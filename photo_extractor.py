@@ -22,6 +22,8 @@ class ImageView(QGraphicsView):
     add_box_requested = pyqtSignal(float, float)
     # Signal emitted when user right-clicks on a box to remove it
     remove_box_requested = pyqtSignal(object)
+    # Signal emitted when boxes are added or removed
+    boxes_changed = pyqtSignal()
     
     def __init__(self):
         super().__init__()
@@ -105,6 +107,9 @@ class ImageView(QGraphicsView):
         if isinstance(box, QuadBoundingBox):
             box.changed.connect(self.update_edge_lines)
         
+        # Emit signal that boxes changed
+        self.boxes_changed.emit()
+        
         return box
         
     def remove_bounding_box(self, box):
@@ -124,10 +129,15 @@ class ImageView(QGraphicsView):
             self.scene.removeItem(box)
             self.bounding_boxes.remove(box)
             
+            # Emit signal that boxes changed
+            self.boxes_changed.emit()
+            
     def clear_boxes(self):
         """Remove all bounding boxes."""
-        for box in self.bounding_boxes[:]:  # Copy list to avoid modification during iteration
-            self.remove_bounding_box(box)
+        if self.bounding_boxes:  # Only emit signal if there were boxes to remove
+            for box in self.bounding_boxes[:]:  # Copy list to avoid modification during iteration
+                self.remove_bounding_box(box)
+            # Note: remove_bounding_box already emits boxes_changed for each removal
             
     def get_crop_rects(self):
         """Get all bounding box rectangles/polygons in scene coordinates."""
@@ -293,6 +303,9 @@ class ImageView(QGraphicsView):
                     box.changed.connect(self.box_changed)
                     box.changed.connect(self.update_edge_lines)
                     
+                    # Emit signal that boxes changed
+                    self.boxes_changed.emit()
+                    
             # Reset drag state
             self.is_dragging = False
             self.drag_start_pos = None
@@ -360,6 +373,12 @@ class PhotoExtractorApp(QMainWindow):
         self.extract_btn.setEnabled(False)
         toolbar_layout.addWidget(self.extract_btn)
         
+        # Clear all button
+        self.clear_btn = QPushButton("Clear All")
+        self.clear_btn.clicked.connect(self.clear_all_boxes)
+        self.clear_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.clear_btn)
+        
         toolbar_layout.addStretch()
         main_layout.addLayout(toolbar_layout)
         
@@ -367,6 +386,7 @@ class PhotoExtractorApp(QMainWindow):
         self.image_view = ImageView()
         self.image_view.add_box_requested.connect(self.add_bounding_box)
         self.image_view.remove_box_requested.connect(self.remove_bounding_box)
+        self.image_view.boxes_changed.connect(self.update_extract_button_state)
         main_layout.addWidget(self.image_view)
         
         # Status bar
@@ -436,25 +456,23 @@ class PhotoExtractorApp(QMainWindow):
     def add_bounding_box(self, x, y):
         """Add a new bounding box at the specified position."""
         self.image_view.add_bounding_box(x, y)
-        self.update_extract_button_state()
         
     def remove_bounding_box(self, box):
         """Remove the specified bounding box."""
         self.image_view.remove_bounding_box(box)
-        self.update_extract_button_state()
         
     def clear_all_boxes(self):
         """Clear all bounding boxes."""
         self.image_view.clear_boxes()
-        self.update_extract_button_state()
         
     def update_extract_button_state(self):
-        """Enable/disable extract button based on current state."""
+        """Enable/disable extract and clear buttons based on current state."""
         has_image = self.current_image_path is not None
         has_output = self.output_directory is not None
         has_boxes = len(self.image_view.bounding_boxes) > 0
         
         self.extract_btn.setEnabled(has_image and has_output and has_boxes)
+        self.clear_btn.setEnabled(has_boxes)
         
     def extract_photos(self):
         """Extract all photos based on bounding boxes."""
