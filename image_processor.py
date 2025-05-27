@@ -157,8 +157,16 @@ class ImageProcessor:
             crop_type, crop_info = data
             cropped = None
             
-            if crop_type == 'rotated':
-                # Convert relative coordinates to absolute pixel coordinates
+            if crop_type == 'quad':
+                # Convert relative coordinates to absolute pixel coordinates for quadrilateral
+                abs_corners = []
+                for rel_x, rel_y in crop_info:
+                    abs_x = rel_x * img_width
+                    abs_y = rel_y * img_height
+                    abs_corners.append((abs_x, abs_y))
+                cropped = self.crop_rotated_image(abs_corners)
+            elif crop_type == 'rotated':
+                # Convert relative coordinates to absolute pixel coordinates (legacy)
                 abs_corners = []
                 for rel_x, rel_y in crop_info:
                     abs_x = rel_x * img_width
