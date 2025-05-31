@@ -391,13 +391,18 @@ class ImageView(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event):
-        """Handle zoom with mouse wheel."""
-        # Zoom in/out
-        zoom_factor = 1.15
-        if event.angleDelta().y() < 0:
-            zoom_factor = 1.0 / zoom_factor
-            
-        self.scale(zoom_factor, zoom_factor)
+        """Handle zoom with mouse wheel or trackpad."""
+        # On macOS, distinguish between scroll and zoom gestures
+        # If Ctrl/Cmd is held down, zoom; otherwise, scroll normally
+        if event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier):
+            # Zoom when Ctrl/Cmd is held
+            zoom_factor = 1.15
+            if event.angleDelta().y() >= 0:
+                zoom_factor = 1.0 / zoom_factor
+            self.scale(zoom_factor, zoom_factor)
+        else:
+            # Normal scrolling behavior
+            super().wheelEvent(event)
 
 class PhotoExtractorApp(QMainWindow):
     """Main application window."""
@@ -520,6 +525,26 @@ class PhotoExtractorApp(QMainWindow):
         clear_action = QAction('Clear All Boxes', self)
         clear_action.triggered.connect(self.clear_all_boxes)
         edit_menu.addAction(clear_action)
+        
+        # View menu
+        view_menu = menubar.addMenu('View')
+        
+        zoom_in_action = QAction('Zoom In', self)
+        zoom_in_action.setShortcut('Ctrl+=')
+        zoom_in_action.triggered.connect(self.zoom_in)
+        view_menu.addAction(zoom_in_action)
+        
+        zoom_out_action = QAction('Zoom Out', self)
+        zoom_out_action.setShortcut('Ctrl+-')
+        zoom_out_action.triggered.connect(self.zoom_out)
+        view_menu.addAction(zoom_out_action)
+        
+        view_menu.addSeparator()
+        
+        fit_action = QAction('Fit Image', self)
+        fit_action.setShortcut('Ctrl+0')
+        fit_action.triggered.connect(self.fit_image)
+        view_menu.addAction(fit_action)
         
     def load_image(self):
         """Load an image file using file dialog."""
@@ -654,3 +679,18 @@ class PhotoExtractorApp(QMainWindow):
         """Refine all bounding boxes using edge detection."""
         self.image_view.refine_all_bounding_boxes()
         self.status_bar.showMessage("Refined all bounding boxes")
+        
+    def zoom_in(self):
+        """Zoom in the image view."""
+        zoom_factor = 1.15
+        self.image_view.scale(zoom_factor, zoom_factor)
+        
+    def zoom_out(self):
+        """Zoom out the image view."""
+        zoom_factor = 1.0 / 1.15
+        self.image_view.scale(zoom_factor, zoom_factor)
+        
+    def fit_image(self):
+        """Fit the image to the view."""
+        if self.image_view.image_item:
+            self.image_view.fitInView(self.image_view.image_item, Qt.AspectRatioMode.KeepAspectRatio)
