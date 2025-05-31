@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget,
                              QPushButton, QFileDialog, QLabel, QMessageBox,
                              QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
                              QMenuBar, QMenu, QStatusBar, QLineEdit, QComboBox,
-                             QListWidget, QListWidgetItem, QSplitter)
+                             QListWidget, QListWidgetItem, QSplitter, QProgressDialog)
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QPointF, QSize
 from PyQt6.QtGui import QAction, QPixmap, QPainter, QIcon
 
@@ -589,7 +589,6 @@ class PhotoExtractorApp(QMainWindow):
         
         self.image_processor = ImageProcessor()
         self.current_image_path = None
-        self.output_directory = None
         self.current_directory = None
         self.bounding_box_storage = None
         
@@ -627,9 +626,6 @@ class PhotoExtractorApp(QMainWindow):
         self.load_btn.clicked.connect(self.load_image)
         toolbar_layout.addWidget(self.load_btn)
         
-        self.output_btn = QPushButton("Set Output Folder")
-        self.output_btn.clicked.connect(self.set_output_folder)
-        toolbar_layout.addWidget(self.output_btn)
         
         # Base name input
         toolbar_layout.addWidget(QLabel("Base Name:"))
@@ -668,6 +664,20 @@ class PhotoExtractorApp(QMainWindow):
         self.refine_all_btn.clicked.connect(self.refine_all_boxes)
         self.refine_all_btn.setEnabled(False)
         toolbar_layout.addWidget(self.refine_all_btn)
+        
+        toolbar_layout.addWidget(QLabel("|"))  # Separator
+        
+        # Batch detect button
+        self.batch_detect_btn = QPushButton("Batch Detect")
+        self.batch_detect_btn.clicked.connect(self.batch_detect_photos)
+        self.batch_detect_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.batch_detect_btn)
+        
+        # Batch extract button
+        self.batch_extract_btn = QPushButton("Batch Extract")
+        self.batch_extract_btn.clicked.connect(self.batch_extract_photos)
+        self.batch_extract_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.batch_extract_btn)
         
         toolbar_layout.addStretch()
         main_layout.addLayout(toolbar_layout)
@@ -837,17 +847,6 @@ class PhotoExtractorApp(QMainWindow):
             self.update_extract_button_state()
             return True
                 
-    def set_output_folder(self):
-        """Set the output directory for extracted photos."""
-        directory = QFileDialog.getExistingDirectory(
-            self, "Select Output Folder"
-        )
-        
-        if directory:
-            self.output_directory = directory
-            self.status_bar.showMessage(f"Output folder: {directory}")
-            self.update_extract_button_state()
-            
     def add_bounding_box(self, x, y):
         """Add a new bounding box at the specified position."""
         self.image_view.add_bounding_box(x, y)
@@ -906,18 +905,20 @@ class PhotoExtractorApp(QMainWindow):
     def update_extract_button_state(self):
         """Enable/disable extract, clear, and detect buttons based on current state."""
         has_image = self.current_image_path is not None
-        has_output = self.output_directory is not None
         has_boxes = len(self.image_view.bounding_boxes) > 0
+        has_directory = self.current_directory is not None
         
-        self.extract_btn.setEnabled(has_image and has_output and has_boxes)
+        self.extract_btn.setEnabled(has_image and has_boxes)
         self.clear_btn.setEnabled(has_boxes)
         self.detect_btn.setEnabled(has_image)
         self.refine_all_btn.setEnabled(has_image and has_boxes)
+        self.batch_detect_btn.setEnabled(has_directory)
+        self.batch_extract_btn.setEnabled(has_directory)
         
     def extract_photos(self):
         """Extract all photos based on bounding boxes."""
-        if not self.current_image_path or not self.output_directory:
-            QMessageBox.warning(self, "Error", "Please load an image and set output folder")
+        if not self.current_image_path:
+            QMessageBox.warning(self, "Error", "Please load an image first")
             return
             
         crop_data = self.image_view.get_crop_rects()
@@ -925,16 +926,24 @@ class PhotoExtractorApp(QMainWindow):
             QMessageBox.warning(self, "Error", "No bounding boxes found")
             return
             
+        # Prompt for output directory
+        output_directory = QFileDialog.getExistingDirectory(
+            self, "Select Output Folder for Extracted Photos"
+        )
+        
+        if not output_directory:
+            return  # User cancelled
+            
         # Extract and save photos
         base_name = self.base_name_edit.text() or "photo"
         saved_files = self.image_processor.save_cropped_images(
-            crop_data, self.output_directory, base_name
+            crop_data, output_directory, base_name
         )
         
         if saved_files:
             QMessageBox.information(
                 self, "Success", 
-                f"Extracted {len(saved_files)} photos to:\n{self.output_directory}"
+                f"Extracted {len(saved_files)} photos to:\n{output_directory}"
             )
             self.status_bar.showMessage(f"Extracted {len(saved_files)} photos")
         else:
@@ -1011,3 +1020,211 @@ class PhotoExtractorApp(QMainWindow):
             if next_item:
                 image_path = next_item.data(Qt.ItemDataRole.UserRole)
                 self.load_image_from_path(image_path)
+                
+    def batch_detect_photos(self):
+        """Run detection strategy on all images in the current directory."""
+        if not self.current_directory:
+            return
+            
+        # Get the selected strategy
+        selected_strategy = self.strategy_combo.currentData()
+        if not selected_strategy:
+            QMessageBox.warning(self, "Error", "No detection strategy selected")
+            return
+            
+        # Get all images in the directory
+        all_image_paths = []
+        for i in range(self.directory_list.count()):
+            item = self.directory_list.item(i)
+            image_path = item.data(Qt.ItemDataRole.UserRole)
+            all_image_paths.append(image_path)
+            
+        if not all_image_paths:
+            QMessageBox.information(self, "No Images", "No images found in current directory")
+            return
+            
+        # Create progress dialog
+        progress = QProgressDialog("Detecting photos...", "Cancel", 0, len(all_image_paths), self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+        
+        successful_detections = 0
+        failed_detections = 0
+        
+        for i, image_path in enumerate(all_image_paths):
+            if progress.wasCanceled():
+                break
+                
+            progress.setValue(i)
+            progress.setLabelText(f"Processing {os.path.basename(image_path)}...")
+            
+            try:
+                # Load image temporarily to get dimensions
+                temp_processor = ImageProcessor()
+                if temp_processor.load_image(image_path):
+                    pixmap = temp_processor.get_pixmap()
+                    if pixmap:
+                        image_width = pixmap.width()
+                        image_height = pixmap.height()
+                        
+                        # Run detection strategy
+                        detected_quads = selected_strategy.detect_photos(image_width, image_height, image_path)
+                        
+                        # Convert to storage format
+                        box_data = []
+                        for quad_corners in detected_quads:
+                            # Convert relative coordinates to absolute coordinates
+                            absolute_corners = []
+                            for corner in quad_corners:
+                                abs_x = corner.x() * image_width
+                                abs_y = corner.y() * image_height
+                                absolute_corners.append([abs_x, abs_y])
+                            box_data.append({'type': 'quad', 'corners': absolute_corners})
+                        
+                        # Save to storage
+                        filename = os.path.basename(image_path)
+                        self.bounding_box_storage.save_bounding_boxes(filename, [])  # Clear existing
+                        if box_data:
+                            self.bounding_box_storage.data[filename] = box_data
+                            self.bounding_box_storage.save_data()
+                        
+                        successful_detections += 1
+                    else:
+                        failed_detections += 1
+                else:
+                    failed_detections += 1
+                    
+            except Exception as e:
+                print(f"Failed to detect photos in {image_path}: {e}")
+                failed_detections += 1
+                
+        progress.setValue(len(all_image_paths))
+        progress.close()
+        
+        # Refresh current image if it has saved boxes
+        if self.current_image_path:
+            self.load_saved_bounding_boxes()
+            
+        # Show results
+        total_processed = successful_detections + failed_detections
+        message = f"Batch detection completed:\n\n"
+        message += f"Successfully processed: {successful_detections}/{total_processed} images\n"
+        message += f"Using strategy: {selected_strategy.name}"
+        
+        if failed_detections > 0:
+            message += f"\n\nFailed to process: {failed_detections} images"
+            
+        QMessageBox.information(self, "Batch Detection Complete", message)
+        self.status_bar.showMessage(f"Batch detection: {successful_detections}/{total_processed} images processed")
+        
+    def batch_extract_photos(self):
+        """Extract photos from all images in the current directory using stored bounding boxes."""
+        if not self.current_directory:
+            return
+            
+        # Get all images in the directory
+        all_image_paths = []
+        for i in range(self.directory_list.count()):
+            item = self.directory_list.item(i)
+            image_path = item.data(Qt.ItemDataRole.UserRole)
+            all_image_paths.append(image_path)
+            
+        if not all_image_paths:
+            QMessageBox.information(self, "No Images", "No images found in current directory")
+            return
+            
+        # Count images that have stored bounding boxes
+        images_with_boxes = 0
+        for image_path in all_image_paths:
+            filename = os.path.basename(image_path)
+            saved_boxes = self.bounding_box_storage.load_bounding_boxes(filename)
+            if saved_boxes:
+                images_with_boxes += 1
+                
+        if images_with_boxes == 0:
+            QMessageBox.information(self, "No Bounding Boxes", 
+                                  "No stored bounding boxes found for images in this directory. "
+                                  "Run 'Batch Detect' or manually add bounding boxes first.")
+            return
+            
+        # Prompt for output directory
+        output_directory = QFileDialog.getExistingDirectory(
+            self, "Select Output Folder for Batch Extraction"
+        )
+        
+        if not output_directory:
+            return  # User cancelled
+            
+        # Create progress dialog
+        progress = QProgressDialog("Extracting photos...", "Cancel", 0, images_with_boxes, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+        
+        successful_extractions = 0
+        total_photos_extracted = 0
+        processed_images = 0
+        
+        for image_path in all_image_paths:
+            filename = os.path.basename(image_path)
+            saved_boxes = self.bounding_box_storage.load_bounding_boxes(filename)
+            
+            if not saved_boxes:
+                continue  # Skip images without bounding boxes
+                
+            if progress.wasCanceled():
+                break
+                
+            progress.setValue(processed_images)
+            progress.setLabelText(f"Extracting from {filename}...")
+            processed_images += 1
+            
+            try:
+                # Load image temporarily
+                temp_processor = ImageProcessor()
+                if temp_processor.load_image(image_path):
+                    # Convert saved boxes to crop data format
+                    crop_data = []
+                    for box_data in saved_boxes:
+                        if box_data.get('type') == 'quad' and 'corners' in box_data:
+                            # Convert absolute coordinates back to relative coordinates
+                            pixmap = temp_processor.get_pixmap()
+                            if pixmap:
+                                image_width = pixmap.width()
+                                image_height = pixmap.height()
+                                
+                                rel_corners = []
+                                for corner in box_data['corners']:
+                                    rel_x = corner[0] / image_width
+                                    rel_y = corner[1] / image_height
+                                    rel_corners.append((rel_x, rel_y))
+                                crop_data.append(('quad', rel_corners))
+                    
+                    if crop_data:
+                        # Use filename without extension as base name
+                        base_name = os.path.splitext(filename)[0]
+                        
+                        # Extract and save photos
+                        saved_files = temp_processor.save_cropped_images(
+                            crop_data, output_directory, base_name
+                        )
+                        
+                        if saved_files:
+                            successful_extractions += 1
+                            total_photos_extracted += len(saved_files)
+                        else:
+                            print(f"Failed to extract photos from {filename}")
+                    
+            except Exception as e:
+                print(f"Failed to extract photos from {image_path}: {e}")
+                
+        progress.setValue(images_with_boxes)
+        progress.close()
+        
+        # Show results
+        message = f"Batch extraction completed:\n\n"
+        message += f"Successfully processed: {successful_extractions}/{images_with_boxes} images\n"
+        message += f"Total photos extracted: {total_photos_extracted}\n"
+        message += f"Output directory: {output_directory}"
+        
+        QMessageBox.information(self, "Batch Extraction Complete", message)
+        self.status_bar.showMessage(f"Batch extraction: {total_photos_extracted} photos from {successful_extractions} images")
