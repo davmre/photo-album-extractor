@@ -6,14 +6,13 @@ import os
 from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, 
                              QPushButton, QFileDialog, QLabel, QMessageBox,
                              QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
-                             QMenuBar, QMenu, QStatusBar, QLineEdit)
+                             QMenuBar, QMenu, QStatusBar, QLineEdit, QComboBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QPointF
 from PyQt6.QtGui import QAction, QPixmap, QPainter
 
 from image_processor import ImageProcessor
-from bounding_box import BoundingBox
-from rotated_bounding_box import RotatedBoundingBox
 from quad_bounding_box import QuadBoundingBox, QuadEdgeLine
+from detection_strategies import DETECTION_STRATEGIES
 
 class ImageView(QGraphicsView):
     """Custom graphics view for displaying images with bounding box interaction."""
@@ -71,18 +70,47 @@ class ImageView(QGraphicsView):
             return None
             
         # Create quadrilateral bounding box by default
-        if quad:
-            # Create initial rectangle corners
-            corners = [
-                QPointF(x - width/2, y - height/2),  # top-left
-                QPointF(x + width/2, y - height/2),  # top-right
-                QPointF(x + width/2, y + height/2),  # bottom-right
-                QPointF(x - width/2, y + height/2)   # bottom-left
-            ]
-            box = QuadBoundingBox(corners)
-        else:
-            # Fallback to old system for compatibility
-            box = RotatedBoundingBox(x, y, width, height)
+        # Create initial rectangle corners
+        corners = [
+            QPointF(x - width/2, y - height/2),  # top-left
+            QPointF(x + width/2, y - height/2),  # top-right
+            QPointF(x + width/2, y + height/2),  # bottom-right
+            QPointF(x - width/2, y + height/2)   # bottom-left
+        ]
+        box = QuadBoundingBox(corners)
+            
+        self.scene.addItem(box)
+        
+        # Add handles to scene
+        if hasattr(box, 'handles'):
+            for handle in box.handles:
+                self.scene.addItem(handle)
+                
+        # Add edge lines for quadrilateral boxes
+        if isinstance(box, QuadBoundingBox):
+            for i in range(4):
+                edge_line = QuadEdgeLine(box, i)
+                box.edge_lines = getattr(box, 'edge_lines', [])
+                box.edge_lines.append(edge_line)
+                self.scene.addItem(edge_line)
+                edge_line.update_edge_geometry()
+                
+        self.bounding_boxes.append(box)
+        
+        # Connect signals
+        box.changed.connect(self.box_changed)
+        if isinstance(box, QuadBoundingBox):
+            box.changed.connect(self.update_edge_lines)
+        
+        # Emit signal that boxes changed
+        self.boxes_changed.emit()
+        
+        return box
+        
+    def add_bounding_box_object(self, box):
+        """Add a pre-created bounding box object to the scene."""
+        if self.image_item is None:
+            return None
             
         self.scene.addItem(box)
         
@@ -143,39 +171,17 @@ class ImageView(QGraphicsView):
         """Get all bounding box rectangles/polygons in scene coordinates."""
         crop_data = []
         for box in self.bounding_boxes:
-            if isinstance(box, QuadBoundingBox):
-                # Get corner points for quadrilateral box in proper extraction order
-                corners = box.get_corner_points_for_extraction()
-                if self.image_item:
-                    img_rect = self.image_item.boundingRect()
-                    # Convert to relative coordinates within image
-                    rel_corners = []
-                    for corner in corners:
-                        rel_x = (corner.x() - img_rect.x()) / img_rect.width()
-                        rel_y = (corner.y() - img_rect.y()) / img_rect.height()
-                        rel_corners.append((rel_x, rel_y))
-                    crop_data.append(('quad', rel_corners))
-            elif hasattr(box, 'get_corner_points'):  # Rotated box (legacy)
-                # Get corner points for rotated box
-                corners = box.get_corner_points()
-                if self.image_item:
-                    img_rect = self.image_item.boundingRect()
-                    # Convert to relative coordinates within image
-                    rel_corners = []
-                    for corner in corners:
-                        rel_x = (corner.x() - img_rect.x()) / img_rect.width()
-                        rel_y = (corner.y() - img_rect.y()) / img_rect.height()
-                        rel_corners.append((rel_x, rel_y))
-                    crop_data.append(('rotated', rel_corners))
-            else:  # Regular axis-aligned box
-                scene_rect = box.sceneBoundingRect()
-                if self.image_item:
-                    img_rect = self.image_item.boundingRect()
-                    rel_x = (scene_rect.x() - img_rect.x()) / img_rect.width()
-                    rel_y = (scene_rect.y() - img_rect.y()) / img_rect.height()
-                    rel_w = scene_rect.width() / img_rect.width()
-                    rel_h = scene_rect.height() / img_rect.height()
-                    crop_data.append(('rect', QRectF(rel_x, rel_y, rel_w, rel_h)))
+            # Get corner points for quadrilateral box in proper extraction order
+            corners = box.get_corner_points_for_extraction()
+            if self.image_item:
+                img_rect = self.image_item.boundingRect()
+                # Convert to relative coordinates within image
+                rel_corners = []
+                for corner in corners:
+                    rel_x = (corner.x() - img_rect.x()) / img_rect.width()
+                    rel_y = (corner.y() - img_rect.y()) / img_rect.height()
+                    rel_corners.append((rel_x, rel_y))
+                crop_data.append(('quad', rel_corners))
                 
         return crop_data
         
@@ -379,6 +385,20 @@ class PhotoExtractorApp(QMainWindow):
         self.clear_btn.setEnabled(False)
         toolbar_layout.addWidget(self.clear_btn)
         
+        # Detection strategy dropdown
+        toolbar_layout.addWidget(QLabel("Detection:"))
+        self.strategy_combo = QComboBox()
+        for strategy in DETECTION_STRATEGIES:
+            self.strategy_combo.addItem(strategy.name, strategy)
+        self.strategy_combo.setMinimumWidth(150)
+        toolbar_layout.addWidget(self.strategy_combo)
+        
+        # Detect photos button
+        self.detect_btn = QPushButton("Detect Photos")
+        self.detect_btn.clicked.connect(self.detect_photos)
+        self.detect_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.detect_btn)
+        
         toolbar_layout.addStretch()
         main_layout.addLayout(toolbar_layout)
         
@@ -465,14 +485,58 @@ class PhotoExtractorApp(QMainWindow):
         """Clear all bounding boxes."""
         self.image_view.clear_boxes()
         
+    def detect_photos(self):
+        """Run the selected detection strategy to automatically detect photos."""
+        if not self.current_image_path:
+            return
+            
+        # Get the selected strategy
+        selected_strategy = self.strategy_combo.currentData()
+        if not selected_strategy:
+            return
+            
+        # Get image dimensions
+        if not self.image_view.image_item:
+            return
+            
+        pixmap = self.image_view.image_item.pixmap()
+        image_width = pixmap.width()
+        image_height = pixmap.height()
+        
+        # Clear existing boxes first
+        self.image_view.clear_boxes()
+        
+        # Run detection strategy
+        try:
+            detected_quads = selected_strategy.detect_photos(image_width, image_height, self.current_image_path)
+            
+            # Convert relative coordinates to scene coordinates and create boxes
+            for quad_corners in detected_quads:
+                # Convert relative coordinates (0-1) to scene coordinates
+                scene_corners = []
+                for corner in quad_corners:
+                    scene_x = corner.x() * image_width
+                    scene_y = corner.y() * image_height
+                    scene_corners.append(QPointF(scene_x, scene_y))
+                
+                # Create the bounding box
+                box = QuadBoundingBox(scene_corners)
+                self.image_view.add_bounding_box_object(box)
+                
+            self.status_bar.showMessage(f"Detected {len(detected_quads)} photos using {selected_strategy.name}")
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Detection Error", f"Failed to detect photos: {str(e)}")
+        
     def update_extract_button_state(self):
-        """Enable/disable extract and clear buttons based on current state."""
+        """Enable/disable extract, clear, and detect buttons based on current state."""
         has_image = self.current_image_path is not None
         has_output = self.output_directory is not None
         has_boxes = len(self.image_view.bounding_boxes) > 0
         
         self.extract_btn.setEnabled(has_image and has_output and has_boxes)
         self.clear_btn.setEnabled(has_boxes)
+        self.detect_btn.setEnabled(has_image)
         
     def extract_photos(self):
         """Extract all photos based on bounding boxes."""
