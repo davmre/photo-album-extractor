@@ -598,7 +598,9 @@ Return only the JSON response, no additional text."""
             pil_image = Image.open(io.BytesIO(image_data))
             if pil_image.mode != 'RGB':
                 pil_image = pil_image.convert('RGB')
-            #pil_image.resize(())
+            # If the image is very large, no need to send the whole thing.
+            # We're just getting approximate bounding boxes here.
+            pil_image = pil_image.resize(size=(768, 768))
             
             prompt = """This is a scanned page from a photo album. Your task is
 to detect the locations of the photos on the page. Output a JSON list of
