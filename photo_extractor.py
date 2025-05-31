@@ -552,7 +552,7 @@ class PhotoExtractorApp(QMainWindow):
             self, 
             "Load Image", 
             "",
-            "Image Files (*.png *.jpg *.jpeg *.bmp *.tiff *.gif)"
+            "Image Files (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.gif)"
         )
         
         if file_path:
