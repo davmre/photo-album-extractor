@@ -461,13 +461,23 @@ class GeminiDetectionStrategy(DetectionStrategy):
     
     def __init__(self):
         self._model = None
+        self._api_key = None
+    
+    def set_api_key(self, api_key):
+        """Set the API key and reinitialize the model."""
+        self._api_key = api_key
         self._setup_gemini()
     
     def _setup_gemini(self):
         """Initialize the Gemini model."""
+        if not self._api_key:
+            print("Gemini API key not set. Please configure it in Settings.")
+            self._model = None
+            return
+            
         try:
             # Configure the API key
-            genai.configure(api_key="AIzaSyBbt3NkCk91s_jb0nOjGUvSeNLdJ9m1OFA")
+            genai.configure(api_key=self._api_key)
             self._model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
         except Exception as e:
             print(f"Failed to initialize Gemini: {e}")

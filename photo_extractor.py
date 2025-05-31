@@ -9,7 +9,8 @@ from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget,
                              QPushButton, QFileDialog, QLabel, QMessageBox,
                              QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
                              QMenuBar, QMenu, QStatusBar, QLineEdit, QComboBox,
-                             QListWidget, QListWidgetItem, QSplitter, QProgressDialog)
+                             QListWidget, QListWidgetItem, QSplitter, QProgressDialog,
+                             QDialog, QFormLayout, QDialogButtonBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QPointF, QSize
 from PyQt6.QtGui import QAction, QPixmap, QPainter, QIcon
 
@@ -17,6 +18,94 @@ from image_processor import ImageProcessor
 from quad_bounding_box import QuadBoundingBox, QuadEdgeLine
 from detection_strategies import DETECTION_STRATEGIES
 import refine_bounds
+
+class Settings:
+    """Handles application settings storage and retrieval."""
+    
+    def __init__(self):
+        self.settings_file = os.path.expanduser("~/.photo_extractor_settings.json")
+        self.data = self.load_settings()
+        
+    def load_settings(self):
+        """Load settings from JSON file."""
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                return {}
+        return {}
+        
+    def save_settings(self):
+        """Save settings to JSON file."""
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(self.data, f, indent=2)
+        except IOError:
+            print(f"Warning: Could not save settings to {self.settings_file}")
+            
+    def get(self, key, default=None):
+        """Get a setting value."""
+        return self.data.get(key, default)
+        
+    def set(self, key, value):
+        """Set a setting value and save."""
+        self.data[key] = value
+        self.save_settings()
+
+class SettingsDialog(QDialog):
+    """Settings dialog for configuring application preferences."""
+    
+    def __init__(self, settings, parent=None):
+        super().__init__(parent)
+        self.settings = settings
+        self.init_ui()
+        
+    def init_ui(self):
+        """Initialize the settings dialog UI."""
+        self.setWindowTitle("Settings")
+        self.setFixedSize(400, 200)
+        
+        layout = QVBoxLayout(self)
+        
+        # Create form layout
+        form_layout = QFormLayout()
+        
+        # Gemini API Key field
+        self.api_key_edit = QLineEdit()
+        self.api_key_edit.setPlaceholderText("Enter your Gemini API key")
+        self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        current_key = self.settings.get('gemini_api_key', '')
+        self.api_key_edit.setText(current_key)
+        
+        form_layout.addRow("Gemini API Key:", self.api_key_edit)
+        
+        layout.addLayout(form_layout)
+        
+        # Add some spacing
+        layout.addStretch()
+        
+        # Buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+        
+    def accept(self):
+        """Save settings when OK is clicked."""
+        api_key = self.api_key_edit.text().strip()
+        
+        # Basic validation for Gemini API key format
+        if api_key and not api_key.startswith('AIza'):
+            QMessageBox.warning(self, "Invalid API Key", 
+                              "Gemini API keys typically start with 'AIza'. "
+                              "Please check your API key.")
+            return
+            
+        self.settings.set('gemini_api_key', api_key)
+        super().accept()
 
 class BoundingBoxStorage:
     """Handles saving and loading bounding box data for images in a directory."""
@@ -591,6 +680,7 @@ class PhotoExtractorApp(QMainWindow):
         self.current_image_path = None
         self.current_directory = None
         self.bounding_box_storage = None
+        self.settings = Settings()
         
         self.init_ui()
         
@@ -733,6 +823,13 @@ class PhotoExtractorApp(QMainWindow):
         clear_action = QAction('Clear All Boxes', self)
         clear_action.triggered.connect(self.clear_all_boxes)
         edit_menu.addAction(clear_action)
+        
+        edit_menu.addSeparator()
+        
+        settings_action = QAction('Settings...', self)
+        settings_action.setShortcut('Ctrl+,')
+        settings_action.triggered.connect(self.open_settings)
+        edit_menu.addAction(settings_action)
         
         # View menu
         view_menu = menubar.addMenu('View')
@@ -879,6 +976,17 @@ class PhotoExtractorApp(QMainWindow):
         
         # Clear existing boxes first
         self.image_view.clear_boxes()
+        
+        # Configure API key for strategies that need it
+        if hasattr(selected_strategy, 'set_api_key'):
+            api_key = self.settings.get('gemini_api_key', '')
+            if api_key:
+                selected_strategy.set_api_key(api_key)
+            else:
+                QMessageBox.warning(self, "API Key Required", 
+                                  f"The {selected_strategy.name} strategy requires an API key. "
+                                  "Please configure it in Edit > Settings.")
+                return
         
         # Run detection strategy
         try:
@@ -1042,6 +1150,17 @@ class PhotoExtractorApp(QMainWindow):
         if not all_image_paths:
             QMessageBox.information(self, "No Images", "No images found in current directory")
             return
+            
+        # Configure API key for strategies that need it
+        if hasattr(selected_strategy, 'set_api_key'):
+            api_key = self.settings.get('gemini_api_key', '')
+            if api_key:
+                selected_strategy.set_api_key(api_key)
+            else:
+                QMessageBox.warning(self, "API Key Required", 
+                                  f"The {selected_strategy.name} strategy requires an API key. "
+                                  "Please configure it in Edit > Settings.")
+                return
             
         # Create progress dialog
         progress = QProgressDialog("Detecting photos...", "Cancel", 0, len(all_image_paths), self)
@@ -1228,3 +1347,8 @@ class PhotoExtractorApp(QMainWindow):
         
         QMessageBox.information(self, "Batch Extraction Complete", message)
         self.status_bar.showMessage(f"Batch extraction: {total_photos_extracted} photos from {successful_extractions} images")
+        
+    def open_settings(self):
+        """Open the settings dialog."""
+        dialog = SettingsDialog(self.settings, self)
+        dialog.exec()
