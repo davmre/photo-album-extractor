@@ -12,20 +12,24 @@ from photo_extractor import PhotoExtractorApp
 
 def main():
     parser = argparse.ArgumentParser(description='Photo Album Extractor')
-    parser.add_argument('image', nargs='?', help='Path to image file to load on startup')
+    parser.add_argument('path', nargs='?', help='Path to image file or directory to load on startup')
     args = parser.parse_args()
     
-    # Validate image path if provided
-    image_path = None
-    if args.image:
-        if os.path.isfile(args.image):
-            image_path = args.image
+    # Validate path if provided
+    initial_image = None
+    initial_directory = None
+    
+    if args.path:
+        if os.path.isfile(args.path):
+            initial_image = args.path
+        elif os.path.isdir(args.path):
+            initial_directory = args.path
         else:
-            print(f"Error: Image file not found: {args.image}")
+            print(f"Error: File or directory not found: {args.path}")
             return 1
     
     app = QApplication(sys.argv)
-    window = PhotoExtractorApp(initial_image=image_path)
+    window = PhotoExtractorApp(initial_image=initial_image, initial_directory=initial_directory)
     window.show()
     sys.exit(app.exec())
 

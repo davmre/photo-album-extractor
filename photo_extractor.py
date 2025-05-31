@@ -3,17 +3,194 @@ Main GUI application for the Photo Album Extractor.
 """
 
 import os
+import json
+import glob
 from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, 
                              QPushButton, QFileDialog, QLabel, QMessageBox,
                              QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
-                             QMenuBar, QMenu, QStatusBar, QLineEdit, QComboBox)
-from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QPointF
-from PyQt6.QtGui import QAction, QPixmap, QPainter
+                             QMenuBar, QMenu, QStatusBar, QLineEdit, QComboBox,
+                             QListWidget, QListWidgetItem, QSplitter)
+from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QPointF, QSize
+from PyQt6.QtGui import QAction, QPixmap, QPainter, QIcon
 
 from image_processor import ImageProcessor
 from quad_bounding_box import QuadBoundingBox, QuadEdgeLine
 from detection_strategies import DETECTION_STRATEGIES
 import refine_bounds
+
+class BoundingBoxStorage:
+    """Handles saving and loading bounding box data for images in a directory."""
+    
+    def __init__(self, directory):
+        self.directory = directory
+        self.data_file = os.path.join(directory, '.photo_extractor_data.json')
+        self.data = self.load_data()
+        
+    def load_data(self):
+        """Load bounding box data from JSON file."""
+        if os.path.exists(self.data_file):
+            try:
+                with open(self.data_file, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                return {}
+        return {}
+        
+    def save_data(self):
+        """Save bounding box data to JSON file."""
+        try:
+            with open(self.data_file, 'w') as f:
+                json.dump(self.data, f, indent=2)
+        except IOError:
+            print(f"Warning: Could not save bounding box data to {self.data_file}")
+            
+    def save_bounding_boxes(self, image_filename, bounding_boxes):
+        """Save bounding boxes for a specific image."""
+        if not bounding_boxes:
+            # Remove entry if no bounding boxes
+            self.data.pop(image_filename, None)
+        else:
+            # Convert bounding boxes to serializable format
+            box_data = []
+            for box in bounding_boxes:
+                if isinstance(box, QuadBoundingBox):
+                    corners = box.get_corner_points_for_extraction()
+                    corner_coords = [[corner.x(), corner.y()] for corner in corners]
+                    box_data.append({'type': 'quad', 'corners': corner_coords})
+            self.data[image_filename] = box_data
+        self.save_data()
+        
+    def load_bounding_boxes(self, image_filename):
+        """Load bounding boxes for a specific image."""
+        return self.data.get(image_filename, [])
+
+class DirectoryImageList(QWidget):
+    """Sidebar widget showing images in the current directory."""
+    
+    image_selected = pyqtSignal(str)  # Emits the full path of selected image
+    directory_changed = pyqtSignal(str)  # Emits when user selects new directory
+    
+    def __init__(self):
+        super().__init__()
+        self.current_directory = None
+        self.supported_formats = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif', '.gif'}
+        
+        # Set up the widget
+        self.setMaximumWidth(250)
+        self.setMinimumWidth(200)
+        
+        # Create layout
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
+        
+        # Open directory button
+        self.open_dir_btn = QPushButton("Open Directory")
+        self.open_dir_btn.clicked.connect(self.open_directory)
+        layout.addWidget(self.open_dir_btn)
+        
+        # Current directory label
+        self.dir_label = QLabel("No directory selected")
+        self.dir_label.setWordWrap(True)
+        self.dir_label.setStyleSheet("QLabel { font-size: 9pt; color: #666; padding: 5px; }")
+        layout.addWidget(self.dir_label)
+        
+        # Image list
+        self.image_list = QListWidget()
+        self.image_list.itemClicked.connect(self.on_item_clicked)
+        layout.addWidget(self.image_list)
+        
+    def set_directory(self, directory):
+        """Set the directory to display images from."""
+        if directory != self.current_directory:
+            self.current_directory = directory
+            self.update_directory_label()
+            self.refresh_images()
+            
+    def update_directory_label(self):
+        """Update the directory label with current path."""
+        if self.current_directory:
+            # Show just the directory name and parent for space efficiency
+            dir_name = os.path.basename(self.current_directory)
+            parent_name = os.path.basename(os.path.dirname(self.current_directory))
+            if parent_name and dir_name:
+                display_text = f".../{parent_name}/{dir_name}"
+            elif dir_name:
+                display_text = dir_name
+            else:
+                display_text = self.current_directory
+            self.dir_label.setText(display_text)
+            self.dir_label.setToolTip(self.current_directory)  # Full path on hover
+        else:
+            self.dir_label.setText("No directory selected")
+            self.dir_label.setToolTip("")
+            
+    def refresh_images(self):
+        """Refresh the list of images in the current directory."""
+        self.image_list.clear()
+        
+        if not self.current_directory or not os.path.isdir(self.current_directory):
+            return
+            
+        # Find all image files in the directory
+        image_files = []
+        for ext in self.supported_formats:
+            pattern = os.path.join(self.current_directory, f"*{ext}")
+            image_files.extend(glob.glob(pattern, recursive=False))
+            pattern = os.path.join(self.current_directory, f"*{ext.upper()}")
+            image_files.extend(glob.glob(pattern, recursive=False))
+            
+        # Sort files alphabetically
+        image_files.sort()
+        
+        # Add items to the list
+        for image_path in image_files:
+            filename = os.path.basename(image_path)
+            item = QListWidgetItem(filename)
+            item.setData(Qt.ItemDataRole.UserRole, image_path)  # Store full path
+            self.image_list.addItem(item)
+            
+    def on_item_clicked(self, item):
+        """Handle image selection."""
+        image_path = item.data(Qt.ItemDataRole.UserRole)
+        if image_path:
+            self.image_selected.emit(image_path)
+            
+    def select_image(self, image_path):
+        """Select the specified image in the list."""
+        filename = os.path.basename(image_path)
+        for i in range(self.image_list.count()):
+            item = self.image_list.item(i)
+            if item.text() == filename:
+                self.image_list.setCurrentItem(item)
+                break
+                
+    def open_directory(self):
+        """Open directory selection dialog."""
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Directory", self.current_directory or os.getcwd()
+        )
+        if directory:
+            self.directory_changed.emit(directory)
+            
+    def get_first_image(self):
+        """Get the path of the first image in the current directory."""
+        if self.image_list.count() > 0:
+            first_item = self.image_list.item(0)
+            return first_item.data(Qt.ItemDataRole.UserRole)
+        return None
+        
+    def currentRow(self):
+        """Get the current row for navigation."""
+        return self.image_list.currentRow()
+        
+    def count(self):
+        """Get the count of images."""
+        return self.image_list.count()
+        
+    def item(self, row):
+        """Get item at specified row."""
+        return self.image_list.item(row)
 
 class ImageView(QGraphicsView):
     """Custom graphics view for displaying images with bounding box interaction."""
@@ -407,23 +584,30 @@ class ImageView(QGraphicsView):
 class PhotoExtractorApp(QMainWindow):
     """Main application window."""
     
-    def __init__(self, initial_image=None):
+    def __init__(self, initial_image=None, initial_directory=None):
         super().__init__()
         
         self.image_processor = ImageProcessor()
         self.current_image_path = None
         self.output_directory = None
+        self.current_directory = None
+        self.bounding_box_storage = None
         
         self.init_ui()
         
-        # Load initial image if provided
+        # Load initial content based on what was provided
         if initial_image:
             self.load_image_from_path(initial_image)
+        elif initial_directory:
+            self.load_directory(initial_directory)
+        else:
+            # Set current working directory as default
+            self.set_current_directory(os.getcwd())
         
     def init_ui(self):
         """Initialize the user interface."""
         self.setWindowTitle("Photo Album Extractor")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1400, 800)
         
         # Create central widget
         central_widget = QWidget()
@@ -488,12 +672,26 @@ class PhotoExtractorApp(QMainWindow):
         toolbar_layout.addStretch()
         main_layout.addLayout(toolbar_layout)
         
+        # Create splitter for sidebar and main content
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # Create directory image list (sidebar)
+        self.directory_list = DirectoryImageList()
+        self.directory_list.image_selected.connect(self.on_image_selected)
+        self.directory_list.directory_changed.connect(self.on_directory_changed)
+        splitter.addWidget(self.directory_list)
+        
         # Create image view
         self.image_view = ImageView()
         self.image_view.add_box_requested.connect(self.add_bounding_box)
         self.image_view.remove_box_requested.connect(self.remove_bounding_box)
         self.image_view.boxes_changed.connect(self.update_extract_button_state)
-        main_layout.addWidget(self.image_view)
+        splitter.addWidget(self.image_view)
+        
+        # Set splitter proportions (sidebar smaller than main view)
+        splitter.setSizes([250, 1000])
+        
+        main_layout.addWidget(splitter)
         
         # Status bar
         self.status_bar = QStatusBar()
@@ -546,6 +744,18 @@ class PhotoExtractorApp(QMainWindow):
         fit_action.triggered.connect(self.fit_image)
         view_menu.addAction(fit_action)
         
+        view_menu.addSeparator()
+        
+        prev_image_action = QAction('Previous Image', self)
+        prev_image_action.setShortcut('Left')
+        prev_image_action.triggered.connect(self.previous_image)
+        view_menu.addAction(prev_image_action)
+        
+        next_image_action = QAction('Next Image', self)
+        next_image_action.setShortcut('Right')
+        next_image_action.triggered.connect(self.next_image)
+        view_menu.addAction(next_image_action)
+        
     def load_image(self):
         """Load an image file using file dialog."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -560,17 +770,72 @@ class PhotoExtractorApp(QMainWindow):
             
     def load_image_from_path(self, file_path):
         """Load an image from the specified file path."""
+        # Save current bounding boxes before switching images
+        if self.current_image_path and self.bounding_box_storage:
+            self.save_current_bounding_boxes()
+            
         if self.image_processor.load_image(file_path):
             pixmap = self.image_processor.get_pixmap()
             if pixmap:
                 self.image_view.set_image(pixmap)
                 self.current_image_path = file_path
+                
+                # Update directory context
+                new_directory = os.path.dirname(file_path)
+                self.set_current_directory(new_directory)
+                
+                # Load saved bounding boxes for this image
+                self.load_saved_bounding_boxes()
+                
+                # Update sidebar selection
+                self.directory_list.select_image(file_path)
+                
                 self.status_bar.showMessage(f"Loaded: {os.path.basename(file_path)}")
                 self.update_extract_button_state()
             else:
                 QMessageBox.warning(self, "Error", "Failed to display image")
         else:
             QMessageBox.warning(self, "Error", "Failed to load image")
+            
+    def on_image_selected(self, image_path):
+        """Handle image selection from the directory list."""
+        self.load_image_from_path(image_path)
+        
+    def on_directory_changed(self, directory):
+        """Handle directory change from the sidebar."""
+        self.load_directory(directory)
+        
+    def set_current_directory(self, directory):
+        """Set the current directory and update the sidebar."""
+        if directory != self.current_directory:
+            self.current_directory = directory
+            self.bounding_box_storage = BoundingBoxStorage(directory)
+            self.directory_list.set_directory(directory)
+            
+    def load_directory(self, directory):
+        """Load a directory and its first image."""
+        if not os.path.isdir(directory):
+            QMessageBox.warning(self, "Error", f"Directory not found: {directory}")
+            return False
+            
+        # Set the directory first
+        self.set_current_directory(directory)
+        
+        # Load the first image in the directory
+        first_image = self.directory_list.get_first_image()
+        if first_image:
+            self.load_image_from_path(first_image)
+            return True
+        else:
+            # No images in directory, just clear the current image
+            if self.current_image_path:
+                # Save current boxes before clearing
+                self.save_current_bounding_boxes()
+            self.current_image_path = None
+            self.image_view.set_image(QPixmap())  # Clear image
+            self.status_bar.showMessage(f"No images found in directory: {os.path.basename(directory)}")
+            self.update_extract_button_state()
+            return True
                 
     def set_output_folder(self):
         """Set the output directory for extracted photos."""
@@ -694,3 +959,55 @@ class PhotoExtractorApp(QMainWindow):
         """Fit the image to the view."""
         if self.image_view.image_item:
             self.image_view.fitInView(self.image_view.image_item, Qt.AspectRatioMode.KeepAspectRatio)
+            
+    def save_current_bounding_boxes(self):
+        """Save the current bounding boxes to storage."""
+        if self.current_image_path and self.bounding_box_storage:
+            filename = os.path.basename(self.current_image_path)
+            self.bounding_box_storage.save_bounding_boxes(filename, self.image_view.bounding_boxes)
+            
+    def load_saved_bounding_boxes(self):
+        """Load saved bounding boxes for the current image."""
+        if self.current_image_path and self.bounding_box_storage:
+            filename = os.path.basename(self.current_image_path)
+            saved_boxes = self.bounding_box_storage.load_bounding_boxes(filename)
+            
+            # Clear existing boxes
+            self.image_view.clear_boxes()
+            
+            # Load saved boxes
+            for box_data in saved_boxes:
+                if box_data.get('type') == 'quad' and 'corners' in box_data:
+                    corners = [QPointF(corner[0], corner[1]) for corner in box_data['corners']]
+                    box = QuadBoundingBox(corners)
+                    self.image_view.add_bounding_box_object(box)
+                    
+    def closeEvent(self, event):
+        """Save bounding boxes before closing the application."""
+        if self.current_image_path and self.bounding_box_storage:
+            self.save_current_bounding_boxes()
+        event.accept()
+        
+    def previous_image(self):
+        """Navigate to the previous image in the directory."""
+        if not self.current_image_path:
+            return
+            
+        current_row = self.directory_list.currentRow()
+        if current_row > 0:
+            previous_item = self.directory_list.item(current_row - 1)
+            if previous_item:
+                image_path = previous_item.data(Qt.ItemDataRole.UserRole)
+                self.load_image_from_path(image_path)
+                
+    def next_image(self):
+        """Navigate to the next image in the directory."""
+        if not self.current_image_path:
+            return
+            
+        current_row = self.directory_list.currentRow()
+        if current_row < self.directory_list.count() - 1:
+            next_item = self.directory_list.item(current_row + 1)
+            if next_item:
+                image_path = next_item.data(Qt.ItemDataRole.UserRole)
+                self.load_image_from_path(image_path)
