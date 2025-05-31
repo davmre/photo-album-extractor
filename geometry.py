@@ -1,0 +1,217 @@
+import numpy as np
+
+def quad_to_unit_square_transform(quad):
+    """
+    Compute the homography matrix that transforms a quadrilateral to the unit square.
+
+    Args:
+        quad: List of 4 corner points [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
+              Points should be ordered (typically clockwise or counter-clockwise)
+
+    Returns:
+        H: 3x3 homography matrix
+
+    The unit square corners are:
+        (0, 0) -> bottom-left
+        (1, 0) -> bottom-right
+        (1, 1) -> top-right
+        (0, 1) -> top-left
+    """
+
+    # Convert quad points to numpy array
+    src_points = np.array(quad, dtype=np.float32)
+
+    # Define unit square corners (destination points)
+    # Order should match the ordering of input quad points
+    dst_points = np.array([
+        [0, 0],  # bottom-left
+        [1, 0],  # bottom-right
+        [1, 1],  # top-right
+        [0, 1]   # top-left
+    ], dtype=np.float32)
+
+    # Set up the system of equations for homography
+    # For each point correspondence (xi, yi) -> (ui, vi):
+    # ui*h7*xi + ui*h8*yi + ui*h9 = h1*xi + h2*yi + h3
+    # vi*h7*xi + vi*h8*yi + vi*h9 = h4*xi + h5*yi + h6
+
+    A = []
+    for i in range(4):
+        x, y = src_points[i]
+        u, v = dst_points[i]
+
+        # First equation: u = (h1*x + h2*y + h3) / (h7*x + h8*y + h9)
+        # Rearranged: h1*x + h2*y + h3 - u*h7*x - u*h8*y - u*h9 = 0
+        A.append([x, y, 1, 0, 0, 0, -u*x, -u*y, -u])
+
+        # Second equation: v = (h4*x + h5*y + h6) / (h7*x + h8*y + h9)
+        # Rearranged: h4*x + h5*y + h6 - v*h7*x - v*h8*y - v*h9 = 0
+        A.append([0, 0, 0, x, y, 1, -v*x, -v*y, -v])
+
+    A = np.array(A)
+
+    # Solve the homogeneous system Ah = 0 using SVD
+    _, _, Vt = np.linalg.svd(A)
+    h = Vt[-1]  # Last row of V^T (corresponding to smallest singular value)
+
+    # Reshape to 3x3 matrix
+    H = h.reshape(3, 3)
+
+    return H
+
+def apply_transform(H, points):
+    """
+    Apply homography transformation to a set of points.
+
+    Args:
+        H: 3x3 homography matrix
+        points: List of (x, y) coordinates or numpy array of shape (N, 2)
+
+    Returns:
+        Transformed points as numpy array of shape (N, 2)
+    """
+    points = np.array(points)
+    if points.ndim == 1:
+        points = points.reshape(1, -1)
+
+    # Convert to homogeneous coordinates
+    ones = np.ones((points.shape[0], 1))
+    homogeneous_points = np.hstack([points, ones])
+
+    # Apply transformation
+    transformed_homogeneous = (H @ homogeneous_points.T).T
+
+    # Convert back to Cartesian coordinates
+    transformed_points = transformed_homogeneous[:, :2] / transformed_homogeneous[:, 2:3]
+
+    return transformed_points
+
+def line_intersection(p1, p2, p3, p4):
+    """
+    Find the intersection point of two lines using parametric form.
+
+    Args:
+        p1, p2: Two points defining the first line (tuples or lists of [x, y])
+        p3, p4: Two points defining the second line (tuples or lists of [x, y])
+
+    Returns:
+        tuple: (x, y) coordinates of intersection point
+        None: If lines are parallel or coincident
+
+    Raises:
+        ValueError: If any point is invalid
+    """
+    # Convert to numpy arrays for easier computation
+    p1, p2, p3, p4 = map(np.array, [p1, p2, p3, p4])
+
+    # Direction vectors
+    d1 = p2 - p1  # Direction of line 1
+    d2 = p4 - p3  # Direction of line 2
+
+    # Check if lines are parallel (cross product = 0)
+    cross_product = d1[0] * d2[1] - d1[1] * d2[0]
+
+    if abs(cross_product) < 1e-10:  # Using small epsilon for floating point comparison
+        return None  # Lines are parallel or coincident
+
+    # Solve the system:
+    # p1 + t1 * d1 = p3 + t2 * d2
+    # Rearranged: t1 * d1 - t2 * d2 = p3 - p1
+
+    # Set up the system as matrix equation: A * t = b
+    # [d1[0]  -d2[0]] [t1]   [p3[0] - p1[0]]
+    # [d1[1]  -d2[1]] [t2] = [p3[1] - p1[1]]
+
+    A = np.array([[d1[0], -d2[0]],
+                  [d1[1], -d2[1]]])
+    b = p3 - p1
+
+    # Solve for parameters t1 and t2
+    t = np.linalg.solve(A, b)
+    t1 = t[0]
+
+    # Calculate intersection point using either line equation
+    intersection = p1 + t1 * d1
+
+    return intersection
+
+
+def line_integral_simple(image, start_point, end_point, num_samples=100):
+    """
+    Simple line integral using linear sampling.
+    """
+    x0, y0 = start_point
+    x1, y1 = end_point
+
+    # Generate sample points
+    t = np.linspace(0, 1, num_samples)
+    x_coords = x0 + t * (x1 - x0)
+    y_coords = y0 + t * (y1 - y0)
+
+    # Round to nearest pixel coordinates
+    x_indices = np.round(x_coords).astype(int)
+    y_indices = np.round(y_coords).astype(int)
+
+    # Filter out-of-bounds indices
+    mask = ((y_indices >= 0) & (y_indices < image.shape[0]) &
+            (x_indices >= 0) & (x_indices < image.shape[1]))
+
+    valid_y = y_indices[mask]
+    valid_x = x_indices[mask]
+
+    sampled = image[valid_y, valid_x]
+
+    # Sum pixel values
+    total_value = np.sum(sampled)
+
+    return total_value
+
+def minimum_bounding_rectangle(points):
+    # points is a list of (x, y) tuples representing the quadrilateral vertices
+    
+    min_area = float('inf')
+    best_rect = None
+    
+    n = len(points)
+    for i in range(n):
+        # Get edge vector
+        p1 = points[i]
+        p2 = points[(i + 1) % n]
+        edge_vector = (p2[0] - p1[0], p2[1] - p1[1])
+        
+        # Normalize edge vector to get unit vector
+        length = np.sqrt(edge_vector[0]**2 + edge_vector[1]**2)
+        if length == 0:
+            continue
+        unit_vector = (edge_vector[0] / length, edge_vector[1] / length)
+        
+        # Perpendicular vector
+        perp_vector = (-unit_vector[1], unit_vector[0])
+        
+        # Project all points onto both axes
+        u_coords = [p[0] * unit_vector[0] + p[1] * unit_vector[1] for p in points]
+        v_coords = [p[0] * perp_vector[0] + p[1] * perp_vector[1] for p in points]
+        
+        # Get bounding box in this coordinate system
+        u_min, u_max = min(u_coords), max(u_coords)
+        v_min, v_max = min(v_coords), max(v_coords)
+        
+        # Calculate area
+        area = (u_max - u_min) * (v_max - v_min)
+        
+        if area < min_area:
+            min_area = area
+            # Convert back to original coordinate system
+            # Rectangle corners in (u,v) coordinates
+            rect_corners_uv = [
+                (u_min, v_min), (u_max, v_min),
+                (u_max, v_max), (u_min, v_max)
+            ]
+            # Transform back to (x,y)
+            best_rect = []
+            for u, v in rect_corners_uv:
+                x = u * unit_vector[0] + v * perp_vector[0]
+                y = u * unit_vector[1] + v * perp_vector[1]
+                best_rect.append((x, y))
+    
+    return np.array(best_rect, dtype=int), min_area
