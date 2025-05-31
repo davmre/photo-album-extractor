@@ -13,6 +13,7 @@ from PyQt6.QtGui import QAction, QPixmap, QPainter
 from image_processor import ImageProcessor
 from quad_bounding_box import QuadBoundingBox, QuadEdgeLine
 from detection_strategies import DETECTION_STRATEGIES
+import refine_bounds
 
 class ImageView(QGraphicsView):
     """Custom graphics view for displaying images with bounding box interaction."""
@@ -205,10 +206,13 @@ class ImageView(QGraphicsView):
         
         if clicked_box:
             # Menu for existing box
+            refine_action = menu.addAction("Refine Bounding Box")
             remove_action = menu.addAction("Remove Bounding Box")
             action = menu.exec(self.mapToGlobal(position))
             
-            if action == remove_action:
+            if action == refine_action:
+                self.refine_bounding_box(clicked_box)
+            elif action == remove_action:
                 self.remove_box_requested.emit(clicked_box)
         else:
             # Menu for adding new box
@@ -228,6 +232,57 @@ class ImageView(QGraphicsView):
             if isinstance(box, QuadBoundingBox) and hasattr(box, 'edge_lines'):
                 for edge_line in box.edge_lines:
                     edge_line.update_edge_geometry()
+                    
+    def refine_bounding_box(self, box):
+        """Refine a single bounding box using edge detection."""
+        if not self.image_item or not isinstance(box, QuadBoundingBox):
+            return
+            
+        # Get the current image as numpy array
+        pixmap = self.image_item.pixmap()
+        # Convert QPixmap to numpy array
+        image = pixmap.toImage()
+        width = image.width()
+        height = image.height()
+        
+        # Convert QImage to numpy array
+        import numpy as np
+        ptr = image.constBits()
+        ptr.setsize(height * width * 4)  # 4 bytes per pixel (RGBA)
+        arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
+        # Convert RGBA to BGR for OpenCV
+        image_bgr = arr[:, :, [2, 1, 0]]  # BGR format
+        
+        # Get current box corners in image coordinates
+        corners = box.get_corner_points_for_extraction()
+        corner_coords = []
+        for corner in corners:
+            corner_coords.append((corner.x(), corner.y()))
+            
+        try:
+            # Run refinement
+            refined_corners = refine_bounds.refine_bounding_box(image_bgr, corner_coords)
+            
+            # Update box with refined corners
+            refined_qpoints = []
+            for corner in refined_corners:
+                refined_qpoints.append(QPointF(float(corner[0]), float(corner[1])))
+                
+            box.set_corners(refined_qpoints)
+            
+            # Update edge lines
+            if hasattr(box, 'edge_lines'):
+                for edge_line in box.edge_lines:
+                    edge_line.update_edge_geometry()
+                    
+        except Exception as e:
+            print(f"Error refining bounding box: {e}")
+            
+    def refine_all_bounding_boxes(self):
+        """Refine all bounding boxes using edge detection."""
+        for box in self.bounding_boxes:
+            if isinstance(box, QuadBoundingBox):
+                self.refine_bounding_box(box)
         
     def mousePressEvent(self, event):
         """Handle mouse press for starting box creation."""
@@ -399,6 +454,12 @@ class PhotoExtractorApp(QMainWindow):
         self.detect_btn.setEnabled(False)
         toolbar_layout.addWidget(self.detect_btn)
         
+        # Refine all button
+        self.refine_all_btn = QPushButton("Refine All")
+        self.refine_all_btn.clicked.connect(self.refine_all_boxes)
+        self.refine_all_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.refine_all_btn)
+        
         toolbar_layout.addStretch()
         main_layout.addLayout(toolbar_layout)
         
@@ -537,6 +598,7 @@ class PhotoExtractorApp(QMainWindow):
         self.extract_btn.setEnabled(has_image and has_output and has_boxes)
         self.clear_btn.setEnabled(has_boxes)
         self.detect_btn.setEnabled(has_image)
+        self.refine_all_btn.setEnabled(has_image and has_boxes)
         
     def extract_photos(self):
         """Extract all photos based on bounding boxes."""
@@ -563,3 +625,8 @@ class PhotoExtractorApp(QMainWindow):
             self.status_bar.showMessage(f"Extracted {len(saved_files)} photos")
         else:
             QMessageBox.warning(self, "Error", "Failed to extract photos")
+            
+    def refine_all_boxes(self):
+        """Refine all bounding boxes using edge detection."""
+        self.image_view.refine_all_bounding_boxes()
+        self.status_bar.showMessage("Refined all bounding boxes")

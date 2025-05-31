@@ -151,6 +151,14 @@ class QuadBoundingBox(QGraphicsObject):
         
         # Return just the corners in correct order
         return [data[1] for data in corner_data]
+        
+    def set_corners(self, new_corners):
+        """Set the corners to new positions."""
+        self.corners = [QPointF(corner) for corner in new_corners]
+        self.setPos(0, 0)  # Reset position since corners are in absolute coordinates
+        self.update_handles()
+        self.update()
+        self.changed.emit()
 
 class CornerHandle(QGraphicsRectItem):
     """Draggable handle for corner points of quadrilateral bounding box."""

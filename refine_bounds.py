@@ -216,6 +216,36 @@ def _candidate_edge_points(patch_n, border_n):
 
     return top_pts, bottom_pts, left_pts, right_pts
 
+def signed_distance_from_border(x_coords, y_coords, border_pt1, border_pt2):
+  x1, y1 = border_pt1
+  x2, y2 = border_pt2
+  return ((y2 - y1) * x_coords - (x2 - x1) * y_coords + x2 * y1 - y2 * x1
+          ) / np.linalg.norm(border_pt2 - border_pt1)
+
+def image_boundary_mask(patch_n, image_to_patch_coords, img_shape):
+  img_height, img_width = img_shape[:2]
+  top_border = image_to_patch_coords(np.array([(0, 0), (img_width-1, 0)]))
+  bottom_border = image_to_patch_coords(np.array([(0, img_height-1), (img_width-1, img_height-1)]))
+  left_border = image_to_patch_coords(np.array([(0, 0), (0, img_height-1)]))
+  right_border = image_to_patch_coords(np.array([(img_width-1, 0), (img_width-1, img_height-1)]))
+
+  x_coords, y_coords = np.meshgrid(np.arange(patch_n), np.arange(patch_n))
+  top_border_dist = signed_distance_from_border(
+      x_coords, y_coords, top_border[0, :], top_border[1, :])
+  bottom_border_dist = signed_distance_from_border(
+      x_coords, y_coords, bottom_border[0, :], bottom_border[1, :])
+  left_border_dist = signed_distance_from_border(
+      x_coords, y_coords, left_border[0, :], left_border[1, :])
+  right_border_dist = signed_distance_from_border(
+      x_coords, y_coords, right_border[0, :], right_border[1, :])
+
+  mask = np.ones([patch_n, patch_n])
+  mask[top_border_dist >= -1] = 0
+  mask[bottom_border_dist <= 1] = 0
+  mask[left_border_dist <= 1] = 0
+  mask[right_border_dist >= -1] = 0
+  return mask
+
 def refine_bounding_box(image, rect, reltol=0.05, resolution=200):
     # Expand the bounding box slightly to search for edges not contained in the
     # original box. This expansion is done in the box's own coordinate frame, by
@@ -235,7 +265,8 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200):
     border_n = int(original_n * reltol) # Output pixels of the added border.
     patch_n = original_n + border_n * 2 # Total output pixels per side.
     extracted_patch = image_processor.extract_perspective_image(
-        image, expanded_rect, output_width=patch_n, output_height=patch_n)
+        Image.fromarray(image[:, :, ::-1]),
+        expanded_rect, output_width=patch_n, output_height=patch_n)
     
     def patch_to_image_coords(pts):
         # Convert coordinates in the extracted patch back to original image.
@@ -244,17 +275,43 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200):
         unit_square_coords = (pts - border_n) / original_n
         return apply_transform(H_inv, unit_square_coords)
     
+    def image_to_patch_coords(pts):
+        # Convert coordinates in the extracted patch back to original image.
+        pts = np.asarray(pts)
+        # First shift and scale patch coords back to the unit square.
+        unit_square_coords = apply_transform(H, pts)
+        return unit_square_coords * original_n + border_n
     
     # Find horizontal and vertical edges within the extracted patch
     gray = cv2.cvtColor(np.array(extracted_patch), cv2.COLOR_BGR2GRAY)
-    sobel_vertical = cv2.GaussianBlur(
-        np.abs(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5)),
-        (5, 5), 
-        0)
-    sobel_horizontal = cv2.GaussianBlur(
-        np.abs(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=5)),
-        (5, 5), 
-        0)
+    sobel_vertical = np.abs(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5))
+    sobel_horizontal = np.abs(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=5))
+    
+    # If the extracted patch includes areas outside the bounds of the original
+    # image, the missing pixels will be filled as black and will create a strong
+    # artificial edge corresponding to the original image bounds. This can
+    # confound the edges of the actual photo, so we want to
+    # suppress the Sobel field when it reaches the boundaries of the original
+    # image.
+    # (note that the photo itself may extend outside the scanned image, but we
+    # obviously can't get any useful edge information from the part we didn't
+    # scan!)
+    boundary_mask = image_boundary_mask(
+        patch_n, image_to_patch_coords, image.shape)
+    sobel_horizontal *= boundary_mask
+    sobel_vertical *= boundary_mask
+
+    # Apply a square root transform to the detected edges. This gives less
+    # weight to 'outliers' --- individual pixels with strong edge detections ---
+    # relative to consistent lines in which every pixel has some edge potential.
+    sobel_horizontal = np.sqrt(sobel_horizontal)
+    sobel_vertical = np.sqrt(sobel_vertical)
+
+    # Slightly blur the detected edges so we give 'partial credit' to candidate
+    # borders that are a pixel or two off from the exact edge.
+    sobel_horizontal = cv2.GaussianBlur(sobel_horizontal, (5, 5), 0)
+    sobel_vertical = cv2.GaussianBlur(sobel_vertical, (5, 5), 0)
+
 
     # Search for the edges that maximize the total response integrated across
     # the appropriate Sobel field (horizontal for top/bottom edges, vertical
