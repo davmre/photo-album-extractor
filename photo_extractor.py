@@ -207,11 +207,20 @@ class ImageView(QGraphicsView):
         if clicked_box:
             # Menu for existing box
             refine_action = menu.addAction("Refine Bounding Box")
+            refine_parallel_action = menu.addAction("Refine Bounding Box (enforce parallel)")
+            refine_multiscale_action = menu.addAction("Refine Bounding Box multiscale (enforce parallel)")
             remove_action = menu.addAction("Remove Bounding Box")
             action = menu.exec(self.mapToGlobal(position))
             
             if action == refine_action:
                 self.refine_bounding_box(clicked_box)
+            if action == refine_parallel_action:
+                self.refine_bounding_box(clicked_box,
+                                         enforce_parallel_sides=True)
+            if action == refine_multiscale_action:
+                self.refine_bounding_box(clicked_box,
+                                         enforce_parallel_sides=True, 
+                                         multiscale=True)
             elif action == remove_action:
                 self.remove_box_requested.emit(clicked_box)
         else:
@@ -233,7 +242,7 @@ class ImageView(QGraphicsView):
                 for edge_line in box.edge_lines:
                     edge_line.update_edge_geometry()
                     
-    def refine_bounding_box(self, box):
+    def refine_bounding_box(self, box, multiscale=False, enforce_parallel_sides=False):
         """Refine a single bounding box using edge detection."""
         if not self.image_item or not isinstance(box, QuadBoundingBox):
             return
@@ -261,7 +270,14 @@ class ImageView(QGraphicsView):
             
         try:
             # Run refinement
-            refined_corners = refine_bounds.refine_bounding_box(image_bgr, corner_coords)
+            if multiscale:
+                refined_corners = refine_bounds.refine_bounding_box_multiscale(
+                image_bgr, corner_coords,
+                enforce_parallel_sides=enforce_parallel_sides)
+            else:
+                refined_corners = refine_bounds.refine_bounding_box(
+                    image_bgr, corner_coords,
+                    enforce_parallel_sides=enforce_parallel_sides)
             
             # Update box with refined corners
             refined_qpoints = []
@@ -386,7 +402,7 @@ class ImageView(QGraphicsView):
 class PhotoExtractorApp(QMainWindow):
     """Main application window."""
     
-    def __init__(self):
+    def __init__(self, initial_image=None):
         super().__init__()
         
         self.image_processor = ImageProcessor()
@@ -394,6 +410,10 @@ class PhotoExtractorApp(QMainWindow):
         self.output_directory = None
         
         self.init_ui()
+        
+        # Load initial image if provided
+        if initial_image:
+            self.load_image_from_path(initial_image)
         
     def init_ui(self):
         """Initialize the user interface."""
@@ -502,7 +522,7 @@ class PhotoExtractorApp(QMainWindow):
         edit_menu.addAction(clear_action)
         
     def load_image(self):
-        """Load an image file."""
+        """Load an image file using file dialog."""
         file_path, _ = QFileDialog.getOpenFileName(
             self, 
             "Load Image", 
@@ -511,17 +531,21 @@ class PhotoExtractorApp(QMainWindow):
         )
         
         if file_path:
-            if self.image_processor.load_image(file_path):
-                pixmap = self.image_processor.get_pixmap()
-                if pixmap:
-                    self.image_view.set_image(pixmap)
-                    self.current_image_path = file_path
-                    self.status_bar.showMessage(f"Loaded: {os.path.basename(file_path)}")
-                    self.update_extract_button_state()
-                else:
-                    QMessageBox.warning(self, "Error", "Failed to display image")
+            self.load_image_from_path(file_path)
+            
+    def load_image_from_path(self, file_path):
+        """Load an image from the specified file path."""
+        if self.image_processor.load_image(file_path):
+            pixmap = self.image_processor.get_pixmap()
+            if pixmap:
+                self.image_view.set_image(pixmap)
+                self.current_image_path = file_path
+                self.status_bar.showMessage(f"Loaded: {os.path.basename(file_path)}")
+                self.update_extract_button_state()
             else:
-                QMessageBox.warning(self, "Error", "Failed to load image")
+                QMessageBox.warning(self, "Error", "Failed to display image")
+        else:
+            QMessageBox.warning(self, "Error", "Failed to load image")
                 
     def set_output_folder(self):
         """Set the output directory for extracted photos."""
