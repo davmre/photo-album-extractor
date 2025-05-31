@@ -603,8 +603,8 @@ Return only the JSON response, no additional text."""
             prompt = """This is a scanned page from a photo album. Your task is
 to detect the locations of the photos on the page. Output a JSON list of
 bounding boxes, one for each photo, where each entry contains the 2D bounding
-box "box_2d" in `[y_min, x_min, y_max, x_max]` format. Return only the JSON
-response, no additional text."""
+box in the format `{ "box_2d": [y_min, x_min, y_max, x_max] }`. Return only the
+JSON response, no additional text."""
 
             # Generate response
             response = self._model.generate_content([pil_image, prompt])
