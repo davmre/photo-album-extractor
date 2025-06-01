@@ -134,8 +134,15 @@ def search_best_rhombus(
 
 def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
                         enforce_parallel_sides=False):
-    
+
+    # Bound the given shape with a (not necessarily axis-aligned) rectangle.
+    # We'll do all our refinement calculations within this rectangle. Using
+    # a rectangle ensures that the transformation into and out of this space
+    # preserves parallel lines.
     rect, _ = geometry.minimum_bounding_rectangle(rect)
+    # Reimpose our standard corner ordering since the previous call may lose it.
+    idxs = geometry.clockwise_corner_permutation(rect)
+    rect = rect[idxs, :]
     
     # Expand the bounding box slightly to search for edges not contained in the
     # original box. This expansion is done in the box's own coordinate frame, by
@@ -153,6 +160,7 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
     # Extract the image patch within the expanded bounding box.
     original_n = resolution # Output pixels for one side of the original box.
     border_n = int(original_n * reltol) # Output pixels of the added border.
+    print("border n", border_n)
     patch_n = original_n + border_n * 2 # Total output pixels per side.
     extracted_patch = image_processor.extract_perspective_image(
         Image.fromarray(image[:, :, ::-1]),
@@ -215,7 +223,7 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
     top_edge_weights = np.zeros([N, N])
     bottom_edge_weights = np.zeros([N, N])
     left_edge_weights = np.zeros([N, N])
-    right_edge_weights = np.zeros([N, N])    
+    right_edge_weights = np.zeros([N, N])
     for i in range(N):
         for j in range(N):
             top_edge_weights[i, j] = geometry.line_integral_simple(
@@ -248,9 +256,7 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
         top_edge[0, :], top_edge[1, :], right_edge[0, :], right_edge[1, :])
     lower_right_corner = geometry.line_intersection(
         bottom_edge[0, :], bottom_edge[1, :], right_edge[0, :], right_edge[1, :])
-
-    # Convert from the 
-
+    
     image_rect = np.round(
         patch_to_image_coords(
             [upper_left_corner,
@@ -263,7 +269,7 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
 
 def refine_bounding_box_multiscale(
     image, rect,
-    reltol=0.1,
+    reltol=0.05,
     base_resolution=200,
     scale_factor=5,
     enforce_parallel_sides=False):

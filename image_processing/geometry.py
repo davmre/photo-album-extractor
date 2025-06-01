@@ -215,3 +215,10 @@ def minimum_bounding_rectangle(points):
                 best_rect.append((x, y))
     
     return np.array(best_rect, dtype=int), min_area
+
+def clockwise_corner_permutation(rect):
+    # rect: array of shape [4, 2]
+    centroid = np.sum(rect, axis=0) / 4.
+    delta = rect - centroid
+    angles = np.atan2(delta[:, 1], delta[:, 0])
+    return np.argsort(angles)

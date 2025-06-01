@@ -257,10 +257,7 @@ class ImageView(QGraphicsView):
         image_bgr = arr[:, :, [2, 1, 0]]  # BGR format
         
         # Get current box corners in image coordinates
-        corners = box.get_corner_points_for_extraction()
-        corner_coords = []
-        for corner in corners:
-            corner_coords.append((corner.x(), corner.y()))
+        corner_coords = box.get_ordered_corners_for_extraction()
             
         try:
             # Run refinement

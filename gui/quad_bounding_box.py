@@ -3,10 +3,14 @@ Quadrilateral bounding box widget for arbitrary four-sided photo selection.
 """
 
 import math
+import numpy as np
+
 import uuid
 from PyQt6.QtWidgets import QGraphicsObject, QGraphicsRectItem, QGraphicsItem
 from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPointF
 from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QPolygonF
+
+from image_processing import geometry
 
 class QuadBoundingBox(QGraphicsObject):
     """A quadrilateral bounding box with four draggable corner points."""
@@ -113,10 +117,6 @@ class QuadBoundingBox(QGraphicsObject):
             world_corners.append(self.pos() + corner)
         return world_corners
         
-    def get_corner_points_for_extraction(self):
-        """Alias for get_ordered_corners_for_extraction for backward compatibility."""
-        return self.get_ordered_corners_for_extraction()
-        
     def set_from_drag(self, start_point, end_point):
         """Set initial rectangle from drag operation."""
         # Create a rectangle from drag points
@@ -152,26 +152,9 @@ class QuadBoundingBox(QGraphicsObject):
         """Get corners in proper order for perspective extraction (prevents flipping)."""
         # Use world coordinates for extraction
         world_corners = self.get_corner_points()
-        
-        # Calculate centroid
-        centroid_x = sum(corner.x() for corner in world_corners) / 4
-        centroid_y = sum(corner.y() for corner in world_corners) / 4
-        centroid = QPointF(centroid_x, centroid_y)
-        
-        # Create list of (angle, corner) tuples
-        corner_data = []
-        for corner in world_corners:
-            # Calculate angle from centroid to corner
-            dx = corner.x() - centroid.x()
-            dy = corner.y() - centroid.y()
-            angle = math.atan2(dy, dx)
-            corner_data.append((angle, corner))
-        
-        # Sort by angle to get proper clockwise ordering
-        corner_data.sort(key=lambda x: x[0])
-        
-        # Return just the corners in correct order
-        return [data[1] for data in corner_data]
+        corners_array = np.asarray([(p.x(), p.y()) for p in world_corners])
+        idxs = geometry.clockwise_corner_permutation(corners_array)
+        return corners_array[idxs, :]
         
     def set_corners(self, new_corners):
         """Set the corners to new world positions."""
