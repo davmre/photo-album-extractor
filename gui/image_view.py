@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPointF
 from PyQt6.QtGui import QPainter
 from PyQt6.QtGui import QPixmap, QImage
 
-from gui.quad_bounding_box import QuadBoundingBox, QuadEdgeLine
+from gui.quad_bounding_box import QuadBoundingBox
 import image_processing.refine_bounds as refine_bounds
 
 
@@ -102,22 +102,12 @@ class ImageView(QGraphicsView):
         if hasattr(box, 'handles'):
             for handle in box.handles:
                 self.scene.addItem(handle)
-                
-        # Add edge lines for quadrilateral boxes
-        if isinstance(box, QuadBoundingBox):
-            for i in range(4):
-                edge_line = QuadEdgeLine(box, i)
-                box.edge_lines = getattr(box, 'edge_lines', [])
-                box.edge_lines.append(edge_line)
-                self.scene.addItem(edge_line)
-                edge_line.update_edge_geometry()
-                
+
         self.bounding_boxes.append(box)
         
         # Connect signals
         box.changed.connect(self.box_changed)
         if isinstance(box, QuadBoundingBox):
-            box.changed.connect(self.update_edge_lines)
             # Connect selection signal
             box.selected_changed.connect(self.on_box_selection_changed)
         
@@ -134,11 +124,6 @@ class ImageView(QGraphicsView):
             if hasattr(box, 'handles'):
                 for handle in box.handles:
                     self.scene.removeItem(handle)
-                    
-            # Remove edge lines for quadrilateral boxes
-            if hasattr(box, 'edge_lines'):
-                for edge_line in box.edge_lines:
-                    self.scene.removeItem(edge_line)
                 
             # Remove box
             self.scene.removeItem(box)
@@ -209,13 +194,6 @@ class ImageView(QGraphicsView):
         """Handle bounding box changes and update magnifier."""
         # Emit signal to update magnifier with new bounding box positions
         self.image_updated.emit()
-        
-    def update_edge_lines(self):
-        """Update edge line geometries when quadrilateral changes."""
-        for box in self.bounding_boxes:
-            if isinstance(box, QuadBoundingBox) and hasattr(box, 'edge_lines'):
-                for edge_line in box.edge_lines:
-                    edge_line.update_edge_geometry()
                     
     def refine_bounding_box(self, box, multiscale=False, enforce_parallel_sides=None):
         """Refine a single bounding box using edge detection."""
@@ -232,9 +210,8 @@ class ImageView(QGraphicsView):
                 enforce_parallel_sides = True
             
         # Get the current image as numpy array
-        pixmap = self.image_item.pixmap()
         # Convert QPixmap to numpy array
-        image = pixmap.toImage()
+        image = self._image_qt
         width = image.width()
         height = image.height()
         
@@ -265,11 +242,6 @@ class ImageView(QGraphicsView):
                 refined_qpoints.append(QPointF(float(corner[0]), float(corner[1])))
                 
             box.set_corners(refined_qpoints)
-            
-            # Update edge lines
-            if hasattr(box, 'edge_lines'):
-                for edge_line in box.edge_lines:
-                    edge_line.update_edge_geometry()
                     
         except Exception as e:
             print(f"Error refining bounding box: {e}")
@@ -330,11 +302,6 @@ class ImageView(QGraphicsView):
                 from PyQt6.QtCore import QPointF
                 corner_points = [QPointF(coord[0], coord[1]) for coord in coordinates]
                 box.set_corners(corner_points)
-                
-                # Update edge lines if they exist
-                if hasattr(box, 'edge_lines'):
-                    for edge_line in box.edge_lines:
-                        edge_line.update_edge_geometry()
                         
                 # Update magnifier
                 self.image_updated.emit()
