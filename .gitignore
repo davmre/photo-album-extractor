@@ -20,9 +20,10 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Test output
+# Test data and outputs
 test_output/
 extracted_photos/
+test_data/
 
 # Temporary files
 *.tmp

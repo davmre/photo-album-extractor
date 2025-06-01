@@ -74,3 +74,22 @@ class TestMainWindowWorkflow:
 
         app.extract_photos(output_directory=temp_output_dir)
         # TODO check the extracted photos have expected sizes and EXIF data
+        
+        """
+        # Verify extracted image
+        extracted_img = Image.open(saved_files[0])
+        assert extracted_img.width > 0
+        assert extracted_img.height > 0
+        
+        # If we have attributes, check for EXIF
+        if single_attrs:
+            try:
+                exif_dict = piexif.load(saved_files[0])
+                # Should have software tag
+                assert piexif.ImageIFD.Software in exif_dict['0th']
+                software = exif_dict['0th'][piexif.ImageIFD.Software]
+                assert software == b'Photo Album Extractor'
+            except (KeyError, piexif.InvalidImageDataError):
+                # Some formats might not support EXIF properly
+                pass
+                """
