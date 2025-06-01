@@ -114,8 +114,6 @@ class PhotoExtractorApp(QMainWindow):
         
         # Create image view
         self.image_view = ImageView()
-        self.image_view.add_box_requested.connect(self.add_bounding_box)
-        self.image_view.remove_box_requested.connect(self.remove_bounding_box)
         self.image_view.boxes_changed.connect(self.update_extract_button_state)
         splitter.addWidget(self.image_view)
         
@@ -275,14 +273,6 @@ class PhotoExtractorApp(QMainWindow):
             self.update_extract_button_state()
             return True
                 
-    def add_bounding_box(self, x, y):
-        """Add a new bounding box at the specified position."""
-        self.image_view.add_bounding_box(x, y)
-        
-    def remove_bounding_box(self, box):
-        """Remove the specified bounding box."""
-        self.image_view.remove_bounding_box(box)
-        
     def clear_all_boxes(self):
         """Clear all bounding boxes."""
         self.image_view.clear_boxes()

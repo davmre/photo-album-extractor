@@ -15,10 +15,6 @@ import image_processing.refine_bounds as refine_bounds
 class ImageView(QGraphicsView):
     """Custom graphics view for displaying images with bounding box interaction."""
     
-    # Signal emitted when user right-clicks to add a new box
-    add_box_requested = pyqtSignal(float, float)
-    # Signal emitted when user right-clicks on a box to remove it
-    remove_box_requested = pyqtSignal(object)
     # Signal emitted when boxes are added or removed
     boxes_changed = pyqtSignal()
     
@@ -61,49 +57,6 @@ class ImageView(QGraphicsView):
         
         # Fit image in view
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
-        
-    def add_bounding_box(self, x, y, width=100, height=100, quad=True):
-        """Add a new bounding box at the specified position."""
-        if self.image_item is None:
-            return None
-            
-        # Create quadrilateral bounding box by default
-        # Create initial rectangle corners
-        corners = [
-            QPointF(x - width/2, y - height/2),  # top-left
-            QPointF(x + width/2, y - height/2),  # top-right
-            QPointF(x + width/2, y + height/2),  # bottom-right
-            QPointF(x - width/2, y + height/2)   # bottom-left
-        ]
-        box = QuadBoundingBox(corners)
-            
-        self.scene.addItem(box)
-        
-        # Add handles to scene
-        if hasattr(box, 'handles'):
-            for handle in box.handles:
-                self.scene.addItem(handle)
-                
-        # Add edge lines for quadrilateral boxes
-        if isinstance(box, QuadBoundingBox):
-            for i in range(4):
-                edge_line = QuadEdgeLine(box, i)
-                box.edge_lines = getattr(box, 'edge_lines', [])
-                box.edge_lines.append(edge_line)
-                self.scene.addItem(edge_line)
-                edge_line.update_edge_geometry()
-                
-        self.bounding_boxes.append(box)
-        
-        # Connect signals
-        box.changed.connect(self.box_changed)
-        if isinstance(box, QuadBoundingBox):
-            box.changed.connect(self.update_edge_lines)
-        
-        # Emit signal that boxes changed
-        self.boxes_changed.emit()
-        
-        return box
         
     def add_bounding_box_object(self, box):
         """Add a pre-created bounding box object to the scene."""
@@ -219,15 +172,8 @@ class ImageView(QGraphicsView):
                                          enforce_parallel_sides=True, 
                                          multiscale=True)
             elif action == remove_action:
-                self.remove_box_requested.emit(clicked_box)
-        else:
-            # Menu for adding new box
-            add_action = menu.addAction("Add Bounding Box")
-            action = menu.exec(self.mapToGlobal(position))
-            
-            if action == add_action:
-                self.add_box_requested.emit(scene_pos.x(), scene_pos.y())
-                
+                self.remove_bounding_box(clicked_box)
+
     def box_changed(self):
         """Handle bounding box changes (for future features like live preview)."""
         pass
@@ -356,28 +302,7 @@ class ImageView(QGraphicsView):
                         scene_pos,
                         QPointF(self.drag_start_pos.x(), scene_pos.y())
                     ]
-                    box = QuadBoundingBox(corners)
-                    self.scene.addItem(box)
-                    
-                    # Add handles to scene
-                    if hasattr(box, 'handles'):
-                        for handle in box.handles:
-                            self.scene.addItem(handle)
-                            
-                    # Add edge lines
-                    for i in range(4):
-                        edge_line = QuadEdgeLine(box, i)
-                        box.edge_lines = getattr(box, 'edge_lines', [])
-                        box.edge_lines.append(edge_line)
-                        self.scene.addItem(edge_line)
-                        edge_line.update_edge_geometry()
-                        
-                    self.bounding_boxes.append(box)
-                    box.changed.connect(self.box_changed)
-                    box.changed.connect(self.update_edge_lines)
-                    
-                    # Emit signal that boxes changed
-                    self.boxes_changed.emit()
+                    self.add_bounding_box_object(QuadBoundingBox(corners))
                     
             # Reset drag state
             self.is_dragging = False
