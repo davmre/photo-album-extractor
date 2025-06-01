@@ -63,28 +63,14 @@ class PhotoExtractorApp(QMainWindow):
         # File selection buttons
         self.load_btn = QPushButton("Load Image")
         self.load_btn.clicked.connect(self.load_image)
-        toolbar_layout.addWidget(self.load_btn)
-        
-        
-        # Base name input
-        toolbar_layout.addWidget(QLabel("Base Name:"))
-        self.base_name_edit = QLineEdit("photo")
-        self.base_name_edit.setMaximumWidth(100)
-        toolbar_layout.addWidget(self.base_name_edit)
+        toolbar_layout.addWidget(self.load_btn)       
         
         # Extract button
         self.extract_btn = QPushButton("Extract Photos")
         self.extract_btn.clicked.connect(self.extract_photos)
         self.extract_btn.setEnabled(False)
         toolbar_layout.addWidget(self.extract_btn)
-        
-        # Clear all button
-        self.clear_btn = QPushButton("Clear All")
-        self.clear_btn.clicked.connect(self.clear_all_boxes)
-        self.clear_btn.setEnabled(False)
-        toolbar_layout.addWidget(self.clear_btn)
-        
-        
+
         # Detect photos button
         self.detect_btn = QPushButton("Detect Photos")
         self.detect_btn.clicked.connect(self.detect_photos)
@@ -96,6 +82,12 @@ class PhotoExtractorApp(QMainWindow):
         self.refine_all_btn.clicked.connect(self.refine_all_boxes)
         self.refine_all_btn.setEnabled(False)
         toolbar_layout.addWidget(self.refine_all_btn)
+
+        # Clear all button
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.clicked.connect(self.clear_all_boxes)
+        self.clear_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.clear_btn)
         
         
         toolbar_layout.addStretch()
@@ -378,7 +370,7 @@ class PhotoExtractorApp(QMainWindow):
             return  # User cancelled
             
         # Extract and save photos
-        base_name = self.base_name_edit.text() or "photo"
+        base_name = "photo"
         saved_files = self.image_processor.save_cropped_images(
             crop_data, output_directory, base_name
         )
