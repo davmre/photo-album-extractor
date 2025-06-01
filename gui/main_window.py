@@ -398,7 +398,7 @@ class PhotoExtractorApp(QMainWindow):
         self.detect_btn.setEnabled(has_image)
         self.refine_all_btn.setEnabled(has_image and has_boxes)
         
-    def extract_photos(self):
+    def extract_photos(self, output_directory=None):
         """Extract all photos based on bounding boxes."""
         if not self.current_image_path or not self.current_image:
             QMessageBox.warning(self, "Error", "Please load an image first")
@@ -408,11 +408,12 @@ class PhotoExtractorApp(QMainWindow):
         if not rects:
             QMessageBox.warning(self, "Error", "No bounding boxes found")
             return
-            
-        # Prompt for output directory
-        output_directory = QFileDialog.getExistingDirectory(
-            self, "Select Output Folder for Extracted Photos"
-        )
+        
+        if not output_directory:
+            # Prompt for output directory
+            output_directory = QFileDialog.getExistingDirectory(
+                self, "Select Output Folder for Extracted Photos"
+            )
         
         if not output_directory:
             return  # User cancelled
