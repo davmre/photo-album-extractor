@@ -5,3 +5,4 @@ opencv-python>=4.5.0
 paddleocr>=3.0.0
 layoutparser>=0.2.0
 google-generativeai>=0.3.0
+piexif>=1.1.3

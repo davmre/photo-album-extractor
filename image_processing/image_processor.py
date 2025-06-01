@@ -4,9 +4,11 @@ Image processing utilities for loading, cropping, and saving photos.
 
 import os
 import numpy as np
+from datetime import datetime
 from PIL import Image
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import QRectF
+import piexif
 
 
 def extract_perspective_image(image, corner_points, output_width=None, output_height=None):
@@ -113,8 +115,15 @@ class ImageProcessor:
             
         return pixmap
 
-    def save_cropped_images(self, crop_data, output_dir, base_name="photo"):
-        """Save multiple cropped images to the specified directory."""
+    def save_cropped_images(self, crop_data, output_dir, base_name="photo", attributes_list=None):
+        """Save multiple cropped images to the specified directory.
+        
+        Args:
+            crop_data: List of crop information
+            output_dir: Directory to save images
+            base_name: Base name for files
+            attributes_list: List of attribute dictionaries (one per crop)
+        """
         if self.current_image is None:
             return []
             
@@ -127,6 +136,11 @@ class ImageProcessor:
         for i, data in enumerate(crop_data, 1):
             crop_type, crop_info = data
             cropped = None
+            
+            # Get attributes for this crop if available
+            attributes = {}
+            if attributes_list and i-1 < len(attributes_list):
+                attributes = attributes_list[i-1] or {}
             
             if crop_type == 'quad':
                 # Convert relative coordinates to absolute pixel coordinates for quadrilateral
@@ -152,16 +166,64 @@ class ImageProcessor:
                 counter += 1
                 
             try:
-                # Convert to RGB if necessary and save
+                # Convert to RGB if necessary
                 if cropped.mode != 'RGB':
                     cropped = cropped.convert('RGB')
-                cropped.save(filepath, 'JPEG', quality=95)
+                    
+                # Save with EXIF data if attributes are provided
+                if attributes:
+                    self._save_image_with_exif(cropped, filepath, attributes)
+                else:
+                    cropped.save(filepath, 'JPEG', quality=95)
+                    
                 saved_files.append(filepath)
                 print(f"Saved: {filename}")
             except Exception as e:
                 print(f"Error saving {filename}: {e}")
                 
         return saved_files
+        
+    def _save_image_with_exif(self, image, filepath, attributes):
+        """Save image with EXIF data from attributes."""
+        try:
+            # Create EXIF dictionary
+            exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+            
+            # Add date/time if available
+            if 'date_time' in attributes and attributes['date_time']:
+                try:
+                    # Parse ISO date string and convert to EXIF format
+                    dt = datetime.fromisoformat(attributes['date_time'].replace('Z', '+00:00'))
+                    exif_datetime = dt.strftime("%Y:%m:%d %H:%M:%S")
+                    
+                    # Set multiple date fields for maximum compatibility
+                    exif_dict["0th"][piexif.ImageIFD.DateTime] = exif_datetime
+                    exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = exif_datetime
+                    exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = exif_datetime
+                except (ValueError, AttributeError) as e:
+                    print(f"Warning: Could not parse date '{attributes['date_time']}': {e}")
+            
+            # Add comments if available
+            if 'comments' in attributes and attributes['comments']:
+                comments = attributes['comments'][:65535]  # EXIF comment limit
+                # Use UserComment for better unicode support
+                exif_dict["Exif"][piexif.ExifIFD.UserComment] = comments.encode('utf-8')
+                # Also set ImageDescription for wider compatibility
+                exif_dict["0th"][piexif.ImageIFD.ImageDescription] = comments
+            
+            # Add software tag
+            exif_dict["0th"][piexif.ImageIFD.Software] = "Photo Album Extractor"
+            
+            # Convert EXIF dictionary to bytes
+            exif_bytes = piexif.dump(exif_dict)
+            
+            # Save image with EXIF data
+            image.save(filepath, 'JPEG', quality=95, exif=exif_bytes)
+            
+        except Exception as e:
+            print(f"Warning: Could not write EXIF data to {filepath}: {e}")
+            # Fall back to saving without EXIF
+            image.save(filepath, 'JPEG', quality=95)
         
     def get_image_size(self):
         """Get the size of the current image."""

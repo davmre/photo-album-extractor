@@ -382,7 +382,7 @@ class PhotoExtractorApp(QMainWindow):
             QMessageBox.warning(self, "Error", "Please load an image first")
             return
             
-        crop_data = self.image_view.get_crop_rects()
+        crop_data, attributes_list = self.image_view.get_crop_rects_with_attributes()
         if not crop_data:
             QMessageBox.warning(self, "Error", "No bounding boxes found")
             return
@@ -395,10 +395,10 @@ class PhotoExtractorApp(QMainWindow):
         if not output_directory:
             return  # User cancelled
             
-        # Extract and save photos
+        # Extract and save photos with attributes
         base_name = "photo"
         saved_files = self.image_processor.save_cropped_images(
-            crop_data, output_directory, base_name
+            crop_data, output_directory, base_name, attributes_list
         )
         
         if saved_files:
@@ -671,8 +671,9 @@ class PhotoExtractorApp(QMainWindow):
                 # Load image temporarily
                 temp_processor = ImageProcessor()
                 if temp_processor.load_image(image_path):
-                    # Convert saved boxes to crop data format
+                    # Convert saved boxes to crop data format and collect attributes
                     crop_data = []
+                    attributes_list = []
                     for box_data in saved_boxes:
                         if box_data.get('type') == 'quad' and 'corners' in box_data:
                             # Convert absolute coordinates back to relative coordinates
@@ -687,14 +688,18 @@ class PhotoExtractorApp(QMainWindow):
                                     rel_y = corner[1] / image_height
                                     rel_corners.append((rel_x, rel_y))
                                 crop_data.append(('quad', rel_corners))
+                                
+                                # Get attributes for this box
+                                attributes = box_data.get('attributes', {})
+                                attributes_list.append(attributes)
                     
                     if crop_data:
                         # Use filename without extension as base name
                         base_name = os.path.splitext(filename)[0]
                         
-                        # Extract and save photos
+                        # Extract and save photos with attributes
                         saved_files = temp_processor.save_cropped_images(
-                            crop_data, output_directory, base_name
+                            crop_data, output_directory, base_name, attributes_list
                         )
                         
                         if saved_files:
