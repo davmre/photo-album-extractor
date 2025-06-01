@@ -191,23 +191,8 @@ class ImageView(QGraphicsView):
         """Handle bounding box changes and update magnifier."""
         # Emit signal to update magnifier with new bounding box positions
         self.image_updated.emit()
-                    
-    def refine_bounding_box(self, box, multiscale=False, enforce_parallel_sides=None):
-        """Refine a single bounding box using edge detection."""
-        if not self.image_item or not isinstance(box, QuadBoundingBox):
-            return
-            
-        # Get enforce_parallel_sides setting if not explicitly provided
-        if enforce_parallel_sides is None:
-            # Default behavior: enforce parallel sides (True) unless setting says otherwise
-            if self.settings:
-                allow_independent = self.settings.get('refine_edges_independently', False)
-                enforce_parallel_sides = not allow_independent
-            else:
-                enforce_parallel_sides = True
-            
-        # Get the current image as numpy array
-        # Convert QPixmap to numpy array
+   
+    def image_as_numpy(self, format="rgb"):
         image = self._image_qt
         width = image.width()
         height = image.height()
@@ -217,8 +202,33 @@ class ImageView(QGraphicsView):
         ptr.setsize(height * width * 4)  # 4 bytes per pixel (RGBA)
         arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
         # Convert RGBA to BGR for OpenCV
-        image_bgr = arr[:, :, [2, 1, 0]]  # BGR format
-        
+        if format == "rgba":
+            image = arr
+        if format == "rgb":
+            image = arr[:, :, [0, 1, 2]]  # RGB format
+        elif format == "bgr":
+            image = arr[:, :, [2, 1, 0]]  # BGR format
+        else:
+            raise ValueError("Unrecognized image format", format)
+        return image
+
+    def refine_bounding_box(self, box, multiscale=False, enforce_parallel_sides=None):
+        """Refine a single bounding box using edge detection."""
+        if not self.image_item or not isinstance(box, QuadBoundingBox):
+            return
+
+        # Get enforce_parallel_sides setting if not explicitly provided
+        if enforce_parallel_sides is None:
+            # Default behavior: enforce parallel sides (True) unless setting says otherwise
+            if self.settings:
+                allow_independent = self.settings.get('refine_edges_independently', False)
+                enforce_parallel_sides = not allow_independent
+            else:
+                enforce_parallel_sides = True
+
+        # Get the current image as numpy array
+        image_bgr = self.image_as_numpy(format="bgr")
+
         # Get current box corners in image coordinates
         corner_coords = box.get_ordered_corners_for_extraction()
             
