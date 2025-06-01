@@ -30,7 +30,7 @@ class DetectionStrategy(ABC):
         pass
     
     @abstractmethod
-    def detect_photos(self, image_width: int, image_height: int, image_path: str = None) -> List[List[QPointF]]:
+    def detect_photos(self, image: Image.Image) -> List[List[QPointF]]:
         """
         Detect photos in an image and return their bounding quadrilaterals.
         
@@ -100,22 +100,17 @@ class GeminiDetectionStrategy(DetectionStrategy):
         yscale = 1. / normalized_height
         return [ QPointF(p[0] * xscale, p[1] * yscale) for p in coords]
     
-    def detect_photos(self, image_width: int, image_height: int, image_path: str = None) -> List[List[QPointF]]:
-        if not image_path or not self._model:
+    def detect_photos(self, image: Image.Image) -> List[List[QPointF]]:
+        if not image or not self._model:
             return []
-            
+
         try:
-            # Load and encode image
-            with open(image_path, 'rb') as f:
-                image_data = f.read()
-            
-            # Create PIL image for Gemini
-            pil_image = Image.open(io.BytesIO(image_data))
-            if pil_image.mode != 'RGB':
-                pil_image = pil_image.convert('RGB')
             # If the image is very large, no need to send the whole thing.
             # We're just getting approximate bounding boxes here.
-            pil_image = pil_image.resize(size=(768, 768))
+            image = image.resize(size=(768, 768))
+
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
             
             prompt = """This is a scanned page from a photo album. Your task is
 to detect the locations of the photos on the page. Output a JSON list of
@@ -123,8 +118,7 @@ bounding boxes, one for each photo, where each entry contains the 2D bounding
 box in the format `{ "box_2d": [y_min, x_min, y_max, x_max] }`. Return only the
 JSON response, no additional text."""
 
-            # Generate response
-            response = self._model.generate_content([pil_image, prompt])
+            response = self._model.generate_content([image, prompt])
             
             if not response.text:
                 return []
@@ -132,7 +126,7 @@ JSON response, no additional text."""
             # Parse the JSON response
             try:
                 result = self._parse_as_json(response)
-                print("GOT RESPONSE")
+                print("GOT Gemini response")
                 print(result)
                 
                 rectangles = []
@@ -144,12 +138,12 @@ JSON response, no additional text."""
                 image_coords = [self._unnormalize_coords(r) for r in rectangles]
                 print("As image coords", image_coords)
                 return image_coords
-                
+
             except json.JSONDecodeError as e:
                 print(f"Failed to parse Gemini JSON response: {e}")
                 print(f"Response was: {response.text}")
                 return []
-                
+
         except Exception as e:
             print(f"Gemini detection error: {e}")
             return []

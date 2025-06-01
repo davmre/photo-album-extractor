@@ -9,15 +9,11 @@ from PyQt6.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
                              QMenu, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QPointF
 from PyQt6.QtGui import QPainter
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QImage
 
 from gui.quad_bounding_box import QuadBoundingBox, QuadEdgeLine
 import image_processing.refine_bounds as refine_bounds
 
-def pil_image_as_pixmap(image: Image.Image) -> QPixmap:
-    """Convert image to QPixmap for display."""
-    image_qt = ImageQt.ImageQt(image)
-    return QPixmap.fromImage(image_qt)
 
 class ImageView(QGraphicsView):
     """Custom graphics view for displaying images with bounding box interaction."""
@@ -73,7 +69,10 @@ class ImageView(QGraphicsView):
         
     def set_image(self, image: Image.Image):
         """Set the image to display."""
-        pixmap = pil_image_as_pixmap(image)
+        # QPixmap using implicit sharing semantics, so it seems we need to 
+        # keep a reference to the QT image so it doesn't get GC'd.
+        self._image_qt = ImageQt.ImageQt(image)
+        pixmap = QPixmap.fromImage(self._image_qt)
         
         # Clear existing image
         if self.image_item:

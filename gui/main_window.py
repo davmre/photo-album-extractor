@@ -310,7 +310,7 @@ class PhotoExtractorApp(QMainWindow):
         
     def detect_photos(self):
         """Run the configured detection strategy to automatically detect photos."""
-        if not self.current_image_path:
+        if not self.current_image_path or not self.current_image:
             return
             
         # Get the selected strategy from settings
@@ -337,6 +337,7 @@ class PhotoExtractorApp(QMainWindow):
         pixmap = self.image_view.image_item.pixmap()
         image_width = pixmap.width()
         image_height = pixmap.height()
+        print("STARTING PIXMAP", image_width, image_height)
         
         # Clear existing boxes first
         self.image_view.clear_boxes()
@@ -354,8 +355,8 @@ class PhotoExtractorApp(QMainWindow):
         
         # Run detection strategy
         try:
-            detected_quads = selected_strategy.detect_photos(image_width, image_height, self.current_image_path)
-            
+            detected_quads = selected_strategy.detect_photos(self.current_image)
+
             # Convert relative coordinates to scene coordinates and create boxes
             for quad_corners in detected_quads:
                 # Convert relative coordinates (0-1) to scene coordinates
@@ -364,7 +365,7 @@ class PhotoExtractorApp(QMainWindow):
                     scene_x = corner.x() * image_width
                     scene_y = corner.y() * image_height
                     scene_corners.append(QPointF(scene_x, scene_y))
-                
+
                 # Create the bounding box
                 box = QuadBoundingBox(scene_corners)
                 self.image_view.add_bounding_box_object(box)
@@ -566,7 +567,7 @@ class PhotoExtractorApp(QMainWindow):
                 image = image_processor.load_image(image_path)
                 if image:
                     # Run detection strategy
-                    detected_quads = selected_strategy.detect_photos(image.width, image.height, image_path)
+                    detected_quads = selected_strategy.detect_photos(image)
                     
                     # Convert to storage format
                     box_data = []
