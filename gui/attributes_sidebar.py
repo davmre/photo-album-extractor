@@ -2,8 +2,8 @@
 Attributes sidebar for editing bounding box metadata.
 """
 
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QDateTimeEdit, 
-                             QTextEdit, QGroupBox, QScrollArea)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QDateTimeEdit, 
+                             QTextEdit, QGroupBox, QScrollArea, QSpinBox)
 from PyQt6.QtCore import Qt, QDateTime, pyqtSignal
 from gui.magnifier_widget import MagnifierWidget
 
@@ -12,6 +12,7 @@ class AttributesSidebar(QWidget):
     """Sidebar widget for editing bounding box attributes."""
     
     attributes_changed = pyqtSignal(str, dict)  # Emits (box_id, attributes)
+    coordinates_changed = pyqtSignal(str, list)  # Emits (box_id, coordinates)
     
     def __init__(self):
         super().__init__()
@@ -75,6 +76,43 @@ class AttributesSidebar(QWidget):
         comments_layout.addWidget(self.comments_edit)
         
         content_layout.addWidget(comments_group)
+        
+        # Coordinates group
+        coordinates_group = QGroupBox("Corner Coordinates")
+        coordinates_layout = QVBoxLayout(coordinates_group)
+        
+        # Create coordinate input fields for each corner
+        self.coordinate_spinboxes = []
+        corner_labels = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"]
+        
+        for i, label in enumerate(corner_labels):
+            corner_layout = QVBoxLayout()
+            corner_label = QLabel(f"{label}:")
+            corner_label.setStyleSheet("font-weight: bold; margin-top: 5px;")
+            corner_layout.addWidget(corner_label)
+            
+            # X coordinate
+            x_layout = QHBoxLayout()
+            x_layout.addWidget(QLabel("X:"))
+            x_spinbox = QSpinBox()
+            x_spinbox.setRange(-9999, 9999)
+            x_spinbox.valueChanged.connect(lambda value, corner=i, coord='x': self.on_coordinate_changed(corner, coord, value))
+            x_layout.addWidget(x_spinbox)
+            corner_layout.addLayout(x_layout)
+            
+            # Y coordinate
+            y_layout = QHBoxLayout()
+            y_layout.addWidget(QLabel("Y:"))
+            y_spinbox = QSpinBox()
+            y_spinbox.setRange(-9999, 9999)
+            y_spinbox.valueChanged.connect(lambda value, corner=i, coord='y': self.on_coordinate_changed(corner, coord, value))
+            y_layout.addWidget(y_spinbox)
+            corner_layout.addLayout(y_layout)
+            
+            self.coordinate_spinboxes.append((x_spinbox, y_spinbox))
+            coordinates_layout.addLayout(corner_layout)
+        
+        content_layout.addWidget(coordinates_group)
         
         # Add stretch to push content to top
         content_layout.addStretch()
@@ -182,3 +220,32 @@ class AttributesSidebar(QWidget):
             attributes['comments'] = comments
             
         return attributes
+        
+    def on_coordinate_changed(self, corner_index, coord_type, value):
+        """Handle coordinate changes."""
+        if not self.updating_ui and self.current_box_id:
+            # Get current coordinates from all spinboxes
+            coordinates = []
+            for x_spinbox, y_spinbox in self.coordinate_spinboxes:
+                x_val = x_spinbox.value()
+                y_val = y_spinbox.value()
+                coordinates.append([float(x_val), float(y_val)])
+            
+            # Focus magnifier on the corner being edited
+            if corner_index < len(coordinates):
+                corner_pos = coordinates[corner_index]
+                self.magnifier.focus_on_corner(corner_pos)
+            
+            # Emit coordinate change signal
+            self.coordinates_changed.emit(self.current_box_id, coordinates)
+            
+    def update_coordinates(self, coordinates):
+        """Update the coordinate spinboxes with new values."""
+        self.updating_ui = True
+        try:
+            for i, (x_spinbox, y_spinbox) in enumerate(self.coordinate_spinboxes):
+                if i < len(coordinates):
+                    x_spinbox.setValue(int(coordinates[i][0]))
+                    y_spinbox.setValue(int(coordinates[i][1]))
+        finally:
+            self.updating_ui = False

@@ -115,11 +115,13 @@ class PhotoExtractorApp(QMainWindow):
         # Create attributes sidebar (right panel)
         self.attributes_sidebar = AttributesSidebar()
         self.attributes_sidebar.attributes_changed.connect(self.on_attributes_changed)
+        self.attributes_sidebar.coordinates_changed.connect(self.on_coordinates_changed)
         main_splitter.addWidget(self.attributes_sidebar)
         
         # Connect magnifier signals
         self.image_view.mouse_moved.connect(self.attributes_sidebar.magnifier.set_cursor_position)
         self.image_view.image_updated.connect(self.update_magnifier)
+        self.image_view.mouse_entered_viewport.connect(self.attributes_sidebar.magnifier.resume_cursor_tracking)
         
         # Set splitter proportions: [left sidebar, main view, right sidebar]
         main_splitter.setSizes([250, 800, 300])
@@ -281,9 +283,10 @@ class PhotoExtractorApp(QMainWindow):
         """Clear all bounding boxes."""
         self.image_view.clear_boxes()
         
-    def on_box_selected(self, box_id, attributes):
+    def on_box_selected(self, box_id, attributes, coordinates):
         """Handle box selection from ImageView."""
         self.attributes_sidebar.show_attributes(box_id, attributes)
+        self.attributes_sidebar.update_coordinates(coordinates)
         
     def on_box_deselected(self):
         """Handle box deselection from ImageView."""
@@ -298,6 +301,15 @@ class PhotoExtractorApp(QMainWindow):
         if self.current_image_path and self.bounding_box_storage:
             filename = os.path.basename(self.current_image_path)
             self.bounding_box_storage.update_box_attributes(filename, box_id, attributes)
+            
+    def on_coordinates_changed(self, box_id, coordinates):
+        """Handle coordinate changes from AttributesSidebar."""
+        # Update the box coordinates
+        self.image_view.update_box_coordinates(box_id, coordinates)
+        
+        # Save to storage immediately for persistence
+        if self.current_image_path and self.bounding_box_storage:
+            self.save_current_bounding_boxes()
         
     def detect_photos(self):
         """Run the configured detection strategy to automatically detect photos."""
@@ -737,6 +749,13 @@ class PhotoExtractorApp(QMainWindow):
             # Set bounding boxes
             bounding_box_corners = self.image_view.get_bounding_box_corners()
             self.attributes_sidebar.magnifier.set_bounding_boxes(bounding_box_corners)
+            
+            # Update coordinate fields if a box is selected
+            selected_box = self.image_view.get_selected_box()
+            if selected_box and self.attributes_sidebar.current_box_id:
+                corners = selected_box.get_corner_points()
+                coordinates = [[corner.x(), corner.y()] for corner in corners]
+                self.attributes_sidebar.update_coordinates(coordinates)
         
     def open_settings(self):
         """Open the settings dialog."""

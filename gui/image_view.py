@@ -18,13 +18,15 @@ class ImageView(QGraphicsView):
     # Signal emitted when boxes are added or removed
     boxes_changed = pyqtSignal()
     # Signal emitted when a box is selected
-    box_selected = pyqtSignal(str, dict)  # Emits (box_id, attributes)
+    box_selected = pyqtSignal(str, dict, list)  # Emits (box_id, attributes, coordinates)
     # Signal emitted when no box is selected
     box_deselected = pyqtSignal()
     # Signal emitted when mouse moves over image
     mouse_moved = pyqtSignal(object)  # Emits QPointF in scene coordinates
     # Signal emitted when image or bounding boxes change
     image_updated = pyqtSignal()
+    # Signal emitted when mouse enters viewport
+    mouse_entered_viewport = pyqtSignal()
     
     def __init__(self, settings=None):
         super().__init__()
@@ -54,6 +56,10 @@ class ImageView(QGraphicsView):
         
         # Enable mouse tracking for magnifier
         self.setMouseTracking(True)
+        
+        # Track enter/leave events for magnifier mode switching
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.mouse_entered = False
         
     def set_image(self, pixmap):
         """Set the image to display."""
@@ -305,7 +311,10 @@ class ImageView(QGraphicsView):
         
         # Emit appropriate signal
         if selected_box:
-            self.box_selected.emit(box_id, selected_box.get_attributes())
+            # Get coordinates in scene coordinates
+            corners = selected_box.get_corner_points()
+            coordinates = [[corner.x(), corner.y()] for corner in corners]
+            self.box_selected.emit(box_id, selected_box.get_attributes(), coordinates)
         else:
             self.box_deselected.emit()
             
@@ -325,6 +334,24 @@ class ImageView(QGraphicsView):
         for box in self.bounding_boxes:
             if isinstance(box, QuadBoundingBox) and box.box_id == box_id:
                 box.set_attributes(attributes)
+                break
+                
+    def update_box_coordinates(self, box_id, coordinates):
+        """Update coordinates for a specific box."""
+        for box in self.bounding_boxes:
+            if isinstance(box, QuadBoundingBox) and box.box_id == box_id:
+                # Convert coordinates to QPointF and set corners
+                from PyQt6.QtCore import QPointF
+                corner_points = [QPointF(coord[0], coord[1]) for coord in coordinates]
+                box.set_corners(corner_points)
+                
+                # Update edge lines if they exist
+                if hasattr(box, 'edge_lines'):
+                    for edge_line in box.edge_lines:
+                        edge_line.update_edge_geometry()
+                        
+                # Update magnifier
+                self.image_updated.emit()
                 break
                 
     def get_bounding_box_corners(self):
@@ -425,3 +452,16 @@ class ImageView(QGraphicsView):
         else:
             # Normal scrolling behavior
             super().wheelEvent(event)
+            
+    def enterEvent(self, event):
+        """Handle mouse entering the viewport."""
+        # Signal that cursor tracking should resume
+        self.mouse_entered = True
+        self.mouse_entered_viewport.emit()
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        """Handle mouse leaving the viewport."""
+        # Track when mouse leaves viewport  
+        self.mouse_entered = False
+        super().leaveEvent(event)

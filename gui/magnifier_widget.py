@@ -23,6 +23,10 @@ class MagnifierWidget(QWidget):
         self.image_rect = QRectF()  # Image bounds
         self.bounding_boxes = []  # List of bounding box corners in image coordinates
         
+        # Tracking mode
+        self.tracking_mode = "cursor"  # "cursor" or "corner"
+        self.focused_corner_pos = QPointF(0, 0)  # Position when focusing on a corner
+        
         # Set up widget
         self.setFixedSize(size, size)
         self.setStyleSheet("""
@@ -69,11 +73,29 @@ class MagnifierWidget(QWidget):
     def set_cursor_position(self, pos):
         """Set the cursor position in image coordinates."""
         self.cursor_pos = QPointF(pos)
+        # Switch back to cursor tracking mode when cursor moves
+        if self.tracking_mode != "cursor":
+            self.tracking_mode = "cursor"
         self.update_magnifier()
         
     def set_bounding_boxes(self, boxes):
         """Set the list of bounding boxes to overlay."""
         self.bounding_boxes = boxes
+        self.update_magnifier()
+        
+    def focus_on_corner(self, corner_pos):
+        """Focus the magnifier on a specific corner position."""
+        self.tracking_mode = "corner"
+        # Handle both list [x, y] and QPointF inputs
+        if isinstance(corner_pos, list) and len(corner_pos) >= 2:
+            self.focused_corner_pos = QPointF(corner_pos[0], corner_pos[1])
+        else:
+            self.focused_corner_pos = QPointF(corner_pos)
+        self.update_magnifier()
+        
+    def resume_cursor_tracking(self):
+        """Resume following the cursor."""
+        self.tracking_mode = "cursor"
         self.update_magnifier()
         
     def update_magnifier(self):
@@ -89,11 +111,12 @@ class MagnifierWidget(QWidget):
             self.magnifier_label.setPixmap(empty_pixmap)
             return
             
-        # Calculate source region around cursor
+        # Calculate source region around the focus point
+        focus_pos = self.focused_corner_pos if self.tracking_mode == "corner" else self.cursor_pos
         half_source = self.source_size / 2
         source_rect = QRectF(
-            self.cursor_pos.x() - half_source,
-            self.cursor_pos.y() - half_source,
+            focus_pos.x() - half_source,
+            focus_pos.y() - half_source,
             self.source_size,
             self.source_size
         )
@@ -168,31 +191,35 @@ class MagnifierWidget(QWidget):
         painter.restore()
         
     def _draw_crosshair(self, painter, source_rect, dest_rect):
-        """Draw crosshair at the cursor position."""
+        """Draw crosshair at the focus position."""
         painter.save()
         
-        # Set up pen for crosshair
-        pen = QPen(QColor(0, 150, 255), 1)
+        # Set up pen for crosshair - different colors for different modes
+        if self.tracking_mode == "corner":
+            pen = QPen(QColor(255, 150, 0), 2)  # Orange for corner focus
+        else:
+            pen = QPen(QColor(0, 150, 255), 1)  # Blue for cursor tracking
         pen.setCosmetic(True)
         painter.setPen(pen)
         
-        # Calculate cursor position in destination coordinates
-        if source_rect.contains(self.cursor_pos):
+        # Calculate focus position in destination coordinates
+        focus_pos = self.focused_corner_pos if self.tracking_mode == "corner" else self.cursor_pos
+        if source_rect.contains(focus_pos):
             scale_x = dest_rect.width() / source_rect.width()
             scale_y = dest_rect.height() / source_rect.height()
             
-            cursor_dest_x = dest_rect.x() + (self.cursor_pos.x() - source_rect.x()) * scale_x
-            cursor_dest_y = dest_rect.y() + (self.cursor_pos.y() - source_rect.y()) * scale_y
+            focus_dest_x = dest_rect.x() + (focus_pos.x() - source_rect.x()) * scale_x
+            focus_dest_y = dest_rect.y() + (focus_pos.y() - source_rect.y()) * scale_y
             
             # Draw crosshair
-            crosshair_size = 10
+            crosshair_size = 10 if self.tracking_mode == "cursor" else 15  # Larger for corner focus
             painter.drawLine(
-                cursor_dest_x - crosshair_size, cursor_dest_y,
-                cursor_dest_x + crosshair_size, cursor_dest_y
+                focus_dest_x - crosshair_size, focus_dest_y,
+                focus_dest_x + crosshair_size, focus_dest_y
             )
             painter.drawLine(
-                cursor_dest_x, cursor_dest_y - crosshair_size,
-                cursor_dest_x, cursor_dest_y + crosshair_size
+                focus_dest_x, focus_dest_y - crosshair_size,
+                focus_dest_x, focus_dest_y + crosshair_size
             )
         
         painter.restore()
