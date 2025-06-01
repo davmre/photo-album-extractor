@@ -45,8 +45,8 @@ class BoundingBoxStorage:
             box_data = []
             for box in bounding_boxes:
                 if isinstance(box, QuadBoundingBox):
-                    corners = box.get_corner_points_for_extraction()
-                    corner_coords = [[corner.x(), corner.y()] for corner in corners]
+                    corners = box.get_ordered_corners_for_extraction()
+                    corner_coords = [[corner[0], corner[1]] for corner in corners]
                     
                     # Build box data with attributes
                     box_entry = {

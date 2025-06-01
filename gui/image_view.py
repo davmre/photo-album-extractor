@@ -61,6 +61,9 @@ class ImageView(QGraphicsView):
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.mouse_entered = False
         
+        # Enable keyboard focus for key events
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        
     def set_image(self, pixmap):
         """Set the image to display."""
         # Clear existing image
@@ -363,6 +366,9 @@ class ImageView(QGraphicsView):
     def mousePressEvent(self, event):
         """Handle mouse press for starting box creation."""
         if event.button() == Qt.MouseButton.LeftButton:
+            # Ensure ImageView has focus for keyboard events
+            self.setFocus()
+            
             # Check if we're clicking on an existing item
             scene_pos = self.mapToScene(event.position().toPoint())
             clicked_item = self.scene.itemAt(scene_pos, self.transform())
@@ -462,3 +468,16 @@ class ImageView(QGraphicsView):
         # Track when mouse leaves viewport  
         self.mouse_entered = False
         super().leaveEvent(event)
+        
+    def keyPressEvent(self, event):
+        """Handle key press events."""
+        if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
+            # Delete the currently selected box
+            if self.selected_box:
+                self.remove_bounding_box(self.selected_box)
+                self.selected_box = None
+                self.box_deselected.emit()
+                return
+        
+        # Let parent handle other keys
+        super().keyPressEvent(event)
