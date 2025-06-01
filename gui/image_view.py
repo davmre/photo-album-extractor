@@ -478,6 +478,11 @@ class ImageView(QGraphicsView):
                 self.selected_box = None
                 self.box_deselected.emit()
                 return
+        elif event.key() == Qt.Key.Key_R:
+            # Refine the currently selected box
+            if self.selected_box and isinstance(self.selected_box, QuadBoundingBox):
+                self.refine_bounding_box(self.selected_box, multiscale=True)
+                return
         
         # Let parent handle other keys
         super().keyPressEvent(event)
