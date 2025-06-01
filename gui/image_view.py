@@ -8,8 +8,8 @@ from PyQt6.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
 from PyQt6.QtCore import Qt, pyqtSignal, QPointF
 from PyQt6.QtGui import QPainter
 
-from quad_bounding_box import QuadBoundingBox, QuadEdgeLine
-import refine_bounds
+from gui.quad_bounding_box import QuadBoundingBox, QuadEdgeLine
+import image_processing.refine_bounds as refine_bounds
 
 
 class ImageView(QGraphicsView):

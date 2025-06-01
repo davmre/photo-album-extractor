@@ -10,9 +10,9 @@ from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget,
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QAction, QPixmap
 
-from image_processor import ImageProcessor
-from quad_bounding_box import QuadBoundingBox
-from detection_strategies import DETECTION_STRATEGIES
+from image_processing.image_processor import ImageProcessor
+from gui.quad_bounding_box import QuadBoundingBox
+from image_processing.detection_strategies import DETECTION_STRATEGIES
 from storage.bounding_box_storage import BoundingBoxStorage
 from gui.settings_dialog import Settings, SettingsDialog
 from gui.directory_sidebar import DirectoryImageList

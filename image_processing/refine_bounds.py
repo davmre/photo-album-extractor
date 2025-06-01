@@ -4,8 +4,8 @@ import numpy as np
 
 from PIL import Image
 
-import image_processor
-import geometry
+import image_processing.image_processor as image_processor
+import image_processing.geometry as geometry
 
 
 

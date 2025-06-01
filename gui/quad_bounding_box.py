@@ -48,9 +48,6 @@ class QuadBoundingBox(QGraphicsObject):
             
     def boundingRect(self):
         """Return the bounding rectangle that encompasses all corners."""
-        if not self.corners:
-            return QRectF(0, 0, 1, 1)
-            
         # Find min/max coordinates
         min_x = min(corner.x() for corner in self.corners)
         max_x = max(corner.x() for corner in self.corners)

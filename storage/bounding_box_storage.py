@@ -4,7 +4,7 @@ Persistent storage for bounding box data per directory.
 
 import os
 import json
-from quad_bounding_box import QuadBoundingBox
+from gui.quad_bounding_box import QuadBoundingBox
 
 
 class BoundingBoxStorage:
