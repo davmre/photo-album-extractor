@@ -398,8 +398,8 @@ class PhotoExtractorApp(QMainWindow):
             QMessageBox.warning(self, "Error", "Please load an image first")
             return
             
-        crop_data, attributes_list = self.image_view.get_crop_rects_with_attributes()
-        if not crop_data:
+        rects, attributes_list = self.image_view.get_crop_rects_with_attributes()
+        if not rects:
             QMessageBox.warning(self, "Error", "No bounding boxes found")
             return
             
@@ -414,7 +414,7 @@ class PhotoExtractorApp(QMainWindow):
         # Extract and save photos with attributes
         base_name = "photo"
         saved_files = self.image_processor.save_cropped_images(
-            crop_data, output_directory, base_name, attributes_list
+            rects, output_directory, base_name, attributes_list
         )
         
         if saved_files:

@@ -145,28 +145,10 @@ class ImageView(QGraphicsView):
             for box in self.bounding_boxes[:]:  # Copy list to avoid modification during iteration
                 self.remove_bounding_box(box)
             # Note: remove_bounding_box already emits boxes_changed for each removal
-            
-    def get_crop_rects(self):
-        """Get all bounding box rectangles/polygons in scene coordinates."""
-        crop_data = []
-        for box in self.bounding_boxes:
-            # Get corner points for quadrilateral box in proper extraction order
-            corners = box.get_corner_points_for_extraction()
-            if self.image_item:
-                img_rect = self.image_item.boundingRect()
-                # Convert to relative coordinates within image
-                rel_corners = []
-                for corner in corners:
-                    rel_x = (corner.x() - img_rect.x()) / img_rect.width()
-                    rel_y = (corner.y() - img_rect.y()) / img_rect.height()
-                    rel_corners.append((rel_x, rel_y))
-                crop_data.append(('quad', rel_corners))
-                
-        return crop_data
         
     def get_crop_rects_with_attributes(self):
         """Get all bounding box crop data along with their attributes."""
-        crop_data = []
+        rects = []
         attributes_list = []
         
         for box in self.bounding_boxes:
@@ -180,15 +162,11 @@ class ImageView(QGraphicsView):
                     rel_x = (corner.x() - img_rect.x()) / img_rect.width()
                     rel_y = (corner.y() - img_rect.y()) / img_rect.height()
                     rel_corners.append((rel_x, rel_y))
-                crop_data.append(('quad', rel_corners))
+                rects.append(rel_corners)
                 
-                # Get attributes for this box
-                if isinstance(box, QuadBoundingBox):
-                    attributes_list.append(box.get_attributes())
-                else:
-                    attributes_list.append({})
+                attributes_list.append(box.get_attributes())
                 
-        return crop_data, attributes_list
+        return rects, attributes_list
         
     def show_context_menu(self, position):
         """Show context menu for adding/removing boxes."""
