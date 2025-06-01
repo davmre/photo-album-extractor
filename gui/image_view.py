@@ -18,8 +18,9 @@ class ImageView(QGraphicsView):
     # Signal emitted when boxes are added or removed
     boxes_changed = pyqtSignal()
     
-    def __init__(self):
+    def __init__(self, settings=None):
         super().__init__()
+        self.settings = settings
         
         # Set up the graphics scene
         self.scene = QGraphicsScene()
@@ -157,20 +158,11 @@ class ImageView(QGraphicsView):
         if clicked_box:
             # Menu for existing box
             refine_action = menu.addAction("Refine Bounding Box")
-            refine_parallel_action = menu.addAction("Refine Bounding Box (enforce parallel)")
-            refine_multiscale_action = menu.addAction("Refine Bounding Box multiscale (enforce parallel)")
             remove_action = menu.addAction("Remove Bounding Box")
             action = menu.exec(self.mapToGlobal(position))
             
             if action == refine_action:
-                self.refine_bounding_box(clicked_box)
-            if action == refine_parallel_action:
-                self.refine_bounding_box(clicked_box,
-                                         enforce_parallel_sides=True)
-            if action == refine_multiscale_action:
-                self.refine_bounding_box(clicked_box,
-                                         enforce_parallel_sides=True, 
-                                         multiscale=True)
+                self.refine_bounding_box(clicked_box, multiscale=True)
             elif action == remove_action:
                 self.remove_bounding_box(clicked_box)
 
@@ -185,10 +177,19 @@ class ImageView(QGraphicsView):
                 for edge_line in box.edge_lines:
                     edge_line.update_edge_geometry()
                     
-    def refine_bounding_box(self, box, multiscale=False, enforce_parallel_sides=False):
+    def refine_bounding_box(self, box, multiscale=False, enforce_parallel_sides=None):
         """Refine a single bounding box using edge detection."""
         if not self.image_item or not isinstance(box, QuadBoundingBox):
             return
+            
+        # Get enforce_parallel_sides setting if not explicitly provided
+        if enforce_parallel_sides is None:
+            # Default behavior: enforce parallel sides (True) unless setting says otherwise
+            if self.settings:
+                allow_independent = self.settings.get('refine_edges_independently', False)
+                enforce_parallel_sides = not allow_independent
+            else:
+                enforce_parallel_sides = True
             
         # Get the current image as numpy array
         pixmap = self.image_item.pixmap()

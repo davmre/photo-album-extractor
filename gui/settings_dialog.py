@@ -90,6 +90,13 @@ class SettingsDialog(QDialog):
         
         form_layout.addRow("", self.auto_refine_checkbox)
         
+        # Refine edges independently checkbox
+        self.refine_independent_checkbox = QCheckBox("Allow non-rectangular selections when refining")
+        refine_independent = self.settings.get('refine_edges_independently', False)
+        self.refine_independent_checkbox.setChecked(refine_independent)
+        
+        form_layout.addRow("", self.refine_independent_checkbox)
+        
         layout.addLayout(form_layout)
         
         # Add some spacing
@@ -124,5 +131,8 @@ class SettingsDialog(QDialog):
             
         # Save auto-refine setting
         self.settings.set('auto_refine_detection', self.auto_refine_checkbox.isChecked())
+        
+        # Save refine edges independently setting
+        self.settings.set('refine_edges_independently', self.refine_independent_checkbox.isChecked())
         
         super().accept()

@@ -113,7 +113,7 @@ class PhotoExtractorApp(QMainWindow):
         splitter.addWidget(self.directory_list)
         
         # Create image view
-        self.image_view = ImageView()
+        self.image_view = ImageView(self.settings)
         self.image_view.boxes_changed.connect(self.update_extract_button_state)
         splitter.addWidget(self.image_view)
         
