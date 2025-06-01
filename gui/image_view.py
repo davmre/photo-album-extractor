@@ -17,10 +17,15 @@ class ImageView(QGraphicsView):
     
     # Signal emitted when boxes are added or removed
     boxes_changed = pyqtSignal()
+    # Signal emitted when a box is selected
+    box_selected = pyqtSignal(str, dict)  # Emits (box_id, attributes)
+    # Signal emitted when no box is selected
+    box_deselected = pyqtSignal()
     
     def __init__(self, settings=None):
         super().__init__()
         self.settings = settings
+        self.selected_box = None
         
         # Set up the graphics scene
         self.scene = QGraphicsScene()
@@ -86,6 +91,8 @@ class ImageView(QGraphicsView):
         box.changed.connect(self.box_changed)
         if isinstance(box, QuadBoundingBox):
             box.changed.connect(self.update_edge_lines)
+            # Connect selection signal
+            box.selected_changed.connect(self.on_box_selection_changed)
         
         # Emit signal that boxes changed
         self.boxes_changed.emit()
@@ -242,6 +249,45 @@ class ImageView(QGraphicsView):
         for box in self.bounding_boxes:
             if isinstance(box, QuadBoundingBox):
                 self.refine_bounding_box(box)
+                
+    def on_box_selection_changed(self, box_id):
+        """Handle box selection changes."""
+        # Find the box with this ID
+        selected_box = None
+        for box in self.bounding_boxes:
+            if isinstance(box, QuadBoundingBox):
+                if box.box_id == box_id:
+                    selected_box = box
+                    box.set_selected(True)
+                else:
+                    box.set_selected(False)
+                    
+        # Update selected box reference
+        self.selected_box = selected_box
+        
+        # Emit appropriate signal
+        if selected_box:
+            self.box_selected.emit(box_id, selected_box.get_attributes())
+        else:
+            self.box_deselected.emit()
+            
+    def clear_selection(self):
+        """Clear the current selection."""
+        if self.selected_box:
+            self.selected_box.set_selected(False)
+            self.selected_box = None
+            self.box_deselected.emit()
+            
+    def get_selected_box(self):
+        """Get the currently selected box."""
+        return self.selected_box
+        
+    def update_box_attributes(self, box_id, attributes):
+        """Update attributes for a specific box."""
+        for box in self.bounding_boxes:
+            if isinstance(box, QuadBoundingBox) and box.box_id == box_id:
+                box.set_attributes(attributes)
+                break
         
     def mousePressEvent(self, event):
         """Handle mouse press for starting box creation."""
@@ -250,8 +296,9 @@ class ImageView(QGraphicsView):
             scene_pos = self.mapToScene(event.position().toPoint())
             clicked_item = self.scene.itemAt(scene_pos, self.transform())
             
-            # If we didn't click on an existing item, start creating a new box
+            # If we didn't click on an existing item, clear selection and start creating a new box
             if clicked_item is None or clicked_item == self.image_item:
+                self.clear_selection()
                 self.is_dragging = True
                 self.drag_start_pos = scene_pos
                 self.setDragMode(QGraphicsView.DragMode.NoDrag)  # Disable default drag
@@ -303,7 +350,9 @@ class ImageView(QGraphicsView):
                         scene_pos,
                         QPointF(self.drag_start_pos.x(), scene_pos.y())
                     ]
-                    self.add_bounding_box_object(QuadBoundingBox(corners))
+                    # Create new box with unique ID
+                    box = QuadBoundingBox(corners)
+                    self.add_bounding_box_object(box)
                     
             # Reset drag state
             self.is_dragging = False

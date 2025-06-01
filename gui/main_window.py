@@ -17,6 +17,7 @@ from storage.bounding_box_storage import BoundingBoxStorage
 from gui.settings_dialog import Settings, SettingsDialog
 from gui.directory_sidebar import DirectoryImageList
 from gui.image_view import ImageView
+from gui.attributes_sidebar import AttributesSidebar
 
 
 class PhotoExtractorApp(QMainWindow):
@@ -93,26 +94,33 @@ class PhotoExtractorApp(QMainWindow):
         toolbar_layout.addStretch()
         main_layout.addLayout(toolbar_layout)
         
-        # Create splitter for sidebar and main content
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        # Create main horizontal splitter for three-panel layout
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
         
-        # Create directory image list (sidebar)
+        # Create directory image list (left sidebar)
         self.directory_list = DirectoryImageList()
         self.directory_list.image_selected.connect(self.on_image_selected)
         self.directory_list.directory_changed.connect(self.on_directory_changed)
         self.directory_list.batch_detect_requested.connect(self.batch_detect_photos)
         self.directory_list.batch_extract_requested.connect(self.batch_extract_photos)
-        splitter.addWidget(self.directory_list)
+        main_splitter.addWidget(self.directory_list)
         
-        # Create image view
+        # Create image view (center panel)
         self.image_view = ImageView(self.settings)
         self.image_view.boxes_changed.connect(self.update_extract_button_state)
-        splitter.addWidget(self.image_view)
+        self.image_view.box_selected.connect(self.on_box_selected)
+        self.image_view.box_deselected.connect(self.on_box_deselected)
+        main_splitter.addWidget(self.image_view)
         
-        # Set splitter proportions (sidebar smaller than main view)
-        splitter.setSizes([250, 1000])
+        # Create attributes sidebar (right panel)
+        self.attributes_sidebar = AttributesSidebar()
+        self.attributes_sidebar.attributes_changed.connect(self.on_attributes_changed)
+        main_splitter.addWidget(self.attributes_sidebar)
         
-        main_layout.addWidget(splitter)
+        # Set splitter proportions: [left sidebar, main view, right sidebar]
+        main_splitter.setSizes([250, 800, 300])
+        
+        main_layout.addWidget(main_splitter)
         
         # Status bar
         self.status_bar = QStatusBar()
@@ -269,6 +277,24 @@ class PhotoExtractorApp(QMainWindow):
         """Clear all bounding boxes."""
         self.image_view.clear_boxes()
         
+    def on_box_selected(self, box_id, attributes):
+        """Handle box selection from ImageView."""
+        self.attributes_sidebar.show_attributes(box_id, attributes)
+        
+    def on_box_deselected(self):
+        """Handle box deselection from ImageView."""
+        self.attributes_sidebar.show_no_selection()
+        
+    def on_attributes_changed(self, box_id, attributes):
+        """Handle attribute changes from AttributesSidebar."""
+        # Update the box attributes
+        self.image_view.update_box_attributes(box_id, attributes)
+        
+        # Save to storage immediately for persistence
+        if self.current_image_path and self.bounding_box_storage:
+            filename = os.path.basename(self.current_image_path)
+            self.bounding_box_storage.update_box_attributes(filename, box_id, attributes)
+        
     def detect_photos(self):
         """Run the configured detection strategy to automatically detect photos."""
         if not self.current_image_path:
@@ -423,7 +449,13 @@ class PhotoExtractorApp(QMainWindow):
             for box_data in saved_boxes:
                 if box_data.get('type') == 'quad' and 'corners' in box_data:
                     corners = [QPointF(corner[0], corner[1]) for corner in box_data['corners']]
-                    box = QuadBoundingBox(corners)
+                    
+                    # Get box ID and attributes if they exist
+                    box_id = box_data.get('id')
+                    attributes = box_data.get('attributes', {})
+                    
+                    # Create box with ID and attributes
+                    box = QuadBoundingBox(corners, box_id=box_id, attributes=attributes)
                     self.image_view.add_bounding_box_object(box)
                     
     def closeEvent(self, event):

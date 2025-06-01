@@ -3,6 +3,7 @@ Quadrilateral bounding box widget for arbitrary four-sided photo selection.
 """
 
 import math
+import uuid
 from PyQt6.QtWidgets import QGraphicsObject, QGraphicsRectItem, QGraphicsItem
 from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPointF
 from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QPolygonF
@@ -11,16 +12,24 @@ class QuadBoundingBox(QGraphicsObject):
     """A quadrilateral bounding box with four draggable corner points."""
     
     changed = pyqtSignal()
+    selected_changed = pyqtSignal(str)  # Emits box_id when selection changes
     
-    def __init__(self, corners, parent=None):
+    def __init__(self, corners, parent=None, box_id=None, attributes=None):
         super().__init__(parent)
         
         # Store the four corner points
         self.corners = [QPointF(corner) for corner in corners]
         
+        # Unique identifier and attributes
+        self.box_id = box_id or str(uuid.uuid4())
+        self.attributes = attributes or {}
+        self._is_selected = False
+        
         # Visual styling
         self.pen = QPen(QColor(255, 0, 0), 2)
         self.brush = QBrush(QColor(255, 0, 0, 30))
+        self.selected_pen = QPen(QColor(0, 150, 255), 3)
+        self.selected_brush = QBrush(QColor(0, 150, 255, 50))
         
         # Interaction flags
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -30,6 +39,9 @@ class QuadBoundingBox(QGraphicsObject):
         # Corner handles
         self.handles = []
         self.create_handles()
+        
+        # Enable mouse interaction for selection
+        self.setAcceptHoverEvents(True)
         
     def create_handles(self):
         """Create corner handles."""
@@ -63,8 +75,13 @@ class QuadBoundingBox(QGraphicsObject):
         
     def paint(self, painter, option, widget):
         """Paint the quadrilateral bounding box."""
-        painter.setPen(self.pen)
-        painter.setBrush(self.brush)
+        # Use selection-specific styling if selected
+        if self._is_selected:
+            painter.setPen(self.selected_pen)
+            painter.setBrush(self.selected_brush)
+        else:
+            painter.setPen(self.pen)
+            painter.setBrush(self.brush)
         
         # Create polygon from corners and draw
         polygon = QPolygonF(self.corners)
@@ -164,6 +181,41 @@ class QuadBoundingBox(QGraphicsObject):
         self.update_handles()
         self.update()
         self.changed.emit()
+        
+    def set_selected(self, selected):
+        """Set the selection state of this bounding box."""
+        if self._is_selected != selected:
+            self._is_selected = selected
+            self.update()  # Trigger repaint
+            if selected:
+                self.selected_changed.emit(self.box_id)
+                
+    def is_selected(self):
+        """Return whether this bounding box is selected."""
+        return self._is_selected
+        
+    def get_attributes(self):
+        """Get the attributes dictionary."""
+        return self.attributes.copy()
+        
+    def set_attributes(self, attributes):
+        """Set the attributes dictionary."""
+        self.attributes = attributes.copy()
+        
+    def get_attribute(self, key, default=None):
+        """Get a specific attribute value."""
+        return self.attributes.get(key, default)
+        
+    def set_attribute(self, key, value):
+        """Set a specific attribute value."""
+        self.attributes[key] = value
+        
+    def mousePressEvent(self, event):
+        """Handle mouse press for selection."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Emit selection signal
+            self.selected_changed.emit(self.box_id)
+        super().mousePressEvent(event)
 
 class CornerHandle(QGraphicsRectItem):
     """Draggable handle for corner points of quadrilateral bounding box."""

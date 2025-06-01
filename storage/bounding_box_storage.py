@@ -4,6 +4,8 @@ Persistent storage for bounding box data per directory.
 
 import os
 import json
+import uuid
+from datetime import datetime
 from gui.quad_bounding_box import QuadBoundingBox
 
 
@@ -45,10 +47,48 @@ class BoundingBoxStorage:
                 if isinstance(box, QuadBoundingBox):
                     corners = box.get_corner_points_for_extraction()
                     corner_coords = [[corner.x(), corner.y()] for corner in corners]
-                    box_data.append({'type': 'quad', 'corners': corner_coords})
+                    
+                    # Build box data with attributes
+                    box_entry = {
+                        'type': 'quad', 
+                        'corners': corner_coords
+                    }
+                    
+                    # Add attributes if they exist
+                    if hasattr(box, 'box_id') and box.box_id:
+                        box_entry['id'] = box.box_id
+                    
+                    if hasattr(box, 'attributes') and box.attributes:
+                        box_entry['attributes'] = box.attributes.copy()
+                    
+                    box_data.append(box_entry)
             self.data[image_filename] = box_data
         self.save_data()
         
     def load_bounding_boxes(self, image_filename):
         """Load bounding boxes for a specific image."""
         return self.data.get(image_filename, [])
+        
+    def generate_box_id(self):
+        """Generate a unique box ID."""
+        return str(uuid.uuid4())
+        
+    def get_box_attributes(self, image_filename, box_id):
+        """Get attributes for a specific box."""
+        boxes = self.load_bounding_boxes(image_filename)
+        for box_data in boxes:
+            if box_data.get('id') == box_id:
+                return box_data.get('attributes', {})
+        return {}
+        
+    def update_box_attributes(self, image_filename, box_id, attributes):
+        """Update attributes for a specific box."""
+        if image_filename not in self.data:
+            return False
+            
+        for box_data in self.data[image_filename]:
+            if box_data.get('id') == box_id:
+                box_data['attributes'] = attributes.copy()
+                self.save_data()
+                return True
+        return False
