@@ -104,19 +104,6 @@ class PhotoExtractorApp(QMainWindow):
         self.refine_all_btn.setEnabled(False)
         toolbar_layout.addWidget(self.refine_all_btn)
         
-        toolbar_layout.addWidget(QLabel("|"))  # Separator
-        
-        # Batch detect button
-        self.batch_detect_btn = QPushButton("Batch Detect")
-        self.batch_detect_btn.clicked.connect(self.batch_detect_photos)
-        self.batch_detect_btn.setEnabled(False)
-        toolbar_layout.addWidget(self.batch_detect_btn)
-        
-        # Batch extract button
-        self.batch_extract_btn = QPushButton("Batch Extract")
-        self.batch_extract_btn.clicked.connect(self.batch_extract_photos)
-        self.batch_extract_btn.setEnabled(False)
-        toolbar_layout.addWidget(self.batch_extract_btn)
         
         toolbar_layout.addStretch()
         main_layout.addLayout(toolbar_layout)
@@ -128,6 +115,8 @@ class PhotoExtractorApp(QMainWindow):
         self.directory_list = DirectoryImageList()
         self.directory_list.image_selected.connect(self.on_image_selected)
         self.directory_list.directory_changed.connect(self.on_directory_changed)
+        self.directory_list.batch_detect_requested.connect(self.batch_detect_photos)
+        self.directory_list.batch_extract_requested.connect(self.batch_extract_photos)
         splitter.addWidget(self.directory_list)
         
         # Create image view
@@ -363,14 +352,11 @@ class PhotoExtractorApp(QMainWindow):
         """Enable/disable extract, clear, and detect buttons based on current state."""
         has_image = self.current_image_path is not None
         has_boxes = len(self.image_view.bounding_boxes) > 0
-        has_directory = self.current_directory is not None
         
         self.extract_btn.setEnabled(has_image and has_boxes)
         self.clear_btn.setEnabled(has_boxes)
         self.detect_btn.setEnabled(has_image)
         self.refine_all_btn.setEnabled(has_image and has_boxes)
-        self.batch_detect_btn.setEnabled(has_directory)
-        self.batch_extract_btn.setEnabled(has_directory)
         
     def extract_photos(self):
         """Extract all photos based on bounding boxes."""
