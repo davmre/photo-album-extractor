@@ -21,6 +21,10 @@ class ImageView(QGraphicsView):
     box_selected = pyqtSignal(str, dict)  # Emits (box_id, attributes)
     # Signal emitted when no box is selected
     box_deselected = pyqtSignal()
+    # Signal emitted when mouse moves over image
+    mouse_moved = pyqtSignal(object)  # Emits QPointF in scene coordinates
+    # Signal emitted when image or bounding boxes change
+    image_updated = pyqtSignal()
     
     def __init__(self, settings=None):
         super().__init__()
@@ -48,6 +52,9 @@ class ImageView(QGraphicsView):
         self.drag_start_pos = None
         self.temp_box = None
         
+        # Enable mouse tracking for magnifier
+        self.setMouseTracking(True)
+        
     def set_image(self, pixmap):
         """Set the image to display."""
         # Clear existing image
@@ -63,6 +70,9 @@ class ImageView(QGraphicsView):
         
         # Fit image in view
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
+        
+        # Emit signal for magnifier
+        self.image_updated.emit()
         
     def add_bounding_box_object(self, box):
         """Add a pre-created bounding box object to the scene."""
@@ -96,6 +106,7 @@ class ImageView(QGraphicsView):
         
         # Emit signal that boxes changed
         self.boxes_changed.emit()
+        self.image_updated.emit()
         
         return box
         
@@ -200,8 +211,9 @@ class ImageView(QGraphicsView):
                 self.remove_bounding_box(clicked_box)
 
     def box_changed(self):
-        """Handle bounding box changes (for future features like live preview)."""
-        pass
+        """Handle bounding box changes and update magnifier."""
+        # Emit signal to update magnifier with new bounding box positions
+        self.image_updated.emit()
         
     def update_edge_lines(self):
         """Update edge line geometries when quadrilateral changes."""
@@ -314,6 +326,15 @@ class ImageView(QGraphicsView):
             if isinstance(box, QuadBoundingBox) and box.box_id == box_id:
                 box.set_attributes(attributes)
                 break
+                
+    def get_bounding_box_corners(self):
+        """Get all bounding box corners for the magnifier overlay."""
+        all_corners = []
+        for box in self.bounding_boxes:
+            if isinstance(box, QuadBoundingBox):
+                corners = box.get_corner_points()  # Get world coordinates
+                all_corners.append(corners)
+        return all_corners
         
     def mousePressEvent(self, event):
         """Handle mouse press for starting box creation."""
@@ -333,9 +354,13 @@ class ImageView(QGraphicsView):
         super().mousePressEvent(event)
         
     def mouseMoveEvent(self, event):
-        """Handle mouse move for box creation."""
+        """Handle mouse move for box creation and magnifier updates."""
+        scene_pos = self.mapToScene(event.position().toPoint())
+        
+        # Emit mouse position for magnifier
+        self.mouse_moved.emit(scene_pos)
+        
         if self.is_dragging and self.drag_start_pos:
-            scene_pos = self.mapToScene(event.position().toPoint())
             
             # Remove temporary box if it exists
             if self.temp_box:

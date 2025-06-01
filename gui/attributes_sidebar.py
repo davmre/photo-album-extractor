@@ -5,6 +5,7 @@ Attributes sidebar for editing bounding box metadata.
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QDateTimeEdit, 
                              QTextEdit, QGroupBox, QScrollArea)
 from PyQt6.QtCore import Qt, QDateTime, pyqtSignal
+from gui.magnifier_widget import MagnifierWidget
 
 
 class AttributesSidebar(QWidget):
@@ -50,6 +51,7 @@ class AttributesSidebar(QWidget):
         self.datetime_edit = QDateTimeEdit()
         self.datetime_edit.setCalendarPopup(True)
         self.datetime_edit.setDateTime(QDateTime.currentDateTime())
+        self.datetime_edit.setDisplayFormat("M/d/yyyy h:mm")
         self.datetime_edit.dateTimeChanged.connect(self.on_datetime_changed)
         datetime_layout.addWidget(self.datetime_edit)
         
@@ -87,6 +89,10 @@ class AttributesSidebar(QWidget):
         self.no_selection_label.setWordWrap(True)
         self.no_selection_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(self.no_selection_label)
+        
+        # Add magnifier widget at the bottom
+        self.magnifier = MagnifierWidget(zoom_factor=6, size=200)
+        main_layout.addWidget(self.magnifier)
         
         # Initially show no selection state
         self.show_no_selection()

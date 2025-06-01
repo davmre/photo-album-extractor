@@ -117,6 +117,10 @@ class PhotoExtractorApp(QMainWindow):
         self.attributes_sidebar.attributes_changed.connect(self.on_attributes_changed)
         main_splitter.addWidget(self.attributes_sidebar)
         
+        # Connect magnifier signals
+        self.image_view.mouse_moved.connect(self.attributes_sidebar.magnifier.set_cursor_position)
+        self.image_view.image_updated.connect(self.update_magnifier)
+        
         # Set splitter proportions: [left sidebar, main view, right sidebar]
         main_splitter.setSizes([250, 800, 300])
         
@@ -722,6 +726,17 @@ class PhotoExtractorApp(QMainWindow):
         
         QMessageBox.information(self, "Batch Extraction Complete", message)
         self.status_bar.showMessage(f"Batch extraction: {total_photos_extracted} photos from {successful_extractions} images")
+        
+    def update_magnifier(self):
+        """Update the magnifier with current image and bounding boxes."""
+        if self.image_view.image_item:
+            # Set source image
+            pixmap = self.image_view.image_item.pixmap()
+            self.attributes_sidebar.magnifier.set_source_image(pixmap)
+            
+            # Set bounding boxes
+            bounding_box_corners = self.image_view.get_bounding_box_corners()
+            self.attributes_sidebar.magnifier.set_bounding_boxes(bounding_box_corners)
         
     def open_settings(self):
         """Open the settings dialog."""
