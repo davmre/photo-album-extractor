@@ -206,38 +206,33 @@ class PhotoExtractorApp(QMainWindow):
             "",
             "Image Files (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.gif)"
         )
-        
+
         if file_path:
             self.load_image_from_path(file_path)
-            
+
     def load_image_from_path(self, file_path):
         """Load an image from the specified file path."""
         # Save current bounding boxes before switching images
         if self.current_image_path and self.bounding_box_storage:
             self.save_current_bounding_boxes()
-        
+
         self.current_image = image_processor.load_image(file_path)
         if self.current_image:
-            pixmap = image_processor.pil_image_as_pixmap(self.current_image)
+            self.image_view.set_image(self.current_image)
+            self.current_image_path = file_path
             
-            if pixmap:
-                self.image_view.set_image(pixmap)
-                self.current_image_path = file_path
-                
-                # Update directory context
-                new_directory = os.path.dirname(file_path)
-                self.set_current_directory(new_directory)
-                
-                # Load saved bounding boxes for this image
-                self.load_saved_bounding_boxes()
-                
-                # Update sidebar selection
-                self.directory_list.select_image(file_path)
-                
-                self.status_bar.showMessage(f"Loaded: {os.path.basename(file_path)}")
-                self.update_extract_button_state()
-            else:
-                QMessageBox.warning(self, "Error", "Failed to display image")
+            # Update directory context
+            new_directory = os.path.dirname(file_path)
+            self.set_current_directory(new_directory)
+            
+            # Load saved bounding boxes for this image
+            self.load_saved_bounding_boxes()
+            
+            # Update sidebar selection
+            self.directory_list.select_image(file_path)
+            
+            self.status_bar.showMessage(f"Loaded: {os.path.basename(file_path)}")
+            self.update_extract_button_state()
         else:
             QMessageBox.warning(self, "Error", "Failed to load image")
             
@@ -570,35 +565,28 @@ class PhotoExtractorApp(QMainWindow):
                 # Load image temporarily to get dimensions
                 image = image_processor.load_image(image_path)
                 if image:
-                    pixmap = image_processor.pil_image_as_pixmap(image)
-                    if pixmap:
-                        image_width = pixmap.width()
-                        image_height = pixmap.height()
-                        
-                        # Run detection strategy
-                        detected_quads = selected_strategy.detect_photos(image_width, image_height, image_path)
-                        
-                        # Convert to storage format
-                        box_data = []
-                        for quad_corners in detected_quads:
-                            # Convert relative coordinates to absolute coordinates
-                            absolute_corners = []
-                            for corner in quad_corners:
-                                abs_x = corner.x() * image_width
-                                abs_y = corner.y() * image_height
-                                absolute_corners.append([abs_x, abs_y])
-                            box_data.append({'type': 'quad', 'corners': absolute_corners})
-                        
-                        # Save to storage
-                        filename = os.path.basename(image_path)
-                        self.bounding_box_storage.save_bounding_boxes(filename, [])  # Clear existing
-                        if box_data:
-                            self.bounding_box_storage.data[filename] = box_data
-                            self.bounding_box_storage.save_data()
-                        
-                        successful_detections += 1
-                    else:
-                        failed_detections += 1
+                    # Run detection strategy
+                    detected_quads = selected_strategy.detect_photos(image.width, image.height, image_path)
+                    
+                    # Convert to storage format
+                    box_data = []
+                    for quad_corners in detected_quads:
+                        # Convert relative coordinates to absolute coordinates
+                        absolute_corners = []
+                        for corner in quad_corners:
+                            abs_x = corner.x() * image.width
+                            abs_y = corner.y() * image.height
+                            absolute_corners.append([abs_x, abs_y])
+                        box_data.append({'type': 'quad', 'corners': absolute_corners})
+
+                    # Save to storage
+                    filename = os.path.basename(image_path)
+                    self.bounding_box_storage.save_bounding_boxes(filename, [])  # Clear existing
+                    if box_data:
+                        self.bounding_box_storage.data[filename] = box_data
+                        self.bounding_box_storage.save_data()
+                    
+                    successful_detections += 1
                 else:
                     failed_detections += 1
                     
@@ -696,21 +684,16 @@ class PhotoExtractorApp(QMainWindow):
                     for box_data in saved_boxes:
                         if box_data.get('type') == 'quad' and 'corners' in box_data:
                             # Convert absolute coordinates back to relative coordinates
-                            pixmap = image_processor.pil_image_as_pixmap(image)
-                            if pixmap:
-                                image_width = pixmap.width()
-                                image_height = pixmap.height()
+                            rel_corners = []
+                            for corner in box_data['corners']:
+                                rel_x = corner[0] / image.width
+                                rel_y = corner[1] / image.height
+                                rel_corners.append((rel_x, rel_y))
+                            crop_data.append(('quad', rel_corners))
 
-                                rel_corners = []
-                                for corner in box_data['corners']:
-                                    rel_x = corner[0] / image_width
-                                    rel_y = corner[1] / image_height
-                                    rel_corners.append((rel_x, rel_y))
-                                crop_data.append(('quad', rel_corners))
-                                
-                                # Get attributes for this box
-                                attributes = box_data.get('attributes', {})
-                                attributes_list.append(attributes)
+                            # Get attributes for this box
+                            attributes = box_data.get('attributes', {})
+                            attributes_list.append(attributes)
                     
                     if crop_data:
                         # Use filename without extension as base name
@@ -718,7 +701,7 @@ class PhotoExtractorApp(QMainWindow):
                         
                         # Extract and save photos with attributes
                         saved_files = image_processor.save_cropped_images(
-                            crop_data, output_directory, base_name, attributes_list
+                            image, crop_data, output_directory, base_name, attributes_list
                         )
                         
                         if saved_files:

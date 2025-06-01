@@ -6,7 +6,6 @@ import os
 import numpy as np
 from datetime import datetime
 from PIL import Image, ImageQt
-from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import QRectF
 import piexif
 
@@ -64,42 +63,6 @@ def extract_perspective_image(image, corner_points, output_width=None, output_he
 def load_image(filepath):
     return Image.open(filepath)
 
-
-def pil_image_as_pixmap(image: Image.Image) -> QPixmap:
-    """Convert image to QPixmap for display."""
-    image_qt = ImageQt.ImageQt(image)
-    return QPixmap.fromImage(image_qt)
-    
-    # Convert PIL image to QPixmap using temporary file approach
-    import io
-    img_io = io.BytesIO()
-
-    # Convert to RGB if needed and save as PNG
-    if image.mode in ('RGBA', 'LA'):
-        # Handle transparency by converting to RGB with white background
-        background = Image.new('RGB', self.current_image.size, (255, 255, 255))
-        if image.mode == 'RGBA':
-            background.paste(image, mask=image.split()[-1])
-        else:
-            background.paste(image)
-        background.save(img_io, format='PNG')
-    elif image.mode != 'RGB':
-        # Convert other modes to RGB
-        rgb_image = image.convert('RGB')
-        rgb_image.save(img_io, format='PNG')
-    else:
-        # RGB image
-        image.save(img_io, format='PNG')
-
-    img_io.seek(0)
-    pixmap = QPixmap()
-    success = pixmap.loadFromData(img_io.getvalue())
-
-    if not success:
-        print(f"Failed to load pixmap from image data")
-        return None
-        
-    return pixmap
 
 def save_cropped_images(image: Image.Image,
                         crop_data, output_dir, base_name="photo",
