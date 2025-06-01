@@ -153,19 +153,19 @@ class ImageView(QGraphicsView):
         
         for box in self.bounding_boxes:
             # Get corner points for quadrilateral box in proper extraction order
-            corners = box.get_corner_points_for_extraction()
+            corners = box.get_ordered_corners_for_extraction()
             if self.image_item:
                 img_rect = self.image_item.boundingRect()
+                img_x, img_y = img_rect.x(), img_rect.y()
+                width, height = img_rect.width(), img_rect.height()
                 # Convert to relative coordinates within image
-                rel_corners = []
-                for corner in corners:
-                    rel_x = (corner.x() - img_rect.x()) / img_rect.width()
-                    rel_y = (corner.y() - img_rect.y()) / img_rect.height()
-                    rel_corners.append((rel_x, rel_y))
+                rel_corners = [
+                    ((x - img_x) / width, (y - img_y) / height)
+                              for (x, y) in corners]
                 rects.append(rel_corners)
                 
                 attributes_list.append(box.get_attributes())
-                
+
         return rects, attributes_list
         
     def show_context_menu(self, position):

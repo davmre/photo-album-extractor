@@ -5,7 +5,7 @@ Image processing utilities for loading, cropping, and saving photos.
 import os
 import numpy as np
 from datetime import datetime
-from PIL import Image
+from PIL import Image, ImageQt
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import QRectF
 import piexif
@@ -51,9 +51,7 @@ def extract_perspective_image(image, corner_points, output_width=None, output_he
             return None
 
     coeffs = find_coeffs(output_corners, corners)
-    if coeffs is None:
-        return None
-        
+
     # Apply perspective transformation
     return image.transform(
         (output_width, output_height),
@@ -62,171 +60,144 @@ def extract_perspective_image(image, corner_points, output_width=None, output_he
         Image.Resampling.BICUBIC
     )
 
-class ImageProcessor:
-    """Handles image loading, cropping, and batch saving operations."""
+
+def load_image(filepath):
+    return Image.open(filepath)
+
+
+def pil_image_as_pixmap(image: Image.Image) -> QPixmap:
+    """Convert image to QPixmap for display."""
+    image_qt = ImageQt.ImageQt(image)
+    return QPixmap.fromImage(image_qt)
     
-    def __init__(self):
-        self.current_image = None
-        self.image_path = None
-        
-    def load_image(self, file_path):
-        """Load an image from file path."""
-        try:
-            self.current_image = Image.open(file_path)
-            self.image_path = file_path
-            return True
-        except Exception as e:
-            print(f"Error loading image: {e}")
-            return False
-            
-    def get_pixmap(self):
-        """Convert current image to QPixmap for display."""
-        if self.current_image is None:
-            return None
+    # Convert PIL image to QPixmap using temporary file approach
+    import io
+    img_io = io.BytesIO()
 
-        # Convert PIL image to QPixmap using temporary file approach
-        import io
-        img_io = io.BytesIO()
-        
-        # Convert to RGB if needed and save as PNG
-        if self.current_image.mode in ('RGBA', 'LA'):
-            # Handle transparency by converting to RGB with white background
-            background = Image.new('RGB', self.current_image.size, (255, 255, 255))
-            if self.current_image.mode == 'RGBA':
-                background.paste(self.current_image, mask=self.current_image.split()[-1])
-            else:
-                background.paste(self.current_image)
-            background.save(img_io, format='PNG')
-        elif self.current_image.mode != 'RGB':
-            # Convert other modes to RGB
-            rgb_image = self.current_image.convert('RGB')
-            rgb_image.save(img_io, format='PNG')
+    # Convert to RGB if needed and save as PNG
+    if image.mode in ('RGBA', 'LA'):
+        # Handle transparency by converting to RGB with white background
+        background = Image.new('RGB', self.current_image.size, (255, 255, 255))
+        if image.mode == 'RGBA':
+            background.paste(image, mask=image.split()[-1])
         else:
-            # RGB image
-            self.current_image.save(img_io, format='PNG')
-            
-        img_io.seek(0)
-        pixmap = QPixmap()
-        success = pixmap.loadFromData(img_io.getvalue())
-        
-        if not success:
-            print(f"Failed to load pixmap from image data")
-            return None
-            
-        return pixmap
+            background.paste(image)
+        background.save(img_io, format='PNG')
+    elif image.mode != 'RGB':
+        # Convert other modes to RGB
+        rgb_image = image.convert('RGB')
+        rgb_image.save(img_io, format='PNG')
+    else:
+        # RGB image
+        image.save(img_io, format='PNG')
 
-    def save_cropped_images(self, crop_data, output_dir, base_name="photo", attributes_list=None):
-        """Save multiple cropped images to the specified directory.
+    img_io.seek(0)
+    pixmap = QPixmap()
+    success = pixmap.loadFromData(img_io.getvalue())
+
+    if not success:
+        print(f"Failed to load pixmap from image data")
+        return None
         
-        Args:
-            crop_data: List of crop information
-            output_dir: Directory to save images
-            base_name: Base name for files
-            attributes_list: List of attribute dictionaries (one per crop)
-        """
-        if self.current_image is None:
-            return []
-            
-        saved_files = []
-        img_width, img_height = self.current_image.size
+    return pixmap
+
+def save_cropped_images(image: Image.Image,
+                        crop_data, output_dir, base_name="photo",
+                        attributes_list=None):
+    """Save multiple cropped images to the specified directory.
+    
+    Args:
+        image: image to crop from.
+        crop_data: List of quadrilaterals to crop. Each quadrilateral is
+            a list of four `(x, y)` corner points in relative coordinates.
+        output_dir: Directory to save images
+        base_name: Base name for files
+        attributes_list: List of attribute dictionaries (one per crop)
+    """
+    saved_files = []
+    img_width, img_height = image.size
+
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for i, crop_rect in enumerate(crop_data):
+        cropped = None
         
-        # Ensure output directory exists
-        os.makedirs(output_dir, exist_ok=True)
+        # Get attributes for this crop if available
+        attributes = {}
+        if attributes_list and i-1 < len(attributes_list):
+            attributes = attributes_list[i-1] or {}
         
-        for i, data in enumerate(crop_data, 1):
-            crop_type, crop_info = data
-            cropped = None
+        # Convert relative coordinates to absolute pixel coordinates for quadrilateral
+        abs_corners = []
+        for rel_x, rel_y in crop_rect:
+            abs_x = rel_x * img_width
+            abs_y = rel_y * img_height
+            abs_corners.append((abs_x, abs_y))
+        cropped = extract_perspective_image(image, abs_corners)
             
-            # Get attributes for this crop if available
-            attributes = {}
-            if attributes_list and i-1 < len(attributes_list):
-                attributes = attributes_list[i-1] or {}
-            
-            if crop_type == 'quad':
-                # Convert relative coordinates to absolute pixel coordinates for quadrilateral
-                abs_corners = []
-                for rel_x, rel_y in crop_info:
-                    abs_x = rel_x * img_width
-                    abs_y = rel_y * img_height
-                    abs_corners.append((abs_x, abs_y))
-                cropped = extract_perspective_image(self.current_image,
-                                                    abs_corners)
-            if cropped is None:
-                continue
-                
-            # Generate filename
-            filename = f"{base_name}_{i:03d}.jpg"
+        # Generate filename
+        filename = f"{base_name}_{i:03d}.jpg"
+        filepath = os.path.join(output_dir, filename)
+        
+        # Ensure unique filename
+        counter = 1
+        while os.path.exists(filepath):
+            filename = f"{base_name}_{i:03d}_{counter}.jpg"
             filepath = os.path.join(output_dir, filename)
+            counter += 1
             
-            # Ensure unique filename
-            counter = 1
-            while os.path.exists(filepath):
-                filename = f"{base_name}_{i:03d}_{counter}.jpg"
-                filepath = os.path.join(output_dir, filename)
-                counter += 1
-                
-            try:
-                # Convert to RGB if necessary
-                if cropped.mode != 'RGB':
-                    cropped = cropped.convert('RGB')
-                    
-                # Save with EXIF data if attributes are provided
-                if attributes:
-                    self._save_image_with_exif(cropped, filepath, attributes)
-                else:
-                    cropped.save(filepath, 'JPEG', quality=95)
-                    
-                saved_files.append(filepath)
-                print(f"Saved: {filename}")
-            except Exception as e:
-                print(f"Error saving {filename}: {e}")
-                
-        return saved_files
-        
-    def _save_image_with_exif(self, image, filepath, attributes):
-        """Save image with EXIF data from attributes."""
         try:
-            # Create EXIF dictionary
-            exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
-            
-            # Add date/time if available
-            if 'date_time' in attributes and attributes['date_time']:
-                try:
-                    # Parse ISO date string and convert to EXIF format
-                    dt = datetime.fromisoformat(attributes['date_time'].replace('Z', '+00:00'))
-                    exif_datetime = dt.strftime("%Y:%m:%d %H:%M:%S")
-                    
-                    # Set multiple date fields for maximum compatibility
-                    exif_dict["0th"][piexif.ImageIFD.DateTime] = exif_datetime
-                    exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = exif_datetime
-                    exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = exif_datetime
-                except (ValueError, AttributeError) as e:
-                    print(f"Warning: Could not parse date '{attributes['date_time']}': {e}")
-            
-            # Add comments if available
-            if 'comments' in attributes and attributes['comments']:
-                comments = attributes['comments'][:65535]  # EXIF comment limit
-                # Use UserComment for better unicode support
-                exif_dict["Exif"][piexif.ExifIFD.UserComment] = comments.encode('utf-8')
-                # Also set ImageDescription for wider compatibility
-                exif_dict["0th"][piexif.ImageIFD.ImageDescription] = comments
-            
-            # Add software tag
-            exif_dict["0th"][piexif.ImageIFD.Software] = "Photo Album Extractor"
-            
-            # Convert EXIF dictionary to bytes
-            exif_bytes = piexif.dump(exif_dict)
-            
-            # Save image with EXIF data
-            image.save(filepath, 'JPEG', quality=95, exif=exif_bytes)
-            
+            # Convert to RGB if necessary
+            if cropped.mode != 'RGB':
+                cropped = cropped.convert('RGB')
+
+            save_image_with_exif(cropped, filepath, attributes)
+            saved_files.append(filepath)
+            print(f"Saved: {filename}")
         except Exception as e:
-            print(f"Warning: Could not write EXIF data to {filepath}: {e}")
-            # Fall back to saving without EXIF
-            image.save(filepath, 'JPEG', quality=95)
+            print(f"Error saving {filename}: {e}")
+            
+    return saved_files
+    
+def save_image_with_exif(image, filepath, attributes, jpeg_quality=95):
+    """Save image with EXIF data from attributes."""
+    try:
+        # Create EXIF dictionary
+        exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
         
-    def get_image_size(self):
-        """Get the size of the current image."""
-        if self.current_image is None:
-            return (0, 0)
-        return self.current_image.size
+        # Add date/time if available
+        if 'date_time' in attributes and attributes['date_time']:
+            try:
+                # Parse ISO date string and convert to EXIF format
+                dt = datetime.fromisoformat(attributes['date_time'].replace('Z', '+00:00'))
+                exif_datetime = dt.strftime("%Y:%m:%d %H:%M:%S")
+                
+                # Set multiple date fields for maximum compatibility
+                exif_dict["0th"][piexif.ImageIFD.DateTime] = exif_datetime
+                exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = exif_datetime
+                exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = exif_datetime
+            except (ValueError, AttributeError) as e:
+                print(f"Warning: Could not parse date '{attributes['date_time']}': {e}")
+        
+        # Add comments if available
+        if 'comments' in attributes and attributes['comments']:
+            comments = attributes['comments'][:65535]  # EXIF comment limit
+            # Use UserComment for better unicode support
+            exif_dict["Exif"][piexif.ExifIFD.UserComment] = comments.encode('utf-8')
+            # Also set ImageDescription for wider compatibility
+            exif_dict["0th"][piexif.ImageIFD.ImageDescription] = comments
+        
+        # Add software tag
+        exif_dict["0th"][piexif.ImageIFD.Software] = "Photo Album Extractor"
+        
+        # Convert EXIF dictionary to bytes
+        exif_bytes = piexif.dump(exif_dict)
+        
+        # Save image with EXIF data
+        image.save(filepath, 'JPEG', quality=jpeg_quality, exif=exif_bytes)
+        
+    except Exception as e:
+        print(f"Warning: Could not write EXIF data to {filepath}: {e}")
+        # Fall back to saving without EXIF
+        image.save(filepath, 'JPEG', quality=jpeg_quality)

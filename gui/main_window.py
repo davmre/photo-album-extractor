@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget,
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QAction, QPixmap
 
-from image_processing.image_processor import ImageProcessor
+from image_processing import image_processor
 from gui.quad_bounding_box import QuadBoundingBox
 from image_processing.detection_strategies import DETECTION_STRATEGIES
 from storage.bounding_box_storage import BoundingBoxStorage
@@ -26,8 +26,8 @@ class PhotoExtractorApp(QMainWindow):
     def __init__(self, initial_image=None, initial_directory=None):
         super().__init__()
         
-        self.image_processor = ImageProcessor()
         self.current_image_path = None
+        self.current_image = None
         self.current_directory = None
         self.bounding_box_storage = None
         self.settings = Settings()
@@ -215,9 +215,11 @@ class PhotoExtractorApp(QMainWindow):
         # Save current bounding boxes before switching images
         if self.current_image_path and self.bounding_box_storage:
             self.save_current_bounding_boxes()
+        
+        self.current_image = image_processor.load_image(file_path)
+        if self.current_image:
+            pixmap = image_processor.pil_image_as_pixmap(self.current_image)
             
-        if self.image_processor.load_image(file_path):
-            pixmap = self.image_processor.get_pixmap()
             if pixmap:
                 self.image_view.set_image(pixmap)
                 self.current_image_path = file_path
@@ -394,7 +396,7 @@ class PhotoExtractorApp(QMainWindow):
         
     def extract_photos(self):
         """Extract all photos based on bounding boxes."""
-        if not self.current_image_path:
+        if not self.current_image_path or not self.current_image:
             QMessageBox.warning(self, "Error", "Please load an image first")
             return
             
@@ -413,7 +415,8 @@ class PhotoExtractorApp(QMainWindow):
             
         # Extract and save photos with attributes
         base_name = "photo"
-        saved_files = self.image_processor.save_cropped_images(
+        saved_files = image_processor.save_cropped_images(
+            self.current_image, 
             rects, output_directory, base_name, attributes_list
         )
         
@@ -565,9 +568,9 @@ class PhotoExtractorApp(QMainWindow):
             
             try:
                 # Load image temporarily to get dimensions
-                temp_processor = ImageProcessor()
-                if temp_processor.load_image(image_path):
-                    pixmap = temp_processor.get_pixmap()
+                image = image_processor.load_image(image_path)
+                if image:
+                    pixmap = image_processor.pil_image_as_pixmap(image)
                     if pixmap:
                         image_width = pixmap.width()
                         image_height = pixmap.height()
@@ -685,19 +688,19 @@ class PhotoExtractorApp(QMainWindow):
             
             try:
                 # Load image temporarily
-                temp_processor = ImageProcessor()
-                if temp_processor.load_image(image_path):
+                image = image_processor.load_image(image_path)
+                if image:
                     # Convert saved boxes to crop data format and collect attributes
                     crop_data = []
                     attributes_list = []
                     for box_data in saved_boxes:
                         if box_data.get('type') == 'quad' and 'corners' in box_data:
                             # Convert absolute coordinates back to relative coordinates
-                            pixmap = temp_processor.get_pixmap()
+                            pixmap = image_processor.pil_image_as_pixmap(image)
                             if pixmap:
                                 image_width = pixmap.width()
                                 image_height = pixmap.height()
-                                
+
                                 rel_corners = []
                                 for corner in box_data['corners']:
                                     rel_x = corner[0] / image_width
@@ -714,7 +717,7 @@ class PhotoExtractorApp(QMainWindow):
                         base_name = os.path.splitext(filename)[0]
                         
                         # Extract and save photos with attributes
-                        saved_files = temp_processor.save_cropped_images(
+                        saved_files = image_processor.save_cropped_images(
                             crop_data, output_directory, base_name, attributes_list
                         )
                         
