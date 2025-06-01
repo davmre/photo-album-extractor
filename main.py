@@ -8,7 +8,7 @@ import sys
 import argparse
 import os
 from PyQt6.QtWidgets import QApplication
-from photo_extractor import PhotoExtractorApp
+from gui.main_window import PhotoExtractorApp
 
 def main():
     parser = argparse.ArgumentParser(description='Photo Album Extractor')
