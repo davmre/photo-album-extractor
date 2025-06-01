@@ -5,7 +5,7 @@ Settings dialog and configuration management.
 import os
 import json
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit, 
-                             QDialogButtonBox, QMessageBox)
+                             QDialogButtonBox, QMessageBox, QComboBox, QCheckBox)
 
 
 class Settings:
@@ -46,15 +46,16 @@ class Settings:
 class SettingsDialog(QDialog):
     """Settings dialog for configuring application preferences."""
     
-    def __init__(self, settings, parent=None):
+    def __init__(self, settings, detection_strategies, parent=None):
         super().__init__(parent)
         self.settings = settings
+        self.detection_strategies = detection_strategies
         self.init_ui()
         
     def init_ui(self):
         """Initialize the settings dialog UI."""
         self.setWindowTitle("Settings")
-        self.setFixedSize(400, 200)
+        self.setFixedSize(450, 300)
         
         layout = QVBoxLayout(self)
         
@@ -69,6 +70,25 @@ class SettingsDialog(QDialog):
         self.api_key_edit.setText(current_key)
         
         form_layout.addRow("Gemini API Key:", self.api_key_edit)
+        
+        # Detection Strategy selector
+        self.strategy_combo = QComboBox()
+        current_strategy = self.settings.get('detection_strategy', '')
+        current_index = 0
+        for i, strategy in enumerate(self.detection_strategies):
+            self.strategy_combo.addItem(strategy.name, strategy)
+            if strategy.name == current_strategy:
+                current_index = i
+        self.strategy_combo.setCurrentIndex(current_index)
+        
+        form_layout.addRow("Detection Strategy:", self.strategy_combo)
+        
+        # Auto-refine checkbox
+        self.auto_refine_checkbox = QCheckBox("Automatically refine detected bounding boxes")
+        auto_refine = self.settings.get('auto_refine_detection', False)
+        self.auto_refine_checkbox.setChecked(auto_refine)
+        
+        form_layout.addRow("", self.auto_refine_checkbox)
         
         layout.addLayout(form_layout)
         
@@ -94,5 +114,15 @@ class SettingsDialog(QDialog):
                               "Please check your API key.")
             return
             
+        # Save all settings
         self.settings.set('gemini_api_key', api_key)
+        
+        # Save detection strategy
+        selected_strategy = self.strategy_combo.currentData()
+        if selected_strategy:
+            self.settings.set('detection_strategy', selected_strategy.name)
+            
+        # Save auto-refine setting
+        self.settings.set('auto_refine_detection', self.auto_refine_checkbox.isChecked())
+        
         super().accept()

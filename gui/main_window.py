@@ -84,13 +84,6 @@ class PhotoExtractorApp(QMainWindow):
         self.clear_btn.setEnabled(False)
         toolbar_layout.addWidget(self.clear_btn)
         
-        # Detection strategy dropdown
-        toolbar_layout.addWidget(QLabel("Detection:"))
-        self.strategy_combo = QComboBox()
-        for strategy in DETECTION_STRATEGIES:
-            self.strategy_combo.addItem(strategy.name, strategy)
-        self.strategy_combo.setMinimumWidth(150)
-        toolbar_layout.addWidget(self.strategy_combo)
         
         # Detect photos button
         self.detect_btn = QPushButton("Detect Photos")
@@ -295,14 +288,26 @@ class PhotoExtractorApp(QMainWindow):
         self.image_view.clear_boxes()
         
     def detect_photos(self):
-        """Run the selected detection strategy to automatically detect photos."""
+        """Run the configured detection strategy to automatically detect photos."""
         if not self.current_image_path:
             return
             
-        # Get the selected strategy
-        selected_strategy = self.strategy_combo.currentData()
+        # Get the selected strategy from settings
+        strategy_name = self.settings.get('detection_strategy', '')
+        selected_strategy = None
+        for strategy in DETECTION_STRATEGIES:
+            if strategy.name == strategy_name:
+                selected_strategy = strategy
+                break
+        
         if not selected_strategy:
-            return
+            # Default to first strategy if none configured
+            if DETECTION_STRATEGIES:
+                selected_strategy = DETECTION_STRATEGIES[0]
+            else:
+                QMessageBox.warning(self, "No Detection Strategy", 
+                                  "No detection strategies available. Please check your configuration.")
+                return
             
         # Get image dimensions
         if not self.image_view.image_item:
@@ -344,6 +349,11 @@ class PhotoExtractorApp(QMainWindow):
                 self.image_view.add_bounding_box_object(box)
                 
             self.status_bar.showMessage(f"Detected {len(detected_quads)} photos using {selected_strategy.name}")
+            
+            # Auto-refine if enabled in settings
+            if self.settings.get('auto_refine_detection', False) and detected_quads:
+                self.refine_all_boxes()
+                self.status_bar.showMessage(f"Detected and refined {len(detected_quads)} photos using {selected_strategy.name}")
             
         except Exception as e:
             QMessageBox.warning(self, "Detection Error", f"Failed to detect photos: {str(e)}")
@@ -469,11 +479,22 @@ class PhotoExtractorApp(QMainWindow):
         if not self.current_directory:
             return
             
-        # Get the selected strategy
-        selected_strategy = self.strategy_combo.currentData()
+        # Get the selected strategy from settings
+        strategy_name = self.settings.get('detection_strategy', '')
+        selected_strategy = None
+        for strategy in DETECTION_STRATEGIES:
+            if strategy.name == strategy_name:
+                selected_strategy = strategy
+                break
+        
         if not selected_strategy:
-            QMessageBox.warning(self, "Error", "No detection strategy selected")
-            return
+            # Default to first strategy if none configured
+            if DETECTION_STRATEGIES:
+                selected_strategy = DETECTION_STRATEGIES[0]
+            else:
+                QMessageBox.warning(self, "No Detection Strategy", 
+                                  "No detection strategies available. Please check your configuration.")
+                return
             
         # Get all images in the directory
         all_image_paths = []
@@ -685,5 +706,5 @@ class PhotoExtractorApp(QMainWindow):
         
     def open_settings(self):
         """Open the settings dialog."""
-        dialog = SettingsDialog(self.settings, self)
+        dialog = SettingsDialog(self.settings, DETECTION_STRATEGIES, self)
         dialog.exec()
