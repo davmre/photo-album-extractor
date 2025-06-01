@@ -48,12 +48,12 @@ class DirectoryImageList(QWidget):
         layout.addWidget(self.image_list)
         
         # Batch operation buttons
-        self.batch_detect_btn = QPushButton("Detect all")
+        self.batch_detect_btn = QPushButton("Detect in all")
         self.batch_detect_btn.clicked.connect(self.batch_detect_requested.emit)
         self.batch_detect_btn.setEnabled(False)
         layout.addWidget(self.batch_detect_btn)
         
-        self.batch_extract_btn = QPushButton("Extract all")
+        self.batch_extract_btn = QPushButton("Extract from all")
         self.batch_extract_btn.clicked.connect(self.batch_extract_requested.emit)
         self.batch_extract_btn.setEnabled(False)
         layout.addWidget(self.batch_extract_btn)
