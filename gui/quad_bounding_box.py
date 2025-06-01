@@ -44,7 +44,9 @@ class QuadBoundingBox(QGraphicsObject):
     def update_handles(self):
         """Update handle positions to match corner points."""
         for i, handle in enumerate(self.handles):
-            handle.setPos(self.corners[i])
+            # Position handles relative to this item's coordinate system
+            world_pos = self.pos() + self.corners[i]
+            handle.setPos(world_pos)
             
     def boundingRect(self):
         """Return the bounding rectangle that encompasses all corners."""
@@ -71,29 +73,32 @@ class QuadBoundingBox(QGraphicsObject):
     def itemChange(self, change, value):
         """Handle item changes (movement, etc.)."""
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
-            # Update handles when position changes
+            # When the box moves, update corners to maintain world coordinates
+            # and update handle positions
+            new_pos = value
+            old_pos = self.pos()
+            delta = new_pos - old_pos
+            
+            # Update corners to new world positions
+            for i in range(len(self.corners)):
+                self.corners[i] += delta
+                
+            # Update handles
             self.update_handles()
             self.changed.emit()
         return super().itemChange(change, value)
         
     def get_corner_points(self):
         """Get the four corner points in world coordinates."""
-        # Apply item position offset to corners
-        pos = self.pos()
+        # Always return world coordinates regardless of item position
         world_corners = []
         for corner in self.corners:
-            world_corners.append(QPointF(corner.x() + pos.x(), corner.y() + pos.y()))
+            world_corners.append(self.pos() + corner)
         return world_corners
         
     def get_corner_points_for_extraction(self):
-        """Get corner points in proper order for extraction (prevents flipping)."""
-        # Get ordered corners and convert to world coordinates
-        ordered_corners = self.get_ordered_corners_for_extraction()
-        pos = self.pos()
-        world_corners = []
-        for corner in ordered_corners:
-            world_corners.append(QPointF(corner.x() + pos.x(), corner.y() + pos.y()))
-        return world_corners
+        """Alias for get_ordered_corners_for_extraction for backward compatibility."""
+        return self.get_ordered_corners_for_extraction()
         
     def set_from_drag(self, start_point, end_point):
         """Set initial rectangle from drag operation."""
@@ -117,11 +122,10 @@ class QuadBoundingBox(QGraphicsObject):
         self.update()
         
     def move_corner(self, corner_id, new_position):
-        """Move a specific corner to a new position."""
+        """Move a specific corner to a new position (in world coordinates)."""
         if 0 <= corner_id < 4:
-            # Convert from world coordinates to local coordinates
-            pos = self.pos()
-            local_pos = QPointF(new_position.x() - pos.x(), new_position.y() - pos.y())
+            # Convert world coordinates to local coordinates
+            local_pos = new_position - self.pos()
             self.corners[corner_id] = local_pos
             self.update_handles()
             self.update()
@@ -129,14 +133,17 @@ class QuadBoundingBox(QGraphicsObject):
             
     def get_ordered_corners_for_extraction(self):
         """Get corners in proper order for perspective extraction (prevents flipping)."""
+        # Use world coordinates for extraction
+        world_corners = self.get_corner_points()
+        
         # Calculate centroid
-        centroid_x = sum(corner.x() for corner in self.corners) / 4
-        centroid_y = sum(corner.y() for corner in self.corners) / 4
+        centroid_x = sum(corner.x() for corner in world_corners) / 4
+        centroid_y = sum(corner.y() for corner in world_corners) / 4
         centroid = QPointF(centroid_x, centroid_y)
         
         # Create list of (angle, corner) tuples
         corner_data = []
-        for corner in self.corners:
+        for corner in world_corners:
             # Calculate angle from centroid to corner
             dx = corner.x() - centroid.x()
             dy = corner.y() - centroid.y()
@@ -150,9 +157,10 @@ class QuadBoundingBox(QGraphicsObject):
         return [data[1] for data in corner_data]
         
     def set_corners(self, new_corners):
-        """Set the corners to new positions."""
+        """Set the corners to new world positions."""
+        # Reset to origin and store corners as local coordinates
+        self.setPos(0, 0)
         self.corners = [QPointF(corner) for corner in new_corners]
-        self.setPos(0, 0)  # Reset position since corners are in absolute coordinates
         self.update_handles()
         self.update()
         self.changed.emit()
@@ -230,7 +238,7 @@ class QuadEdgeLine(QGraphicsRectItem):
         
     def update_edge_geometry(self):
         """Update the edge geometry to match the quadrilateral edge."""
-        corners = self.parent_box.get_corner_points()
+        corners = self.parent_box.get_corner_points()  # Get world coordinates
         
         # Get the two corners that define this edge
         corner1 = corners[self.edge_id]
@@ -291,6 +299,7 @@ class QuadEdgeLine(QGraphicsRectItem):
             corner1_id = self.edge_id
             corner2_id = (self.edge_id + 1) % 4
             
+            # start_corners contains world coordinates
             new_corner1 = self.start_corners[corner1_id] + delta
             new_corner2 = self.start_corners[corner2_id] + delta
             
