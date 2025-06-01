@@ -216,9 +216,10 @@ class PhotoExtractorApp(QMainWindow):
         if self.current_image_path and self.bounding_box_storage:
             self.save_current_bounding_boxes()
 
-        self.current_image = image_processor.load_image(file_path)
-        if self.current_image:
-            self.image_view.set_image(self.current_image)
+        try:
+            image = image_processor.load_image(file_path)
+            self.image_view.set_image(image)
+            self.current_image = image
             self.current_image_path = file_path
             
             # Update directory context
@@ -233,9 +234,16 @@ class PhotoExtractorApp(QMainWindow):
             
             self.status_bar.showMessage(f"Loaded: {os.path.basename(file_path)}")
             self.update_extract_button_state()
-        else:
-            QMessageBox.warning(self, "Error", "Failed to load image")
             
+            return True # Load succeeded.
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to load image: {e}")
+            # Revert to previous selection in directory listing.
+            self.directory_list.select_image(self.current_image_path)
+
+        return False
+
     def on_image_selected(self, image_path):
         """Handle image selection from the directory list."""
         self.load_image_from_path(image_path)
@@ -271,7 +279,7 @@ class PhotoExtractorApp(QMainWindow):
                 # Save current boxes before clearing
                 self.save_current_bounding_boxes()
             self.current_image_path = None
-            self.image_view.set_image(QPixmap())  # Clear image
+            self.image_view.set_image()  # Clear image
             self.status_bar.showMessage(f"No images found in directory: {os.path.basename(directory)}")
             self.update_extract_button_state()
             return True
@@ -412,7 +420,7 @@ class PhotoExtractorApp(QMainWindow):
         # Extract and save photos with attributes
         base_name = "photo"
         saved_files = image_processor.save_cropped_images(
-            self.current_image, 
+            self.current_image,
             rects, output_directory, base_name, attributes_list
         )
         

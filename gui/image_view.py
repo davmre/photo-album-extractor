@@ -5,6 +5,8 @@ Custom graphics view for displaying images with bounding box interaction.
 import numpy as np
 from PIL import Image, ImageQt
 
+from typing import Optional
+
 from PyQt6.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, 
                              QMenu, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QPointF
@@ -67,13 +69,17 @@ class ImageView(QGraphicsView):
         # Enable keyboard focus for key events
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         
-    def set_image(self, image: Image.Image):
+    def set_image(self, image: Optional[Image.Image] = None):
         """Set the image to display."""
         # QPixmap using implicit sharing semantics, so it seems we need to 
         # keep a reference to the QT image so it doesn't get GC'd.
-        self._image_qt = ImageQt.ImageQt(image)
-        pixmap = QPixmap.fromImage(self._image_qt)
-        
+        if image is None:
+            self._image_qt = None
+            pixmap = QPixmap()
+        else:
+            self._image_qt = ImageQt.ImageQt(image)
+            pixmap = QPixmap.fromImage(self._image_qt)
+
         # Clear existing image
         if self.image_item:
             self.scene.removeItem(self.image_item)
@@ -147,20 +153,11 @@ class ImageView(QGraphicsView):
         for box in self.bounding_boxes:
             # Get corner points for quadrilateral box in proper extraction order
             corners = box.get_ordered_corners_for_extraction()
-            if self.image_item:
-                img_rect = self.image_item.boundingRect()
-                img_x, img_y = img_rect.x(), img_rect.y()
-                width, height = img_rect.width(), img_rect.height()
-                # Convert to relative coordinates within image
-                rel_corners = [
-                    ((x - img_x) / width, (y - img_y) / height)
-                              for (x, y) in corners]
-                rects.append(rel_corners)
-                
-                attributes_list.append(box.get_attributes())
+            rects.append(corners)
+            attributes_list.append(box.get_attributes())
 
         return rects, attributes_list
-        
+
     def show_context_menu(self, position):
         """Show context menu for adding/removing boxes."""
         # Convert position to scene coordinates

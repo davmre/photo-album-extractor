@@ -92,12 +92,7 @@ def save_cropped_images(image: Image.Image,
             attributes = attributes_list[i-1] or {}
         
         # Convert relative coordinates to absolute pixel coordinates for quadrilateral
-        abs_corners = []
-        for rel_x, rel_y in crop_rect:
-            abs_x = rel_x * img_width
-            abs_y = rel_y * img_height
-            abs_corners.append((abs_x, abs_y))
-        cropped = extract_perspective_image(image, abs_corners)
+        cropped = extract_perspective_image(image, crop_rect)
             
         # Generate filename
         filename = f"{base_name}_{i:03d}.jpg"
