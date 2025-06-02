@@ -153,9 +153,8 @@ class QuadBoundingBox(QGraphicsObject):
         # Use world coordinates for extraction
         world_corners = self.get_corner_points()
         corners_array = np.asarray([(p.x(), p.y()) for p in world_corners])
-        idxs = geometry.clockwise_corner_permutation(corners_array)
-        return corners_array[idxs, :]
-        
+        return geometry.sort_clockwise(corners_array)
+
     def set_corners(self, new_corners):
         """Set the corners to new world positions."""
         # Reset to origin and store corners as local coordinates
