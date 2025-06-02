@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def quad_to_unit_square_transform(quad):
     """
     Compute the homography matrix that transforms a quadrilateral to the unit square.
@@ -85,6 +86,33 @@ def apply_transform(H, points):
     transformed_points = transformed_homogeneous[:, :2] / transformed_homogeneous[:, 2:3]
 
     return transformed_points
+
+
+class PatchCoordinatesConverter(object):
+    
+    def __init__(self, rect, patch_resolution: int, patch_offset: int):
+        self.H = quad_to_unit_square_transform(rect)
+        self.H_inv = np.linalg.inv(self.H)
+        self.patch_resolution = patch_resolution
+        self.patch_offset = patch_offset
+        
+    def image_to_unit_square(self, pts):
+        pts = np.asarray(pts)
+        return apply_transform(self.H, pts)
+    
+    def unit_square_to_image(self, pts):
+        pts = np.asarray(pts)
+        return apply_transform(self.H_inv, pts)
+    
+    def patch_to_image(self, pts):
+        pts = np.asarray(pts, dtype=np.float32)
+        return self.unit_square_to_image(
+            (pts - self.patch_offset) / self.patch_resolution)
+        
+    def image_to_patch(self, pts):
+        unit_square_coords = self.image_to_unit_square(pts)
+        return unit_square_coords * self.patch_resolution + self.patch_offset
+    
 
 def line_intersection(p1, p2, p3, p4):
     """
@@ -222,3 +250,8 @@ def clockwise_corner_permutation(rect):
     delta = rect - centroid
     angles = np.atan2(delta[:, 1], delta[:, 0])
     return np.argsort(angles)
+
+def sort_clockwise(rect):
+    rect = np.asarray(rect)
+    idxs = clockwise_corner_permutation(rect)
+    return rect[idxs]

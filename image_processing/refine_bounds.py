@@ -1,12 +1,15 @@
+import pathlib
+import os
 import cv2
 from matplotlib import pyplot as plt
 import numpy as np
 
 from PIL import Image
 
+from typing import Union
+
 import image_processing.image_processor as image_processor
 import image_processing.geometry as geometry
-
 
 
 def _candidate_edge_points(patch_n, border_n):
@@ -132,8 +135,34 @@ def search_best_rhombus(
     print("score", score)
     return top_edge, bottom_edge, left_edge, right_edge
 
+def annotate_image(img: np.ndarray, rects=None, edges=None):
+  img = img.copy()
+  if rects:
+      cv2.drawContours(img, np.array(rects), -1, (0, 0, 255), 1)
+  if edges:
+      colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255), (255, 255, 0), (0, 255, 255)]
+      for edge, color in zip(edges, colors):
+        cv2.line(img, (edge[0, 0], edge[0, 1]), (edge[1, 0], edge[1, 1]), color, 1)
+  return img
+
+def save_image(file_path: str, img: Union[np.ndarray, Image.Image]):
+    if not isinstance(img, Image.Image):
+        img = Image.fromarray(img)
+    if img.mode == 'F':
+        # PNG supports greyscale images with 8-bit int pixels.
+        img = img.convert("L")
+        
+    img.save(file_path)
+    print("saved: ", file_path)
+
 def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
-                        enforce_parallel_sides=False):
+                        enforce_parallel_sides=False,
+                        debug_dir=None):
+    if debug_dir is not None:
+        print("CALLED WITH DEBUG", debug_dir)
+        pathlib.Path(debug_dir).mkdir(parents=True, exist_ok=True)
+        print("logging to debug dir", debug_dir)
+        
 
     # Bound the given shape with a (not necessarily axis-aligned) rectangle.
     # We'll do all our refinement calculations within this rectangle. Using
@@ -141,50 +170,49 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
     # preserves parallel lines.
     rect, _ = geometry.minimum_bounding_rectangle(rect)
     # Reimpose our standard corner ordering since the previous call may lose it.
-    idxs = geometry.clockwise_corner_permutation(rect)
-    rect = rect[idxs, :]
+    rect = geometry.sort_clockwise(rect)
+    border_n = int(resolution * reltol)
+    coordinates = geometry.PatchCoordinatesConverter(
+        rect, patch_resolution=resolution, patch_offset=border_n)
     
     # Expand the bounding box slightly to search for edges not contained in the
     # original box. This expansion is done in the box's own coordinate frame, by
     # mapping it to the unit square, and then inverse-mapping an expanded unit
     # square.
-    H = geometry.quad_to_unit_square_transform(rect)
-    H_inv = np.linalg.inv(H)
+    
     expanded_unit_square = np.array([
         (-reltol, -reltol),
         (1 + reltol, -reltol),
         (1 + reltol, 1 + reltol),
         (-reltol, 1 + reltol)])
-    expanded_rect = np.astype(geometry.apply_transform(H_inv, expanded_unit_square), int)
+    expanded_rect = np.astype(
+        coordinates.unit_square_to_image(expanded_unit_square), int)
     
     # Extract the image patch within the expanded bounding box.
-    original_n = resolution # Output pixels for one side of the original box.
-    border_n = int(original_n * reltol) # Output pixels of the added border.
-    print("border n", border_n)
-    patch_n = original_n + border_n * 2 # Total output pixels per side.
+    patch_n = resolution + border_n * 2 # Total output pixels per side.
     extracted_patch = image_processor.extract_perspective_image(
         Image.fromarray(image[:, :, ::-1]),
         expanded_rect, output_width=patch_n, output_height=patch_n)
-    
-    def patch_to_image_coords(pts):
-        # Convert coordinates in the extracted patch back to original image.
-        pts = np.asarray(pts)
-        # First shift and scale patch coords back to the unit square.
-        unit_square_coords = (pts - border_n) / original_n
-        return geometry.apply_transform(H_inv, unit_square_coords)
-    
-    def image_to_patch_coords(pts):
-        # Convert coordinates in the extracted patch back to original image.
-        pts = np.asarray(pts)
-        # First shift and scale patch coords back to the unit square.
-        unit_square_coords = geometry.apply_transform(H, pts)
-        return unit_square_coords * original_n + border_n
-    
+    if debug_dir:
+        patch_array = np.array(extracted_patch)[:, :, ::-1]
+        border_rect = [(border_n * 2, border_n * 2), 
+                       (border_n * 2, resolution),
+                       (resolution, resolution),
+                       (resolution, border_n * 2)]
+        patch_array = annotate_image(patch_array, [border_rect])
+        save_image(os.path.join(debug_dir, "patch_with_bounds.png"),
+                   patch_array)
+
     # Find horizontal and vertical edges within the extracted patch
     gray = cv2.cvtColor(np.array(extracted_patch), cv2.COLOR_BGR2GRAY)
     sobel_vertical = np.abs(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5))
     sobel_horizontal = np.abs(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=5))
-    
+    if debug_dir:
+        save_image(os.path.join(debug_dir, "sobel_vertical.png"), 
+                   annotate_image(sobel_vertical, [border_rect]))
+        save_image(os.path.join(debug_dir, "sobel_horizontal.png"), 
+                   annotate_image(sobel_horizontal, [border_rect]))
+
     # If the extracted patch includes areas outside the bounds of the original
     # image, the missing pixels will be filled as black and will create a strong
     # artificial edge corresponding to the original image bounds. This can
@@ -195,9 +223,12 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
     # obviously can't get any useful edge information from the part we didn't
     # scan!)
     boundary_mask = image_boundary_mask(
-        patch_n, image_to_patch_coords, image.shape)
+        patch_n, image_to_patch_coords=coordinates.image_to_patch, 
+        img_shape=image.shape)
     sobel_horizontal *= boundary_mask
     sobel_vertical *= boundary_mask
+    if debug_dir:
+        save_image(os.path.join(debug_dir, "boundary_mask.png"), boundary_mask)
 
     # Apply a square root transform to the detected edges. This gives less
     # weight to 'outliers' --- individual pixels with strong edge detections ---
@@ -209,7 +240,12 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
     # borders that are a pixel or two off from the exact edge.
     sobel_horizontal = cv2.GaussianBlur(sobel_horizontal, (5, 5), 0)
     sobel_vertical = cv2.GaussianBlur(sobel_vertical, (5, 5), 0)
-
+    if debug_dir:
+        save_image(os.path.join(debug_dir, "sobel_vertical_sqrt_blur.png"), 
+                   annotate_image(sobel_vertical, [border_rect]))
+        save_image(os.path.join(debug_dir, "sobel_horizontal_sqrt_blur.png"),
+                   annotate_image(sobel_horizontal, [border_rect]))
+    
 
     # Search for the edges that maximize the total response integrated across
     # the appropriate Sobel field (horizontal for top/bottom edges, vertical
@@ -245,6 +281,13 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
         bottom_edge, _ = get_best_edge(bottom_edge_weights, bottom_pts)
         left_edge, _ = get_best_edge(left_edge_weights, left_pts)
         right_edge, _ = get_best_edge(right_edge_weights, right_pts)
+        
+    if debug_dir:
+        annotated = annotate_image(
+            np.array(extracted_patch)[:, :, ::-1],
+            edges=(top_edge, bottom_edge, left_edge, right_edge))
+        save_image(os.path.join(debug_dir, "best_edges.png"), annotated)
+
 
     # Get corners for the refined bounding box by finding the intersections
     # of the refined edges.
@@ -256,9 +299,9 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
         top_edge[0, :], top_edge[1, :], right_edge[0, :], right_edge[1, :])
     lower_right_corner = geometry.line_intersection(
         bottom_edge[0, :], bottom_edge[1, :], right_edge[0, :], right_edge[1, :])
-    
+
     image_rect = np.round(
-        patch_to_image_coords(
+        coordinates.patch_to_image(
             [upper_left_corner,
              upper_right_corner,
              lower_right_corner,
@@ -272,7 +315,8 @@ def refine_bounding_box_multiscale(
     reltol=0.05,
     base_resolution=200,
     scale_factor=5,
-    enforce_parallel_sides=False):
+    enforce_parallel_sides=False,
+    debug_dir=None):
     rect = np.array(rect)
     width1 = np.linalg.norm(rect[1] - rect[0])
     width2 = np.linalg.norm(rect[2] - rect[3])
@@ -293,8 +337,13 @@ def refine_bounding_box_multiscale(
         reltols.append(1.5 * scale_factor / new_resolution)
     
     for reltol, resolution in zip(reltols, resolutions):
+        debug_subdir = None
+        if debug_dir:
+            debug_subdir = os.path.join(debug_dir, f"{resolution}_{reltol:.5f}")
+            
         rect = refine_bounding_box(
             image, rect, reltol=reltol, resolution=resolution,
-            enforce_parallel_sides=enforce_parallel_sides)
+            enforce_parallel_sides=enforce_parallel_sides,
+            debug_dir=debug_subdir)
         print("resolution", resolution, "reltol", reltol, "rect", rect)
     return rect
