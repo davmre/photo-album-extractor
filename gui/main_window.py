@@ -404,8 +404,8 @@ class PhotoExtractorApp(QMainWindow):
             QMessageBox.warning(self, "Error", "Please load an image first")
             return
             
-        rects, attributes_list = self.image_view.get_crop_rects_with_attributes()
-        if not rects:
+        corner_points, attributes_list = self.image_view.get_crop_corner_points_with_attributes()
+        if not corner_points:
             QMessageBox.warning(self, "Error", "No bounding boxes found")
             return
         
@@ -422,7 +422,7 @@ class PhotoExtractorApp(QMainWindow):
         base_name = "photo"
         saved_files = image_processor.save_cropped_images(
             self.current_image,
-            rects, output_directory, base_name, attributes_list
+            corner_points, output_directory, base_name, attributes_list
         )
         
         if saved_files:

@@ -91,7 +91,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
         json_text = json_text.strip()
         return json.loads(json_text)
     
-    def _rect_from_bbox(self, box_2d):
+    def _corner_points_from_bbox(self, box_2d):
         y_min, x_min, y_max, x_max = box_2d
         return [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
     
@@ -133,7 +133,7 @@ JSON response, no additional text."""
                 bboxes = {}
                 for entry in result:
                     if 'box_2d' in entry:
-                        rectangles.append(self._rect_from_bbox(entry['box_2d']))
+                        rectangles.append(self._corner_points_from_bbox(entry['box_2d']))
                 print("Parsed rectangles", rectangles)
                 image_coords = [self._unnormalize_coords(r) for r in rectangles]
                 print("As image coords", image_coords)

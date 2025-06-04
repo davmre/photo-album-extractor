@@ -71,8 +71,8 @@ class ImageView(QGraphicsView):
         
     def set_image(self, image: Optional[Image.Image] = None):
         """Set the image to display."""
-        # QPixmap using implicit sharing semantics, so it seems we need to 
-        # keep a reference to the QT image so it doesn't get GC'd.
+        # QPixmap uses implicit sharing semantics, so it seems we need to 
+        # keep a reference to the QImage so it doesn't get GC'd.
         if image is None:
             self._image_qt = None
             pixmap = QPixmap()
@@ -145,18 +145,18 @@ class ImageView(QGraphicsView):
                 self.remove_bounding_box(box)
             # Note: remove_bounding_box already emits boxes_changed for each removal
         
-    def get_crop_rects_with_attributes(self):
+    def get_crop_corner_points_with_attributes(self):
         """Get all bounding box crop data along with their attributes."""
-        rects = []
+        corner_points = []
         attributes_list = []
         
         for box in self.bounding_boxes:
             # Get corner points for quadrilateral box in proper extraction order
             corners = box.get_ordered_corners_for_extraction()
-            rects.append(corners)
+            corner_points.append(corners)
             attributes_list.append(box.get_attributes())
 
-        return rects, attributes_list
+        return corner_points, attributes_list
 
     def show_context_menu(self, position):
         """Show context menu for adding/removing boxes."""

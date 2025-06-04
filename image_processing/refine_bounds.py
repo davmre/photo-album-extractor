@@ -139,10 +139,10 @@ def search_best_rhombus(
     logging.debug(f"best edges {top_edge}, {bottom_edge}, {left_edge}, {right_edge}")
     return top_edge, bottom_edge, left_edge, right_edge
 
-def annotate_image(img: np.ndarray, rects=None, edges=None):
+def annotate_image(img: np.ndarray, contours=None, edges=None):
   img = img.copy()
-  if rects:
-      cv2.drawContours(img, np.array(rects), -1, (0, 0, 255), 1)
+  if contours:
+      cv2.drawContours(img, np.array(contours), -1, (0, 0, 255), 1)
   if edges:
       colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255), (255, 255, 0), (0, 255, 255)]
       for edge, color in zip(edges, colors):
@@ -159,7 +159,7 @@ def save_image(file_path: str, img: Union[np.ndarray, Image.Image]):
     img.save(file_path)
     logging.info("saved: ", file_path)
 
-def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
+def refine_bounding_box(image, corner_points, reltol=0.05, resolution=200,
                         enforce_parallel_sides=False,
                         debug_dir=None):
     if debug_dir is not None:
@@ -171,7 +171,7 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
     # We'll do all our refinement calculations within this rectangle. Using
     # a rectangle ensures that the transformation into and out of this space
     # preserves parallel lines.
-    rect, _ = geometry.minimum_bounding_rectangle(rect)
+    rect, _ = geometry.minimum_bounding_rectangle(corner_points)
     logging.debug("bounding rect", rect)
     
     # Reimpose our standard corner ordering since the previous call may lose it.
@@ -307,8 +307,7 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
         bottom_edge[0, :], bottom_edge[1, :], right_edge[0, :], right_edge[1, :])
 
     logging.debug(
-        f"patch rect {[upper_left_corner, upper_right_corner,
-        lower_right_corner, lower_left_corner]}")
+        f"patch rect {[upper_left_corner, upper_right_corner, lower_right_corner, lower_left_corner]}")
 
     image_rect = coordinates.patch_to_image(
             [upper_left_corner,
@@ -319,18 +318,14 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
 
 
 def refine_bounding_box_multiscale(
-    image, rect,
+    image, corner_points,
     reltol=0.05,
     base_resolution=200,
     scale_factor=5,
     enforce_parallel_sides=False,
     debug_dir=None):
-    rect = np.array(rect)
-    width1 = np.linalg.norm(rect[1] - rect[0])
-    width2 = np.linalg.norm(rect[2] - rect[3])
-    height1 = np.linalg.norm(rect[3] - rect[0])
-    height2 = np.linalg.norm(rect[2] - rect[1])
-    outer_resolution = int(np.max([width1, width2, height1, height2]))
+    corner_points = np.array(corner_points)
+    outer_resolution = int(max(geometry.dimension_bounds(corner_points)))
     
     resolutions = [base_resolution]
     new_resolution = base_resolution
@@ -349,9 +344,10 @@ def refine_bounding_box_multiscale(
         if debug_dir:
             debug_subdir = os.path.join(debug_dir, f"{resolution}_{reltol:.5f}")
             
-        rect = refine_bounding_box(
-            image, rect, reltol=reltol, resolution=resolution,
+        corner_points = refine_bounding_box(
+            image, corner_points, reltol=reltol, resolution=resolution,
             enforce_parallel_sides=enforce_parallel_sides,
             debug_dir=debug_subdir)
-        logging.debug(f"resolution {resolution} reltol {reltol} rect {rect}")
-    return rect
+        logging.debug(
+            f"resolution {resolution} reltol {reltol} corner_points {corner_points}")
+    return corner_points
