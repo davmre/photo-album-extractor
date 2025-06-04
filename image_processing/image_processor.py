@@ -9,6 +9,8 @@ from PIL import Image, ImageQt
 from PyQt6.QtCore import QRectF
 import piexif
 
+from  image_processing import geometry
+
 
 def extract_perspective_image(image, corner_points, output_width=None, output_height=None):
     """Crop image using four corner points."""
@@ -17,14 +19,9 @@ def extract_perspective_image(image, corner_points, output_width=None, output_he
     
     # Calculate the width and height of the output rectangle
     # Use the maximum dimensions to avoid losing any image data
-    if output_width is None:
-        width1 = np.linalg.norm(corners[1] - corners[0])
-        width2 = np.linalg.norm(corners[2] - corners[3])
-        output_width = int(max(width1, width2))
-    if output_height is None:
-        height1 = np.linalg.norm(corners[3] - corners[0])
-        height2 = np.linalg.norm(corners[2] - corners[1])
-        output_height = int(max(height1, height2))
+    max_width, max_height = geometry.dimension_bounds(corners)
+    output_width = output_width if output_width else max_width
+    output_height = output_height if output_height else max_height
     
     # Define the output rectangle corners (in order: top-left, top-right, bottom-right, bottom-left)
     output_corners = np.array([

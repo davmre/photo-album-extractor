@@ -1,5 +1,14 @@
 import numpy as np
 
+UNIT_SQUARE = np.array([(0., 0.), (1., 0.), (1., 1.), (0., 1.)])
+
+def dimension_bounds(rect):
+    width1 = np.linalg.norm(rect[1] - rect[0])
+    width2 = np.linalg.norm(rect[2] - rect[3])
+    height1 = np.linalg.norm(rect[3] - rect[0])
+    height2 = np.linalg.norm(rect[2] - rect[1])
+    
+    return max(width1, width2), max(height1, height2)
 
 def quad_to_unit_square_transform(quad):
     """
@@ -90,7 +99,7 @@ def apply_transform(H, points):
 
 class PatchCoordinatesConverter(object):
     
-    def __init__(self, rect, patch_resolution: int, patch_offset: int):
+    def __init__(self, rect, patch_resolution: int = 1, patch_offset: int = 0):
         self.H = quad_to_unit_square_transform(rect)
         self.H_inv = np.linalg.inv(self.H)
         self.patch_resolution = patch_resolution
