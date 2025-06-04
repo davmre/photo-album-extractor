@@ -11,6 +11,8 @@ from typing import Union
 import image_processing.image_processor as image_processor
 import image_processing.geometry as geometry
 
+import logging
+
 
 def _candidate_edge_points(patch_n, border_n):
     """Enumerate potential endpoints for each of the four image borders.
@@ -90,7 +92,9 @@ def get_best_edge(edge_weights, pts):
     left_idx, right_idx = np.unravel_index(edge_weights.argmax(), edge_weights.shape)
     pt0 = pts[0, left_idx]
     pt1 = pts[1, right_idx]
-    return np.astype(np.asarray([pt0, pt1]), int), edge_weights[left_idx, right_idx]
+    edge = np.asarray([pt0, pt1])
+    logging.debug(f"best edge {edge}")
+    return edge, edge_weights[left_idx, right_idx]
 
 def search_best_rhombus(
     top_pts,
@@ -117,7 +121,7 @@ def search_best_rhombus(
 
     best_offset_idx = np.argmax(offset_scores)
     best_offset = offsets[best_offset_idx]
-    print("best offset", best_offset)
+    logging.debug("best offset", best_offset)
     best_score = np.max(offset_scores)
     horizontal_offset_mask = ((idxs2 - idxs1) == best_offset)
     vertical_offset_mask = ((idxs1 - idxs2) == best_offset)
@@ -131,8 +135,8 @@ def search_best_rhombus(
         right_edge_weights * vertical_offset_mask, right_pts)
 
     score = top_score + bottom_score + left_score + right_score
-    print("best score", score)
-    print("score", score)
+    logging.debug("best score", score)
+    logging.debug(f"best edges {top_edge}, {bottom_edge}, {left_edge}, {right_edge}")
     return top_edge, bottom_edge, left_edge, right_edge
 
 def annotate_image(img: np.ndarray, rects=None, edges=None):
@@ -153,15 +157,14 @@ def save_image(file_path: str, img: Union[np.ndarray, Image.Image]):
         img = img.convert("L")
         
     img.save(file_path)
-    print("saved: ", file_path)
+    logging.info("saved: ", file_path)
 
 def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
                         enforce_parallel_sides=False,
                         debug_dir=None):
     if debug_dir is not None:
-        print("CALLED WITH DEBUG", debug_dir)
         pathlib.Path(debug_dir).mkdir(parents=True, exist_ok=True)
-        print("logging to debug dir", debug_dir)
+        logging.info("logging to debug dir", debug_dir)
         
 
     # Bound the given shape with a (not necessarily axis-aligned) rectangle.
@@ -169,6 +172,8 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
     # a rectangle ensures that the transformation into and out of this space
     # preserves parallel lines.
     rect, _ = geometry.minimum_bounding_rectangle(rect)
+    logging.debug("bounding rect", rect)
+    
     # Reimpose our standard corner ordering since the previous call may lose it.
     rect = geometry.sort_clockwise(rect)
     border_n = int(resolution * reltol)
@@ -185,14 +190,15 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
         (1 + reltol, -reltol),
         (1 + reltol, 1 + reltol),
         (-reltol, 1 + reltol)])
-    expanded_rect = np.astype(
-        coordinates.unit_square_to_image(expanded_unit_square), int)
-    
+    expanded_rect = coordinates.unit_square_to_image(expanded_unit_square)
+    logging.debug("expanded rect", expanded_rect)
+        
     # Extract the image patch within the expanded bounding box.
     patch_n = resolution + border_n * 2 # Total output pixels per side.
     extracted_patch = image_processor.extract_perspective_image(
         Image.fromarray(image[:, :, ::-1]),
         expanded_rect, output_width=patch_n, output_height=patch_n)
+    logging.debug(f"extracted patch dims {extracted_patch.width} {extracted_patch.height}")
     if debug_dir:
         patch_array = np.array(extracted_patch)[:, :, ::-1]
         border_rect = [(border_n * 2, border_n * 2), 
@@ -238,8 +244,8 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
 
     # Slightly blur the detected edges so we give 'partial credit' to candidate
     # borders that are a pixel or two off from the exact edge.
-    sobel_horizontal = cv2.GaussianBlur(sobel_horizontal, (5, 5), 0)
-    sobel_vertical = cv2.GaussianBlur(sobel_vertical, (5, 5), 0)
+    #sobel_horizontal = cv2.GaussianBlur(sobel_horizontal, (5, 5), 0)
+    #sobel_vertical = cv2.GaussianBlur(sobel_vertical, (5, 5), 0)
     if debug_dir:
         save_image(os.path.join(debug_dir, "sobel_vertical_sqrt_blur.png"), 
                    annotate_image(sobel_vertical, [border_rect]))
@@ -300,13 +306,15 @@ def refine_bounding_box(image, rect, reltol=0.05, resolution=200,
     lower_right_corner = geometry.line_intersection(
         bottom_edge[0, :], bottom_edge[1, :], right_edge[0, :], right_edge[1, :])
 
-    image_rect = np.round(
-        coordinates.patch_to_image(
+    logging.debug(
+        f"patch rect {[upper_left_corner, upper_right_corner,
+        lower_right_corner, lower_left_corner]}")
+
+    image_rect = coordinates.patch_to_image(
             [upper_left_corner,
              upper_right_corner,
              lower_right_corner,
              lower_left_corner])
-        ).astype(int)
     return image_rect
 
 
@@ -345,5 +353,5 @@ def refine_bounding_box_multiscale(
             image, rect, reltol=reltol, resolution=resolution,
             enforce_parallel_sides=enforce_parallel_sides,
             debug_dir=debug_subdir)
-        print("resolution", resolution, "reltol", reltol, "rect", rect)
+        logging.debug(f"resolution {resolution} reltol {reltol} rect {rect}")
     return rect
