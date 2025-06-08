@@ -99,11 +99,9 @@ def apply_transform(H, points):
 
 class PatchCoordinatesConverter(object):
     
-    def __init__(self, rect, patch_resolution: int = 1, patch_offset: int = 0):
+    def __init__(self, rect):
         self.H = quad_to_unit_square_transform(rect)
         self.H_inv = np.linalg.inv(self.H)
-        self.patch_resolution = patch_resolution
-        self.patch_offset = patch_offset
         
     def image_to_unit_square(self, pts):
         pts = np.asarray(pts)
@@ -112,16 +110,7 @@ class PatchCoordinatesConverter(object):
     def unit_square_to_image(self, pts):
         pts = np.asarray(pts)
         return apply_transform(self.H_inv, pts)
-    
-    def patch_to_image(self, pts):
-        pts = np.asarray(pts, dtype=np.float32)
-        return self.unit_square_to_image(
-            (pts - self.patch_offset) / self.patch_resolution)
-        
-    def image_to_patch(self, pts):
-        unit_square_coords = self.image_to_unit_square(pts)
-        return unit_square_coords * self.patch_resolution + self.patch_offset
-    
+
 
 def line_intersection(p1, p2, p3, p4):
     """
@@ -171,6 +160,55 @@ def line_intersection(p1, p2, p3, p4):
     intersection = p1 + t1 * d1
 
     return intersection
+
+
+
+def line_integral_vectorized(image, start_points, end_points, num_samples=100):
+    """
+    Fully vectorized version - maximum performance for large N.
+    
+    Args:
+        image: 2D numpy array
+        start_points: (N, 2) array of start coordinates  
+        end_points: (N, 2) array of end coordinates
+        num_samples: number of sample points along each line
+    
+    Returns:
+        (N,) array of line integral values
+    """
+    N = start_points.shape[0]
+    
+    # Extract coordinates - shape (N,)
+    x0, y0 = start_points[:, 0], start_points[:, 1]
+    x1, y1 = end_points[:, 0], end_points[:, 1]
+    
+    # Generate sample points - broadcast to shape (N, num_samples)
+    t = np.linspace(0, 1, num_samples)  # shape (num_samples,)
+    x_coords = x0[:, None] + t[None, :] * (x1 - x0)[:, None]
+    y_coords = y0[:, None] + t[None, :] * (y1 - y0)[:, None]
+    
+    # Round to nearest pixel coordinates
+    x_indices = np.round(x_coords).astype(int)
+    y_indices = np.round(y_coords).astype(int)
+    
+    # Create mask for valid coordinates - shape (N, num_samples)
+    mask = ((y_indices >= 0) & (y_indices < image.shape[0]) &
+            (x_indices >= 0) & (x_indices < image.shape[1]))
+    
+    # Use safe indexing - replace invalid indices with 0 (any valid index)
+    safe_y = np.where(mask, y_indices, 0)
+    safe_x = np.where(mask, x_indices, 0)
+    
+    # Sample from image - advanced indexing gives shape (N, num_samples)
+    sampled = image[safe_y, safe_x]
+    
+    # Zero out samples that were out of bounds
+    sampled = np.where(mask, sampled, 0)
+    
+    # Sum along the samples dimension to get integral for each line
+    results = np.sum(sampled, axis=1)
+    
+    return results
 
 
 def line_integral_simple(image, start_point, end_point, num_samples=100):
@@ -251,7 +289,7 @@ def minimum_bounding_rectangle(points):
                 y = u * unit_vector[1] + v * perp_vector[1]
                 best_rect.append((x, y))
     
-    return np.array(best_rect, dtype=int), min_area
+    return np.array(best_rect), min_area
 
 def clockwise_corner_permutation(rect):
     # rect: array of shape [4, 2]

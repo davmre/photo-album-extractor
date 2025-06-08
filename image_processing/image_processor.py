@@ -12,7 +12,7 @@ import piexif
 from  image_processing import geometry
 
 
-def extract_perspective_image(image, corner_points, output_width=None, output_height=None):
+def extract_perspective_image(image, corner_points, output_width=None, output_height=None, mode=Image.Resampling.BICUBIC) -> Image.Image:
     """Crop image using four corner points."""
     # Convert corner points to numpy array
     corners = np.array(corner_points, dtype=np.float32)
@@ -53,8 +53,7 @@ def extract_perspective_image(image, corner_points, output_width=None, output_he
         (output_width, output_height),
         Image.Transform.PERSPECTIVE,
         coeffs,
-        Image.Resampling.BICUBIC
-    )
+        mode)
 
 
 def load_image(filepath):
