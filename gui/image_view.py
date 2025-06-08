@@ -220,14 +220,11 @@ class ImageView(QGraphicsView):
         if not self.image_item or not isinstance(box, QuadBoundingBox):
             return
 
-        # Get enforce_parallel_sides setting if not explicitly provided
-        if enforce_parallel_sides is None:
-            # Default behavior: enforce parallel sides (True) unless setting says otherwise
-            if self.settings:
-                allow_independent = self.settings.get('refine_edges_independently', False)
-                enforce_parallel_sides = not allow_independent
-            else:
-                enforce_parallel_sides = True
+        strategy_name = self.settings.get('refinement_strategy',
+                                          'Original (multiscale)')
+        refine_fn = refine_bounds.REFINEMENT_STRATEGIES[strategy_name]
+            
+        
 
         # Get the current image as numpy array
         image_bgr = self.image_as_numpy(format="bgr")
@@ -240,17 +237,9 @@ class ImageView(QGraphicsView):
             debug_dir = os.path.join(debug_dir, str(box.box_id))
             
         try:
-            # Run refinement
-            if multiscale:
-                refined_corners = refine_bounds.refine_bounding_box_multiscale(
+            refined_corners = refine_fn(
                 image_bgr, corner_coords,
-                enforce_parallel_sides=enforce_parallel_sides,
                 debug_dir=debug_dir)
-            else:
-                refined_corners = refine_bounds.refine_bounding_box(
-                    image_bgr, corner_coords,
-                    enforce_parallel_sides=enforce_parallel_sides,
-                    debug_dir=debug_dir)
             
             # Update box with refined corners
             refined_qpoints = []

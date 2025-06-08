@@ -17,6 +17,41 @@ import logging
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 LOGGER = logging.getLogger("logger")
 
+# Registry of all available strategies
+REFINEMENT_STRATEGIES = {
+    "Original (200px res)": 
+        (lambda image, corner_points, debug_dir=None: 
+         refine_bounding_box(image, corner_points, resolution=200, 
+                             enforce_parallel_sides=True, 
+                             debug_dir=debug_dir)),
+    "Original (multiscale)":
+         (lambda image, corner_points, debug_dir=None: 
+         refine_bounding_box_multiscale(image, corner_points, 
+                                        enforce_parallel_sides=True,
+                                        debug_dir=debug_dir)),
+    "Original (multiscale, independent sides)": 
+        (lambda image, corner_points, debug_dir=None: 
+         refine_bounding_box_multiscale(image, corner_points, 
+                                        enforce_parallel_sides=False,
+                                        debug_dir=debug_dir)),
+    "Strips (native res)": (
+        lambda image, corner_points, debug_dir=None: 
+         refine_bounding_box_strips(image, corner_points, 
+                                    enforce_parallel_sides=True,
+                                    debug_dir=debug_dir)),
+    "Strips (10x downscaled)": (
+        lambda image, corner_points, debug_dir=None: 
+         refine_bounding_box_strips(image, corner_points,
+                                    resolution_scale_factor=0.1, 
+                                    enforce_parallel_sides=True, 
+                                    debug_dir=debug_dir)),
+    "Strips (multiscale)" : (
+        lambda image, corner_points, debug_dir=None: 
+         refine_bounding_box_strips_multiscale(
+             image, corner_points, 
+             enforce_parallel_sides=True,
+             debug_dir=debug_dir))
+}
 
 def _candidate_edge_points(patch_n, border_n):
     """Enumerate potential endpoints for each of the four image borders.
@@ -924,7 +959,8 @@ def refine_bounding_box_strips_multiscale(
     while new_scale_factor < 1.:
         new_scale_factor = min(1., new_scale_factor * scale_step)
         scale_factors.append(new_scale_factor)
-        reltols.append(2 * scale_step / (new_scale_factor * base_resolution))
+        reltols.append(
+            min(reltol / 2., scale_step / (new_scale_factor * base_resolution)))
         
     scale_factors[-1] = 1.
     

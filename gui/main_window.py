@@ -13,6 +13,7 @@ from PyQt6.QtGui import QAction, QPixmap
 from image_processing import image_processor
 from gui.quad_bounding_box import QuadBoundingBox
 from image_processing.detection_strategies import DETECTION_STRATEGIES
+from image_processing.refine_bounds import REFINEMENT_STRATEGIES
 from storage.bounding_box_storage import BoundingBoxStorage
 from gui.settings_dialog import Settings, SettingsDialog
 from gui.directory_sidebar import DirectoryImageList
@@ -762,5 +763,9 @@ class PhotoExtractorApp(QMainWindow):
         
     def open_settings(self):
         """Open the settings dialog."""
-        dialog = SettingsDialog(self.settings, DETECTION_STRATEGIES, self)
+        dialog = SettingsDialog(
+            self.settings,
+            DETECTION_STRATEGIES,
+            REFINEMENT_STRATEGIES.keys(),
+            self)
         dialog.exec()

@@ -46,10 +46,11 @@ class Settings:
 class SettingsDialog(QDialog):
     """Settings dialog for configuring application preferences."""
     
-    def __init__(self, settings, detection_strategies, parent=None):
+    def __init__(self, settings, detection_strategies, refinement_strategy_names, parent=None):
         super().__init__(parent)
         self.settings = settings
         self.detection_strategies = detection_strategies
+        self.refinement_strategy_names = refinement_strategy_names
         self.init_ui()
         
     def init_ui(self):
@@ -72,16 +73,16 @@ class SettingsDialog(QDialog):
         form_layout.addRow("Gemini API Key:", self.api_key_edit)
         
         # Detection Strategy selector
-        self.strategy_combo = QComboBox()
+        self.detection_strategy_combo = QComboBox()
         current_strategy = self.settings.get('detection_strategy', '')
         current_index = 0
         for i, strategy in enumerate(self.detection_strategies):
-            self.strategy_combo.addItem(strategy.name, strategy)
+            self.detection_strategy_combo.addItem(strategy.name, strategy)
             if strategy.name == current_strategy:
                 current_index = i
-        self.strategy_combo.setCurrentIndex(current_index)
+        self.detection_strategy_combo.setCurrentIndex(current_index)
         
-        form_layout.addRow("Detection Strategy:", self.strategy_combo)
+        form_layout.addRow("Detection Strategy:", self.detection_strategy_combo)
         
         # Auto-refine checkbox
         self.auto_refine_checkbox = QCheckBox("Automatically refine detected bounding boxes")
@@ -90,13 +91,18 @@ class SettingsDialog(QDialog):
         
         form_layout.addRow("", self.auto_refine_checkbox)
         
-        # Refine edges independently checkbox
-        self.refine_independent_checkbox = QCheckBox("Allow non-rectangular selections when refining")
-        refine_independent = self.settings.get('refine_edges_independently', False)
-        self.refine_independent_checkbox.setChecked(refine_independent)
+        # Refinement Strategy combo
+        self.refinement_strategy_combo = QComboBox()
+        current_strategy = self.settings.get('refinement_strategy', '')
+        current_index = 0
+        for i, strategy in enumerate(self.refinement_strategy_names):
+            self.refinement_strategy_combo.addItem(strategy, strategy)
+            if strategy == current_strategy:
+                current_index = i
+        self.refinement_strategy_combo.setCurrentIndex(current_index)
         
-        form_layout.addRow("", self.refine_independent_checkbox)
-        
+        form_layout.addRow("Refinement Strategy:", self.refinement_strategy_combo)
+
         layout.addLayout(form_layout)
         
         # Add some spacing
@@ -125,14 +131,17 @@ class SettingsDialog(QDialog):
         self.settings.set('gemini_api_key', api_key)
         
         # Save detection strategy
-        selected_strategy = self.strategy_combo.currentData()
+        selected_strategy = self.detection_strategy_combo.currentData()
         if selected_strategy:
             self.settings.set('detection_strategy', selected_strategy.name)
             
         # Save auto-refine setting
         self.settings.set('auto_refine_detection', self.auto_refine_checkbox.isChecked())
-        
-        # Save refine edges independently setting
-        self.settings.set('refine_edges_independently', self.refine_independent_checkbox.isChecked())
-        
+                    
+        # Save refinement strategy
+        selected_strategy = self.refinement_strategy_combo.currentData()
+        if selected_strategy:
+            self.settings.set('refinement_strategy', selected_strategy)
+            
+
         super().accept()
