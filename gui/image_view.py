@@ -2,6 +2,7 @@
 Custom graphics view for displaying images with bounding box interaction.
 """
 
+import os
 import numpy as np
 from PIL import Image, ImageQt
 
@@ -37,6 +38,8 @@ class ImageView(QGraphicsView):
         super().__init__()
         self.settings = settings
         self.selected_box = None
+        
+        self.refine_debug_dir = None
         
         # Set up the graphics scene
         self.scene = QGraphicsScene()
@@ -231,17 +234,23 @@ class ImageView(QGraphicsView):
 
         # Get current box corners in image coordinates
         corner_coords = box.get_ordered_corners_for_extraction()
+           
+        debug_dir = getattr(self, 'refine_debug_dir', None)
+        if debug_dir is not None:
+            debug_dir = os.path.join(debug_dir, str(box.box_id))
             
         try:
             # Run refinement
             if multiscale:
                 refined_corners = refine_bounds.refine_bounding_box_multiscale(
                 image_bgr, corner_coords,
-                enforce_parallel_sides=enforce_parallel_sides)
+                enforce_parallel_sides=enforce_parallel_sides,
+                debug_dir=debug_dir)
             else:
                 refined_corners = refine_bounds.refine_bounding_box(
                     image_bgr, corner_coords,
-                    enforce_parallel_sides=enforce_parallel_sides)
+                    enforce_parallel_sides=enforce_parallel_sides,
+                    debug_dir=debug_dir)
             
             # Update box with refined corners
             refined_qpoints = []

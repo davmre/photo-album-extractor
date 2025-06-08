@@ -13,6 +13,7 @@ from gui.main_window import PhotoExtractorApp
 def main():
     parser = argparse.ArgumentParser(description='Photo Album Extractor')
     parser.add_argument('path', nargs='?', help='Path to image file or directory to load on startup')
+    parser.add_argument('--refine_debug_dir', default=None, help="Directory to save debugging images for boundary refinement.")
     args = parser.parse_args()
     
     # Validate path if provided
@@ -29,7 +30,8 @@ def main():
             return 1
     
     app = QApplication(sys.argv)
-    window = PhotoExtractorApp(initial_image=initial_image, initial_directory=initial_directory)
+    window = PhotoExtractorApp(initial_image=initial_image, initial_directory=initial_directory,
+                               refine_debug_dir = args.refine_debug_dir)
     window.show()
     sys.exit(app.exec())
 

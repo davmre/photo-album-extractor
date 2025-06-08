@@ -23,8 +23,11 @@ from gui.attributes_sidebar import AttributesSidebar
 class PhotoExtractorApp(QMainWindow):
     """Main application window."""
     
-    def __init__(self, initial_image=None, initial_directory=None):
+    def __init__(self, initial_image=None, initial_directory=None,
+                 refine_debug_dir=None):
         super().__init__()
+        
+        self.refine_debug_dir = refine_debug_dir
         
         self.current_image_path = None
         self.current_image = None
@@ -219,6 +222,11 @@ class PhotoExtractorApp(QMainWindow):
         try:
             image = image_processor.load_image(file_path)
             self.image_view.set_image(image)
+            if self.refine_debug_dir:
+                self.image_view.refine_debug_dir = os.path.join(
+                    self.refine_debug_dir,
+                    os.path.splitext(os.path.basename(file_path))[0])
+                print("IMAGE RDD", self.image_view.refine_debug_dir)
             self.current_image = image
             self.current_image_path = file_path
             
@@ -345,7 +353,6 @@ class PhotoExtractorApp(QMainWindow):
         pixmap = self.image_view.image_item.pixmap()
         image_width = pixmap.width()
         image_height = pixmap.height()
-        print("STARTING PIXMAP", image_width, image_height)
         
         # Clear existing boxes first
         self.image_view.clear_boxes()
