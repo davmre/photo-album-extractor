@@ -3,25 +3,35 @@ Image processing utilities for loading, cropping, and saving photos.
 """
 
 import os
-import numpy as np
 from datetime import datetime
-from PIL import Image, ImageQt
-from PyQt6.QtCore import QRectF
+from typing import Dict, List, Optional, Union
+
+import numpy as np
+import numpy.typing as npt
 import piexif
+import PIL.Image
+from numpy import ndarray
+from PIL import Image, ImageQt
+from PIL.JpegImagePlugin import JpegImageFile
+from PyQt6.QtCore import QRectF
 
-from  image_processing import geometry
+from image_processing import geometry
+
+# Semantic type aliases
+QuadArray = geometry.QuadArray
+PILImage = PIL.Image.Image  # PIL/Pillow images
 
 
-def extract_perspective_image(image, corner_points, output_width=None, output_height=None, mode=Image.Resampling.BICUBIC) -> Image.Image:
+def extract_perspective_image(image: PILImage, corner_points: QuadArray, output_width: Optional[int]=None, output_height: Optional[int]=None, mode: PIL.Image.Resampling=Image.Resampling.BICUBIC) -> PILImage:
     """Crop image using four corner points."""
     # Convert corner points to numpy array
-    corners = np.array(corner_points, dtype=np.float32)
+    corners = np.array(corner_points, dtype=np.float64)
     
     # Calculate the width and height of the output rectangle
     # Use the maximum dimensions to avoid losing any image data
     max_width, max_height = geometry.dimension_bounds(corners)
-    output_width = output_width if output_width else max_width
-    output_height = output_height if output_height else max_height
+    output_width = output_width if output_width else int(max_width)
+    output_height = output_height if output_height else int(max_height)
     
     # Define the output rectangle corners (in order: top-left, top-right, bottom-right, bottom-left)
     output_corners = np.array([
@@ -56,13 +66,13 @@ def extract_perspective_image(image, corner_points, output_width=None, output_he
         mode)
 
 
-def load_image(filepath):
+def load_image(filepath: str) -> PILImage:
     return Image.open(filepath)
 
 
-def save_cropped_images(image: Image.Image,
-                        crop_data, output_dir, base_name="photo",
-                        attributes_list=None):
+def save_cropped_images(image: PILImage,
+                        crop_data: List[QuadArray], output_dir: str, base_name: str="photo",
+                        attributes_list: Optional[List[Dict[str, str]]]=None) -> List[str]:
     """Save multiple cropped images to the specified directory.
     
     Args:
@@ -114,7 +124,7 @@ def save_cropped_images(image: Image.Image,
             
     return saved_files
     
-def save_image_with_exif(image, filepath, attributes, jpeg_quality=95):
+def save_image_with_exif(image: PILImage, filepath: str, attributes: Dict[str, str], jpeg_quality: int=95) -> None:
     """Save image with EXIF data from attributes."""
     try:
         # Create EXIF dictionary

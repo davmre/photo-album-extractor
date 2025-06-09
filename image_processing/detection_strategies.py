@@ -2,15 +2,18 @@
 Photo detection strategies for automatically identifying photos in scanned album pages.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Any
 import cv2
 import numpy as np
 from PIL import Image
+import PIL.Image
 from PyQt6.QtCore import QPointF
 import base64
 import io
-import google.generativeai as genai
+import google.generativeai as genai  # type: ignore
 import json
 
 
@@ -30,7 +33,7 @@ class DetectionStrategy(ABC):
         pass
     
     @abstractmethod
-    def detect_photos(self, image: Image.Image) -> List[List[QPointF]]:
+    def detect_photos(self, image: PIL.Image.Image) -> List[List[QPointF]]:
         """
         Detect photos in an image and return their bounding quadrilaterals.
         
@@ -49,16 +52,16 @@ class DetectionStrategy(ABC):
 class GeminiDetectionStrategy(DetectionStrategy):
     """Gemini AI-based strategy for detecting photos in album pages."""
     
-    def __init__(self):
-        self._model = None
-        self._api_key = None
+    def __init__(self) -> None:
+        self._model: Optional[Any] = None
+        self._api_key: Optional[str] = None
     
-    def set_api_key(self, api_key):
+    def set_api_key(self, api_key: str) -> None:
         """Set the API key and reinitialize the model."""
         self._api_key = api_key
         self._setup_gemini()
     
-    def _setup_gemini(self):
+    def _setup_gemini(self) -> None:
         """Initialize the Gemini model."""
         if not self._api_key:
             print("Gemini API key not set. Please configure it in Settings.")
@@ -67,8 +70,8 @@ class GeminiDetectionStrategy(DetectionStrategy):
             
         try:
             # Configure the API key
-            genai.configure(api_key=self._api_key)
-            self._model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+            genai.configure(api_key=self._api_key)  # type: ignore
+            self._model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')  # type: ignore
         except Exception as e:
             print(f"Failed to initialize Gemini: {e}")
             self._model = None
@@ -81,7 +84,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
     def description(self) -> str:
         return "Use Gemini AI to intelligently detect photos in album pages"
     
-    def _parse_as_json(self, response):
+    def _parse_as_json(self, response: Any) -> List[dict[str, Any]]:
         # Extract JSON from response (remove any markdown formatting)
         json_text = response.text.strip()
         if json_text.startswith('```json'):
@@ -91,16 +94,16 @@ class GeminiDetectionStrategy(DetectionStrategy):
         json_text = json_text.strip()
         return json.loads(json_text)
     
-    def _corner_points_from_bbox(self, box_2d):
+    def _corner_points_from_bbox(self, box_2d: List[float]) -> List[Tuple[float, float]]:
         y_min, x_min, y_max, x_max = box_2d
         return [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
     
-    def _unnormalize_coords(self, coords, normalized_width=1000, normalized_height=1000):
+    def _unnormalize_coords(self, coords: List[Tuple[float, float]], normalized_width: int = 1000, normalized_height: int = 1000) -> List[QPointF]:
         xscale = 1. / normalized_width
         yscale = 1. / normalized_height
         return [ QPointF(p[0] * xscale, p[1] * yscale) for p in coords]
     
-    def detect_photos(self, image: Image.Image) -> List[List[QPointF]]:
+    def detect_photos(self, image: PIL.Image.Image) -> List[List[QPointF]]:
         if not image or not self._model:
             return []
 

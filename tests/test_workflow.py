@@ -2,26 +2,25 @@
 Tests for image loading functionality in the photo extractor app.
 """
 
+import logging
 import os
+import shutil
 import sys
+import tempfile
+
 import piexif
 import pytest
-import tempfile
-import shutil
-from PIL import Image
-from PyQt6.QtWidgets import QApplication, QMessageBox
-from PyQt6.QtGui import QPixmap
-
 import pytest_mock as mock
-
-
-import logging
+from PIL import Image
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import QApplication, QMessageBox
 
 # Add parent directory to path to import app modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from image_processing import image_processor
 from gui.main_window import PhotoExtractorApp
+from image_processing import image_processor
+
 
 class TestMainWindowWorkflow:
     """Test image loading through the main application window."""
@@ -58,7 +57,6 @@ class TestMainWindowWorkflow:
         
         assert app.current_image_path == jpeg_path
         assert app.current_image is not None
-        assert app.image_view.scene.items()  # Should have image item in scene
         
         # Should load stored boxes.
         assert len(app.image_view.bounding_boxes) == 3

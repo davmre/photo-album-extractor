@@ -6,18 +6,20 @@ import os
 import json
 import uuid
 from datetime import datetime
+from typing import Any, Dict, List, Union
 from gui.quad_bounding_box import QuadBoundingBox
+from numpy import float64
 
 
 class BoundingBoxStorage:
     """Handles saving and loading bounding box data for images in a directory."""
     
-    def __init__(self, directory):
+    def __init__(self, directory: str) -> None:
         self.directory = directory
         self.data_file = os.path.join(directory, '.photo_extractor_data.json')
-        self.data = self.load_data()
+        self.data: Dict[str, List[Dict[str, Any]]] = self.load_data()
         
-    def load_data(self):
+    def load_data(self) -> Dict[str, List[Dict[str, Any]]]:
         """Load bounding box data from JSON file."""
         if os.path.exists(self.data_file):
             try:
@@ -27,7 +29,7 @@ class BoundingBoxStorage:
                 return {}
         return {}
         
-    def save_data(self):
+    def save_data(self) -> None:
         """Save bounding box data to JSON file."""
         try:
             with open(self.data_file, 'w') as f:
@@ -35,7 +37,7 @@ class BoundingBoxStorage:
         except IOError:
             print(f"Warning: Could not save bounding box data to {self.data_file}")
             
-    def save_bounding_boxes(self, image_filename, bounding_boxes):
+    def save_bounding_boxes(self, image_filename: str, bounding_boxes: List[QuadBoundingBox]) -> None:
         """Save bounding boxes for a specific image."""
         if not bounding_boxes:
             # Remove entry if no bounding boxes
@@ -65,7 +67,7 @@ class BoundingBoxStorage:
             self.data[image_filename] = box_data
         self.save_data()
         
-    def load_bounding_boxes(self, image_filename):
+    def load_bounding_boxes(self, image_filename: str) -> List[Dict[str, Any]]:
         """Load bounding boxes for a specific image."""
         return self.data.get(image_filename, [])
         
@@ -81,7 +83,7 @@ class BoundingBoxStorage:
                 return box_data.get('attributes', {})
         return {}
         
-    def update_box_attributes(self, image_filename, box_id, attributes):
+    def update_box_attributes(self, image_filename: str, box_id: str, attributes: Dict[str, str]) -> bool:
         """Update attributes for a specific box."""
         if image_filename not in self.data:
             return False

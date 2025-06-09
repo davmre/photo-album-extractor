@@ -2,20 +2,21 @@
 Custom graphics view for displaying images with bounding box interaction.
 """
 
+from __future__ import annotations
+
 import os
+from typing import List, Optional
+
 import numpy as np
 from PIL import Image, ImageQt
+from PyQt6.QtCore import QPointF, Qt, pyqtSignal
+from PyQt6.QtGui import QImage, QPainter, QPixmap
+from PyQt6.QtWidgets import (QGraphicsPixmapItem, QGraphicsScene,
+                             QGraphicsView, QMenu, QMessageBox)
 
-from typing import Optional
-
-from PyQt6.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, 
-                             QMenu, QMessageBox)
-from PyQt6.QtCore import Qt, pyqtSignal, QPointF
-from PyQt6.QtGui import QPainter
-from PyQt6.QtGui import QPixmap, QImage
-
-from gui.quad_bounding_box import QuadBoundingBox
 import image_processing.refine_bounds as refine_bounds
+from gui.quad_bounding_box import QuadBoundingBox
+from gui.settings_dialog import Settings
 
 
 class ImageView(QGraphicsView):
@@ -34,20 +35,25 @@ class ImageView(QGraphicsView):
     # Signal emitted when mouse enters viewport
     mouse_entered_viewport = pyqtSignal()
     
-    def __init__(self, settings=None):
+    def __init__(self, settings: Settings) -> None:
         super().__init__()
         self.settings = settings
-        self.selected_box = None
+        self.selected_box: Optional[QuadBoundingBox] = None
         
-        self.refine_debug_dir = None
+        self.refine_debug_dir: Optional[str] = None
         
         # Set up the graphics scene
-        self.scene = QGraphicsScene()
-        self.setScene(self.scene)
+        self._scene = QGraphicsScene()
+        self.setScene(self._scene)
         
         # Image item
-        self.image_item = None
-        self.bounding_boxes = []
+        self.image_item: Optional[QGraphicsPixmapItem] = None
+        self.bounding_boxes: List[QuadBoundingBox] = []
+        
+        # Drag state
+        self.is_dragging: bool = False
+        self.drag_start_pos: Optional[QPointF] = None
+        self.temp_box: Optional[QuadBoundingBox] = None
         
         # View settings
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
@@ -85,11 +91,11 @@ class ImageView(QGraphicsView):
 
         # Clear existing image
         if self.image_item:
-            self.scene.removeItem(self.image_item)
+            self._scene.removeItem(self.image_item)
             
         # Add new image
         self.image_item = QGraphicsPixmapItem(pixmap)
-        self.scene.addItem(self.image_item)
+        self._scene.addItem(self.image_item)
         
         # Clear existing bounding boxes
         self.clear_boxes()
@@ -105,12 +111,12 @@ class ImageView(QGraphicsView):
         if self.image_item is None:
             return None
             
-        self.scene.addItem(box)
+        self._scene.addItem(box)
         
         # Add handles to scene
         if hasattr(box, 'handles'):
             for handle in box.handles:
-                self.scene.addItem(handle)
+                self._scene.addItem(handle)
 
         self.bounding_boxes.append(box)
         
@@ -132,10 +138,10 @@ class ImageView(QGraphicsView):
             # Remove handles
             if hasattr(box, 'handles'):
                 for handle in box.handles:
-                    self.scene.removeItem(handle)
+                    self._scene.removeItem(handle)
                 
             # Remove box
-            self.scene.removeItem(box)
+            self._scene.removeItem(box)
             self.bounding_boxes.remove(box)
             
             # Emit signal that boxes changed
@@ -167,7 +173,7 @@ class ImageView(QGraphicsView):
         scene_pos = self.mapToScene(position)
         
         # Check if we're clicking on a bounding box
-        clicked_item = self.scene.itemAt(scene_pos, self.transform())
+        clicked_item = self._scene.itemAt(scene_pos, self.transform())
         clicked_box = None
         
         # Find the bounding box if we clicked on one or its handle
@@ -220,8 +226,8 @@ class ImageView(QGraphicsView):
         if not self.image_item or not isinstance(box, QuadBoundingBox):
             return
 
-        strategy_name = self.settings.get('refinement_strategy',
-                                          'Original (multiscale)')
+        strategy_name = (self.settings.get('refinement_strategy') 
+                         or 'Original (multiscale)')
         refine_fn = refine_bounds.REFINEMENT_STRATEGIES[strategy_name]
             
         
@@ -237,7 +243,7 @@ class ImageView(QGraphicsView):
             debug_dir = os.path.join(debug_dir, str(box.box_id))
             
         try:
-            refined_corners = refine_fn(
+            refined_corners = refine_fn(  # type: ignore[reportCallIssue]
                 image_bgr, corner_coords,
                 debug_dir=debug_dir)
             
@@ -329,7 +335,7 @@ class ImageView(QGraphicsView):
             
             # Check if we're clicking on an existing item
             scene_pos = self.mapToScene(event.position().toPoint())
-            clicked_item = self.scene.itemAt(scene_pos, self.transform())
+            clicked_item = self._scene.itemAt(scene_pos, self.transform())
             
             # If we didn't click on an existing item, clear selection and start creating a new box
             if clicked_item is None or clicked_item == self.image_item:
@@ -348,11 +354,11 @@ class ImageView(QGraphicsView):
         # Emit mouse position for magnifier
         self.mouse_moved.emit(scene_pos)
         
-        if self.is_dragging and self.drag_start_pos:
+        if self.is_dragging and self.drag_start_pos is not None:
             
             # Remove temporary box if it exists
             if self.temp_box:
-                self.scene.removeItem(self.temp_box)
+                self._scene.removeItem(self.temp_box)
                 self.temp_box = None
                 
             # Create temporary quadrilateral box for preview
@@ -363,7 +369,7 @@ class ImageView(QGraphicsView):
                 QPointF(self.drag_start_pos.x(), scene_pos.y())
             ]
             self.temp_box = QuadBoundingBox(corners)
-            self.scene.addItem(self.temp_box)
+            self._scene.addItem(self.temp_box)
             
         super().mouseMoveEvent(event)
         
@@ -374,11 +380,11 @@ class ImageView(QGraphicsView):
             
             # Remove temporary box
             if self.temp_box:
-                self.scene.removeItem(self.temp_box)
+                self._scene.removeItem(self.temp_box)
                 self.temp_box = None
                 
             # Create final box if drag was significant
-            if self.drag_start_pos:
+            if self.drag_start_pos is not None:
                 distance = ((scene_pos.x() - self.drag_start_pos.x())**2 + 
                            (scene_pos.y() - self.drag_start_pos.y())**2)**0.5
                 if distance > 10:  # Minimum drag distance

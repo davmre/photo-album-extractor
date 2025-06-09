@@ -7,3 +7,8 @@ piexif>=1.1.3
 pytest>=7.0.0
 pytest-qt>=4.2.0
 pytest-mock>=3.10.0
+
+# Type checking and stubs
+pyright>=1.1.350
+types-Pillow>=10.0.0
+types-requests>=2.31.0

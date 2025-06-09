@@ -2,13 +2,17 @@
 Main application window for the Photo Album Extractor.
 """
 
+from __future__ import annotations
+
 import os
+from typing import Optional, List, Any
 from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, 
                              QPushButton, QFileDialog, QLabel, QMessageBox,
                              QStatusBar, QLineEdit, QComboBox, QSplitter,
                              QProgressDialog)
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QAction, QPixmap
+import PIL.Image
 
 from image_processing import image_processor
 from gui.quad_bounding_box import QuadBoundingBox
@@ -24,17 +28,23 @@ from gui.attributes_sidebar import AttributesSidebar
 class PhotoExtractorApp(QMainWindow):
     """Main application window."""
     
-    def __init__(self, initial_image=None, initial_directory=None,
-                 refine_debug_dir=None):
+    def __init__(self, initial_image: Optional[str] = None, initial_directory: Optional[str] = None,
+                 refine_debug_dir: Optional[str] = None) -> None:
         super().__init__()
         
         self.refine_debug_dir = refine_debug_dir
         
-        self.current_image_path = None
-        self.current_image = None
-        self.current_directory = None
-        self.bounding_box_storage = None
+        self.current_image_path: Optional[str] = None
+        self.current_image: Optional[PIL.Image.Image] = None
+        self.current_directory: Optional[str] = None
+        self.bounding_box_storage: Optional[BoundingBoxStorage] = None
         self.settings = Settings()
+        
+        # GUI components (will be initialized in init_ui)
+        self.image_view: ImageView
+        self.directory_list: DirectoryImageList  
+        self.attributes_sidebar: AttributesSidebar
+        self.status_bar: QStatusBar
         
         self.init_ui()
         
@@ -481,7 +491,7 @@ class PhotoExtractorApp(QMainWindow):
             # Load saved boxes
             for box_data in saved_boxes:
                 if box_data.get('type') == 'quad' and 'corners' in box_data:
-                    corners = [QPointF(corner[0], corner[1]) for corner in box_data['corners']]
+                    corners = [QPointF(float(corner[0]), float(corner[1])) for corner in box_data['corners']]
                     
                     # Get box ID and attributes if they exist
                     box_id = box_data.get('id')
@@ -705,8 +715,8 @@ class PhotoExtractorApp(QMainWindow):
                             # Convert absolute coordinates back to relative coordinates
                             rel_corners = []
                             for corner in box_data['corners']:
-                                rel_x = corner[0] / image.width
-                                rel_y = corner[1] / image.height
+                                rel_x = float(corner[0]) / image.width
+                                rel_y = float(corner[1]) / image.height
                                 rel_corners.append((rel_x, rel_y))
                             crop_data.append(('quad', rel_corners))
 

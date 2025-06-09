@@ -88,9 +88,12 @@ class MagnifierWidget(QWidget):
         self.tracking_mode = "corner"
         # Handle both list [x, y] and QPointF inputs
         if isinstance(corner_pos, list) and len(corner_pos) >= 2:
-            self.focused_corner_pos = QPointF(corner_pos[0], corner_pos[1])
+            self.focused_corner_pos = QPointF(float(corner_pos[0]), float(corner_pos[1]))
+        elif isinstance(corner_pos, QPointF):
+            self.focused_corner_pos = corner_pos
         else:
-            self.focused_corner_pos = QPointF(corner_pos)
+            # If it's something else, create a default point
+            self.focused_corner_pos = QPointF(0.0, 0.0)
         self.update_magnifier()
         
     def resume_cursor_tracking(self):
