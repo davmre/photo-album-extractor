@@ -36,6 +36,19 @@ This should pass. To run all tests (some may not be passing currently):
 pytest tests
 ```
 
+## Development principles
+
+Before any sizable change, write a plan and save it under
+`plans/<change_name>.md`. Refer to the plan as you work and update it
+at the end of each phase with the current status, any issues encountered and if
+or how they were resolved.
+
+Remember that you are an AI language model, writing for yourself. You
+do not need to include schedule estimates since you don't work on a human
+schedule (though it is fine to assess difficulty of specific tasks if that is
+helpful for your own planning). You do want to be thoughtful in recording
+context and any changes to your understanding of the task, since
+you have no other means of persisting memory from session to session.
 
 ## Architecture
 
@@ -66,3 +79,24 @@ pytest tests
 - **Coordinate Systems**: Be careful with Qt's coordinate systems vs numpy array indexing
 - **Perspective Transform**: Uses `cv2.getPerspectiveTransform()` for non-rectangular regions
 - **JSON Storage**: Bounding boxes persist automatically on changes using Qt signals
+
+## Type System Guidelines
+
+### Type Checking Setup
+
+```bash
+# Always validate types before committing
+source .venv/bin/activate
+pyright  # Should show 0 errors, 0 warnings
+```
+
+The codebase uses `pyproject.toml` for pyright configuration with gradual typing enabled.
+
+### File Organization
+
+**Type-First Development**: When adding new modules:
+
+1. Start with type definitions in appropriate module
+2. Import semantic types from `photo_types.py`
+3. Add proper type annotations from the beginning
+4. Validate with `pyright` frequently
