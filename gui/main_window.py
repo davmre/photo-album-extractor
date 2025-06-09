@@ -424,7 +424,7 @@ class PhotoExtractorApp(QMainWindow):
             )
         
         if not output_directory:
-            return  # User cancelled
+            return [] # User cancelled
             
         # Extract and save photos with attributes
         base_name = "photo"
@@ -439,6 +439,7 @@ class PhotoExtractorApp(QMainWindow):
                 f"Extracted {len(saved_files)} photos to:\n{output_directory}"
             )
             self.status_bar.showMessage(f"Extracted {len(saved_files)} photos")
+            return saved_files
         else:
             QMessageBox.warning(self, "Error", "Failed to extract photos")
             

@@ -4,6 +4,7 @@ Tests for image loading functionality in the photo extractor app.
 
 import os
 import sys
+import piexif
 import pytest
 import tempfile
 import shutil
@@ -70,26 +71,27 @@ class TestMainWindowWorkflow:
         # Refine the stored boxes. This shouldn't change them much.
         app.refine_all_boxes()
         assert len(app.image_view.bounding_boxes) == 3
-        # TODO test the refined dims?
-
-        app.extract_photos(output_directory=temp_output_dir)
-        # TODO check the extracted photos have expected sizes and EXIF data
         
-        """
+        saved_files = app.extract_photos(output_directory=temp_output_dir)
+        assert len(saved_files) == 3
+        # TODO check the extracted photos have expected sizes
+
         # Verify extracted image
         extracted_img = Image.open(saved_files[0])
         assert extracted_img.width > 0
         assert extracted_img.height > 0
-        
-        # If we have attributes, check for EXIF
-        if single_attrs:
-            try:
-                exif_dict = piexif.load(saved_files[0])
-                # Should have software tag
-                assert piexif.ImageIFD.Software in exif_dict['0th']
-                software = exif_dict['0th'][piexif.ImageIFD.Software]
-                assert software == b'Photo Album Extractor'
-            except (KeyError, piexif.InvalidImageDataError):
-                # Some formats might not support EXIF properly
-                pass
-                """
+
+        # Check for EXIF data
+        expected_descriptions = [b'Family group photo after party', 
+                                 b'Birthday party - Sarah blowing out candles',
+                                 b'Birthday cake - chocolate with strawberries']
+        expected_datetimes =  ['1985:06:21 00:00:00', '1985:06:20 00:00:00', '1985:06:20 00:00:00']
+        exif_dicts = [piexif.load(filename) for filename in saved_files]
+        for exif_dict in exif_dicts:
+            description = exif_dict['0th'][piexif.ImageIFD.ImageDescription]
+            assert description in expected_descriptions
+            expected_datetime = expected_datetimes[expected_descriptions.index(description)]
+            assert exif_dict['0th'][piexif.ImageIFD.DateTime] == expected_datetime.encode()
+            assert exif_dict['0th'][piexif.ImageIFD.Software] == b'Photo Album Extractor'
+
+
