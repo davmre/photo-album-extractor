@@ -14,6 +14,7 @@ from PyQt6.QtGui import QImage, QPainter, QPixmap
 from PyQt6.QtWidgets import (QGraphicsPixmapItem, QGraphicsScene,
                              QGraphicsView, QMenu, QMessageBox)
 
+import image_processing.geometry as geometry
 import image_processing.refine_bounds as refine_bounds
 from gui.quad_bounding_box import QuadBoundingBox
 from gui.settings_dialog import Settings
@@ -187,12 +188,18 @@ class ImageView(QGraphicsView):
         
         if clicked_box:
             # Menu for existing box
-            refine_action = menu.addAction("Refine Bounding Box")
-            remove_action = menu.addAction("Remove Bounding Box")
+            refine_action = menu.addAction("Refine")
+            rectangle_inner_action = menu.addAction("Rectangle-ify (inner)")
+            rectangle_outer_action = menu.addAction("Rectangle-ify (outer)")
+            remove_action = menu.addAction("Remove")
             action = menu.exec(self.mapToGlobal(position))
             
             if action == refine_action:
                 self.refine_bounding_box(clicked_box, multiscale=True)
+            if action == rectangle_inner_action:
+                self.rectangleify_bounding_box(clicked_box, inner=True)
+            if action == rectangle_outer_action:
+                self.rectangleify_bounding_box(clicked_box, inner=False)                
             elif action == remove_action:
                 self.remove_bounding_box(clicked_box)
 
@@ -221,7 +228,22 @@ class ImageView(QGraphicsView):
             raise ValueError("Unrecognized image format", format)
         return image
 
-    def refine_bounding_box(self, box, multiscale=False, enforce_parallel_sides=None):
+    def rectangleify_bounding_box(self, box: QuadBoundingBox, inner=True):
+        if not self.image_item or not isinstance(box, QuadBoundingBox):
+            return
+        corner_coords = box.get_ordered_corners_for_extraction()
+        if inner:
+            # TODO: implement maximum inscribed rectangle
+            QMessageBox.warning(self, "Not implemented", 
+                                  "inner/inset rectangles not yet implemented!")
+            return
+        else:
+            rect_array, _ = geometry.minimum_bounding_rectangle(corner_coords)
+        box.set_corners(rect_array)
+
+    def refine_bounding_box(self, box: QuadBoundingBox,
+                            multiscale=False,
+                            enforce_parallel_sides=None):
         """Refine a single bounding box using edge detection."""
         if not self.image_item or not isinstance(box, QuadBoundingBox):
             return
