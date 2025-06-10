@@ -204,12 +204,19 @@ def save_image(file_path: str, img: Union[AnyArray, PIL.Image.Image]) -> None:
     img.save(file_path)
     LOGGER.info(f"saved: {file_path}")
 
-def refine_bounding_box(image: UInt8Array, corner_points: BoundingBoxAny, reltol: float = 0.05, resolution: int = 200,
+def refine_bounding_box(image: Union[UInt8Array, Image.Image], 
+                        corner_points: BoundingBoxAny, reltol: float = 0.05, resolution: int = 200,
                         enforce_parallel_sides: bool = False,
                         debug_dir: Optional[str] = None) -> QuadArray:
     if debug_dir is not None:
         pathlib.Path(debug_dir).mkdir(parents=True, exist_ok=True)
         LOGGER.info(f"logging to debug dir {debug_dir}")
+    if isinstance(image, np.ndarray):
+        pil_image = Image.fromarray(image[:, :, ::-1])
+        del image
+    else:
+        pil_image = image
+    image_shape = (pil_image.width, pil_image.height)
     
     # Initial corner points represent an arbitrary quadrilateral.
     # Bound this with a (not necessarily axis-aligned) rectangle.
@@ -249,7 +256,7 @@ def refine_bounding_box(image: UInt8Array, corner_points: BoundingBoxAny, reltol
     # (probably downscaled) square.
     patch_n = resolution + border_n * 2 # Total output pixels per side.
     extracted_patch = image_processor.extract_perspective_image(
-        Image.fromarray(image[:, :, ::-1]),
+        pil_image,
         expanded_rect, output_width=patch_n, output_height=patch_n)
     LOGGER.debug(f"extracted patch dims {extracted_patch.width} {extracted_patch.height}")
     if debug_dir:
@@ -292,7 +299,7 @@ def refine_bounding_box(image: UInt8Array, corner_points: BoundingBoxAny, reltol
     
     boundary_mask = image_boundary_mask(
         image_to_patch_coords=_image_to_patch, 
-        image_shape=image.shape,
+        image_shape=image_shape,
         patch_shape=(patch_n, patch_n))
     sobel_horizontal *= boundary_mask
     sobel_vertical *= boundary_mask
@@ -386,7 +393,8 @@ def refine_bounding_box(image: UInt8Array, corner_points: BoundingBoxAny, reltol
 
 
 def refine_bounding_box_multiscale(
-    image: UInt8Array, corner_points: BoundingBoxAny,
+    image: Union[UInt8Array, Image.Image],
+    corner_points: BoundingBoxAny,
     reltol: float = 0.05,
     base_resolution: int = 200,
     scale_factor: int = 5,
