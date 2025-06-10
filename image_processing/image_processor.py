@@ -16,16 +16,16 @@ from PIL.JpegImagePlugin import JpegImageFile
 from PyQt6.QtCore import QRectF
 
 from image_processing import geometry
+import photo_types
 
 # Semantic type aliases
-QuadArray = geometry.QuadArray
 PILImage = PIL.Image.Image  # PIL/Pillow images
 
 
-def extract_perspective_image(image: PILImage, corner_points: QuadArray, output_width: Optional[int]=None, output_height: Optional[int]=None, mode: PIL.Image.Resampling=Image.Resampling.BICUBIC) -> PILImage:
+def extract_perspective_image(image: PILImage, corner_points: photo_types.BoundingBoxAny, output_width: Optional[int]=None, output_height: Optional[int]=None, mode: PIL.Image.Resampling=Image.Resampling.BICUBIC) -> PILImage:
     """Crop image using four corner points."""
     # Convert corner points to numpy array
-    corners = np.array(corner_points, dtype=np.float64)
+    corners = photo_types.bounding_box_as_array(corner_points)
     
     # Calculate the width and height of the output rectangle
     # Use the maximum dimensions to avoid losing any image data
@@ -71,7 +71,7 @@ def load_image(filepath: str) -> PILImage:
 
 
 def save_cropped_images(image: PILImage,
-                        crop_data: List[QuadArray], output_dir: str, base_name: str="photo",
+                        crop_data: List[photo_types.QuadArray], output_dir: str, base_name: str="photo",
                         attributes_list: Optional[List[Dict[str, str]]]=None) -> List[str]:
     """Save multiple cropped images to the specified directory.
     

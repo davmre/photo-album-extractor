@@ -7,12 +7,12 @@ import numpy.typing as npt
 from numpy import float32, float64, ndarray
 
 # Import semantic types from photo_types for consistency
-from photo_types import QuadArray, TransformMatrix, ImageCoordinate
-CornerPoints = List[ImageCoordinate]
+from photo_types import QuadArray, TransformMatrix, BoundingBoxAny, bounding_box_as_array
 
 UNIT_SQUARE = np.array([(0., 0.), (1., 0.), (1., 1.), (0., 1.)])
 
-def dimension_bounds(rect: QuadArray) -> Tuple[float, float]:
+def dimension_bounds(rect: BoundingBoxAny) -> Tuple[float, float]:
+    rect = bounding_box_as_array(rect)
     width1 = np.linalg.norm(rect[1] - rect[0])
     width2 = np.linalg.norm(rect[2] - rect[3])
     height1 = np.linalg.norm(rect[3] - rect[0])
@@ -251,39 +251,36 @@ def line_integral_simple(image, start_point, end_point, num_samples=100):
 
     return total_value
 
-def minimum_bounding_rectangle(points: Union[CornerPoints, QuadArray]) -> Tuple[QuadArray, float]:
+def minimum_bounding_rectangle(points: BoundingBoxAny) -> Tuple[QuadArray, float]:
     # Convert QuadArray to CornerPoints for internal processing
-    if isinstance(points, np.ndarray):
-        points_list = [(float(pt[0]), float(pt[1])) for pt in points]
-    else:
-        points_list = points
+    points = bounding_box_as_array(points)
+    n = points.shape[0]
     
     min_area = float('inf')
     best_rect = None
     
-    n = len(points_list)
     for i in range(n):
         # Get edge vector
-        p1 = points_list[i]
-        p2 = points_list[(i + 1) % n]
-        edge_vector = (p2[0] - p1[0], p2[1] - p1[1])
+        p1 = points[i]
+        p2 = points[(i + 1) % n]
+        edge_vector = p2 - p1
         
         # Normalize edge vector to get unit vector
-        length = np.sqrt(edge_vector[0]**2 + edge_vector[1]**2)
+        length = np.linalg.norm(edge_vector)
         if length == 0:
             continue
-        unit_vector = (edge_vector[0] / length, edge_vector[1] / length)
+        unit_vector = edge_vector / length
         
         # Perpendicular vector
-        perp_vector = (-unit_vector[1], unit_vector[0])
+        perp_vector = np.array((-unit_vector[1], unit_vector[0]))
         
         # Project all points onto both axes
-        u_coords = [p[0] * unit_vector[0] + p[1] * unit_vector[1] for p in points_list]
-        v_coords = [p[0] * perp_vector[0] + p[1] * perp_vector[1] for p in points_list]
+        u_coords = np.dot(points, unit_vector)
+        v_coords = np.dot(points, perp_vector)
         
         # Get bounding box in this coordinate system
-        u_min, u_max = min(u_coords), max(u_coords)
-        v_min, v_max = min(v_coords), max(v_coords)
+        u_min, u_max = np.min(u_coords), np.max(u_coords)
+        v_min, v_max = np.min(v_coords), np.max(v_coords)
         
         # Calculate area
         area = (u_max - u_min) * (v_max - v_min)
@@ -305,6 +302,8 @@ def minimum_bounding_rectangle(points: Union[CornerPoints, QuadArray]) -> Tuple[
     
     return np.array(best_rect), min_area
 
+
+
 def clockwise_corner_permutation(rect: QuadArray) -> ndarray:
     # rect: array of shape [4, 2]
     centroid = np.sum(rect, axis=0) / 4.
@@ -312,7 +311,7 @@ def clockwise_corner_permutation(rect: QuadArray) -> ndarray:
     angles = np.atan2(delta[:, 1], delta[:, 0])
     return np.argsort(angles)
 
-def sort_clockwise(rect: QuadArray) -> QuadArray:
-    rect = np.asarray(rect)
+def sort_clockwise(rect: BoundingBoxAny) -> QuadArray:
+    rect = bounding_box_as_array(rect)
     idxs = clockwise_corner_permutation(rect)
     return rect[idxs]

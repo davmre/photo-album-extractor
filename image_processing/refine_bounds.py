@@ -14,9 +14,8 @@ from PIL import Image
 
 import image_processing.geometry as geometry
 import image_processing.image_processor as image_processor
-from image_processing.geometry import QuadArray
 from photo_types import (AnyArray, BGRImage, BoundaryRefinementStrategy,
-                         DirectoryPath, FloatArray, IntArray, UInt8Array)
+                         DirectoryPath, FloatArray, IntArray, UInt8Array, QuadArray, BoundingBoxAny, bounding_box_as_array)
 
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 LOGGER = logging.getLogger("logger")
@@ -205,7 +204,7 @@ def save_image(file_path: str, img: Union[AnyArray, PIL.Image.Image]) -> None:
     img.save(file_path)
     LOGGER.info(f"saved: {file_path}")
 
-def refine_bounding_box(image: UInt8Array, corner_points: QuadArray, reltol: float = 0.05, resolution: int = 200,
+def refine_bounding_box(image: UInt8Array, corner_points: BoundingBoxAny, reltol: float = 0.05, resolution: int = 200,
                         enforce_parallel_sides: bool = False,
                         debug_dir: Optional[str] = None) -> QuadArray:
     if debug_dir is not None:
@@ -387,14 +386,14 @@ def refine_bounding_box(image: UInt8Array, corner_points: QuadArray, reltol: flo
 
 
 def refine_bounding_box_multiscale(
-    image: UInt8Array, corner_points: QuadArray,
+    image: UInt8Array, corner_points: BoundingBoxAny,
     reltol: float = 0.05,
     base_resolution: int = 200,
     scale_factor: int = 5,
     enforce_parallel_sides: bool = False,
     debug_dir: Optional[str] = None) -> QuadArray:
     """Coarse-to-fine refinement of bounding box edges."""
-    corner_points = np.array(corner_points)
+    corner_points = bounding_box_as_array(corner_points)
     outer_resolution = int(max(geometry.dimension_bounds(corner_points)))
     
     resolutions = [base_resolution]
@@ -492,14 +491,20 @@ def detect_edges_color(pixels: UInt8Array, horizontal: bool = True, mask: Option
     edge_response = cv2.GaussianBlur(edge_response, (5, 5), 0)
     return edge_response
 
-def extract_border_strips(image: UInt8Array, 
+def extract_border_strips(image: Union[Image.Image, UInt8Array], 
                           rect: QuadArray,
                           reltol: float, 
                           resolution_scale_factor: float = 1., 
                           min_image_pixels: int = 8,
                           debug_dir: Optional[str] = None) -> Dict[str, 'StripData']:
     """Extract four border strips from the image."""
-    pil_image = Image.fromarray(image)
+    if isinstance(image, np.ndarray):
+        pil_image = Image.fromarray(image)
+        del image
+    else:
+        pil_image = image
+        
+    image_shape = (pil_image.width, pil_image.height)
     
     # Ensure rect is sorted clockwise
     rect = geometry.sort_clockwise(rect)
@@ -580,7 +585,7 @@ def extract_border_strips(image: UInt8Array,
                 sc.unit_square_to_image(pts / np.array([sw, sh])))
         
         strip_mask = image_boundary_mask(
-            image_shape=image.shape,
+            image_shape=image_shape,
             patch_shape=pixels_array.shape,
             image_to_patch_coords=image_to_strip_transform)
         edge_response = detect_edges_color(
@@ -823,12 +828,13 @@ def search_best_edge(strip, edge_is_horizontal=True):
     return best_edge
 
 
-def refine_bounding_box_strips(image: UInt8Array,
-                               corner_points: QuadArray, 
+def refine_bounding_box_strips(image: Union[Image.Image, UInt8Array],
+                               corner_points: BoundingBoxAny, 
                                reltol: float = 0.05,
                                resolution_scale_factor: float = 1.,
                               enforce_parallel_sides: bool = False, debug_dir: Optional[str] = None) -> QuadArray:
     """Refine bounding box using strip-based edge detection."""
+    corner_points = bounding_box_as_array(corner_points)
     if debug_dir is not None:
         pathlib.Path(debug_dir).mkdir(parents=True, exist_ok=True)
         LOGGER.info(f"logging to debug dir {debug_dir}")
@@ -945,14 +951,14 @@ def refine_bounding_box_strips(image: UInt8Array,
 
 def refine_bounding_box_strips_multiscale(
     image: UInt8Array,
-    corner_points: QuadArray,
+    corner_points: BoundingBoxAny,
     reltol: float = 0.05,
     base_resolution: int = 200,
     scale_step: int = 4,
     enforce_parallel_sides: bool = False,
     debug_dir: Optional[str] = None) -> QuadArray:
     """Coarse-to-fine refinement using strip-based edge detection."""
-    corner_points = np.array(corner_points)
+    corner_points = bounding_box_as_array(corner_points)
     
     outer_resolution = int(max(geometry.dimension_bounds(corner_points)))
     

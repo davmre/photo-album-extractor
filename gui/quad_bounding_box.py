@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPointF
 from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QPolygonF
 
 from image_processing import geometry
+import photo_types
 
 class QuadBoundingBox(QGraphicsObject):
     """A quadrilateral bounding box with four draggable corner points."""
@@ -22,7 +23,7 @@ class QuadBoundingBox(QGraphicsObject):
         super().__init__(parent)
         
         # Store the four corner points
-        self.corners = [QPointF(corner) for corner in corners]
+        self.corners = photo_types.bounding_box_as_list_of_qpointfs(corners)
         
         # Unique identifier and attributes
         self.box_id = box_id or str(uuid.uuid4())
@@ -109,7 +110,7 @@ class QuadBoundingBox(QGraphicsObject):
             self.changed.emit()
         return super().itemChange(change, value)
         
-    def get_corner_points(self):
+    def get_corner_points(self) -> photo_types.BoundingBoxQPointF:
         """Get the four corner points in world coordinates."""
         # Always return world coordinates regardless of item position
         world_corners = []
@@ -138,7 +139,7 @@ class QuadBoundingBox(QGraphicsObject):
         self.update_handles()
         self.update()
         
-    def move_corner(self, corner_id, new_position):
+    def move_corner(self, corner_id: int, new_position: QPointF):
         """Move a specific corner to a new position (in world coordinates)."""
         if 0 <= corner_id < 4:
             # Convert world coordinates to local coordinates
@@ -148,18 +149,16 @@ class QuadBoundingBox(QGraphicsObject):
             self.update()
             self.changed.emit()
             
-    def get_ordered_corners_for_extraction(self):
+    def get_ordered_corners_for_extraction(self) -> photo_types.QuadArray:
         """Get corners in proper order for perspective extraction (prevents flipping)."""
         # Use world coordinates for extraction
-        world_corners = self.get_corner_points()
-        corners_array = np.asarray([(p.x(), p.y()) for p in world_corners])
-        return geometry.sort_clockwise(corners_array)
+        return geometry.sort_clockwise(self.get_corner_points())
 
-    def set_corners(self, new_corners):
+    def set_corners(self, new_corners: photo_types.BoundingBoxAny):
         """Set the corners to new world positions."""
         # Reset to origin and store corners as local coordinates
         self.setPos(0, 0)
-        self.corners = [QPointF(corner) for corner in new_corners]
+        self.corners = photo_types.bounding_box_as_list_of_qpointfs(new_corners)
         self.update_handles()
         self.update()
         self.changed.emit()
