@@ -1,10 +1,8 @@
-from typing import Tuple
 import numpy as np
 import scipy.optimize
 
 from image_processing import geometry
-
-from photo_types import QuadArray, BoundingBoxAny, bounding_box_as_array
+from photo_types import BoundingBoxAny, QuadArray, bounding_box_as_array
 
 """
 Tools to compute the largest rectangle inscribable in a (convex) quadrilateral.
@@ -32,35 +30,38 @@ minimized in this neighborhood using scipy.optimize.minimize_scalar
 """
 
 
-def cross2d(x : np.ndarray, y: np.ndarray) -> np.ndarray:
-  x, y = np.asarray(x), np.asarray(y)
-  return x[..., 0] * y[..., 1] - x[..., 1] * y[..., 0]
+def cross2d(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    x, y = np.asarray(x), np.asarray(y)
+    return x[..., 0] * y[..., 1] - x[..., 1] * y[..., 0]
 
 
 def merge_adjacent_intervals(intervals):
-  merged = []
-  for (a, b) in intervals:
-    if not merged or merged[-1][1] < a:
-      merged.append((a, b))
-    else:
-      merged[-1] = (merged[-1][0], max(merged[-1][1], b))
-  return merged
+    merged = []
+    for a, b in intervals:
+        if not merged or merged[-1][1] < a:
+            merged.append((a, b))
+        else:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+    return merged
 
 
 def minimize_scalar_multimodal(fn, bounds, n_eval_points):
-  xs = np.linspace(bounds[0], bounds[1], n_eval_points)
-  fs = [fn(x) for x in xs]
-  best_idx = np.argmin(fs)
-  x_lower = xs[best_idx - 1] if best_idx > 0 else bounds[0]
-  x_upper = xs[best_idx + 1] if best_idx < n_eval_points - 1 else bounds[1]
-  return scipy.optimize.minimize_scalar(fn, bounds=[x_lower, x_upper], method="bounded")
+    xs = np.linspace(bounds[0], bounds[1], n_eval_points)
+    fs = [fn(x) for x in xs]
+    best_idx = np.argmin(fs)
+    x_lower = xs[best_idx - 1] if best_idx > 0 else bounds[0]
+    x_upper = xs[best_idx + 1] if best_idx < n_eval_points - 1 else bounds[1]
+    return scipy.optimize.minimize_scalar(
+        fn, bounds=[x_lower, x_upper], method="bounded"
+    )
 
 
 class NotFeasibleException(Exception):
     pass
 
+
 class InscriptionGeometry:
-  """
+    """
   Assume we are given a quadrilateral with four points in counterclockwise
   order. We are considering rectangles inscribed in this quadrilateral that
   contact it at (at least) three points p1, p2, p3. We begin with a fixed
@@ -181,274 +182,294 @@ class InscriptionGeometry:
 
   """
 
-  def __init__(self, quad_counterclockwise, contact_edge1_idx, contact_edge2_idx, contact_edge3_idx, t1):
-    quad = np.array(quad_counterclockwise)
-    self.quad = quad
-    # Ensure that points are in counterclockwise order so that the normals point
-    # inwards.
-    #quad_counterclockwise = sort_counterclockwise(quad)
-    #if np.sum(np.abs(quad - quad_counterclockwise)) > 1e-6:
-    #  raise ValueError("quad points not in clockwise order")
+    def __init__(
+        self,
+        quad_counterclockwise,
+        contact_edge1_idx,
+        contact_edge2_idx,
+        contact_edge3_idx,
+        t1,
+    ):
+        quad = np.array(quad_counterclockwise)
+        self.quad = quad
+        # Ensure that points are in counterclockwise order so that the normals point
+        # inwards.
+        # quad_counterclockwise = sort_counterclockwise(quad)
+        # if np.sum(np.abs(quad - quad_counterclockwise)) > 1e-6:
+        #  raise ValueError("quad points not in clockwise order")
 
-    x1, x2, x3, x4 = [np.asarray(p) for p in quad]
-    self.edges = [(x1, x2), (x2, x3), (x3, x4), (x4, x1)]
+        x1, x2, x3, x4 = [np.asarray(p) for p in quad]
+        self.edges = [(x1, x2), (x2, x3), (x3, x4), (x4, x1)]
 
-    self.contact_edge1_idx = contact_edge1_idx
-    self.contact_edge2_idx = contact_edge2_idx
-    self.contact_edge3_idx = contact_edge3_idx
-    
-    # Compute the first contact point p1.
-    contact_edge1 = self.edges[contact_edge1_idx]
-    self.contact_point_1 = (1 - t1) * contact_edge1[0] + t1 * contact_edge1[1]
-    
-    # The points A,B and C,D are defined as the endpoints of the two remaining 
-    # contact edges.
-    self.pt_a, self.pt_b = self.edges[contact_edge2_idx]
-    self.pt_c, self.pt_d = self.edges[contact_edge3_idx]
+        self.contact_edge1_idx = contact_edge1_idx
+        self.contact_edge2_idx = contact_edge2_idx
+        self.contact_edge3_idx = contact_edge3_idx
 
-    # Precompute some useful quantities.
-    self.cp_vec = self.pt_c - self.contact_point_1
-    self.ap_vec = self.pt_a - self.contact_point_1
-    self.ba_vec = self.pt_b - self.pt_a  # aka edge2_vec
-    self.dp_vec = self.pt_d - self.contact_point_1
-    self.dc_vec = self.pt_d - self.pt_c  # aka edge3_vec
+        # Compute the first contact point p1.
+        contact_edge1 = self.edges[contact_edge1_idx]
+        self.contact_point_1 = (1 - t1) * contact_edge1[0] + t1 * contact_edge1[1]
 
-    self.A = np.dot(self.ap_vec, self.ap_vec)
-    self.B = np.dot(self.ap_vec, self.ba_vec)
-    self.C = np.dot(self.ba_vec, self.ba_vec)
-    self.D = np.dot(self.ap_vec, self.dc_vec)
-    self.E = np.dot(self.ba_vec, self.dc_vec)
+        # The points A,B and C,D are defined as the endpoints of the two remaining
+        # contact edges.
+        self.pt_a, self.pt_b = self.edges[contact_edge2_idx]
+        self.pt_c, self.pt_d = self.edges[contact_edge3_idx]
 
-    self.F = -np.dot(self.cp_vec, self.ap_vec)
-    self.G = -np.dot(self.cp_vec, self.ba_vec)
-    self.K = cross2d(self.cp_vec, self.dc_vec)
+        # Precompute some useful quantities.
+        self.cp_vec = self.pt_c - self.contact_point_1
+        self.ap_vec = self.pt_a - self.contact_point_1
+        self.ba_vec = self.pt_b - self.pt_a  # aka edge2_vec
+        self.dp_vec = self.pt_d - self.contact_point_1
+        self.dc_vec = self.pt_d - self.pt_c  # aka edge3_vec
 
-  def get_t2_cutpoints_from_third_edge_bounds(self):
-    cutpoints = []
-    if self.contact_edge1_idx != self.contact_edge2_idx:
-      if self.G != 0:
-        t2_at_t3_is_zero = - self.F / self.G # np.dot(g.ap_vec, g.cp_vec) / ( np.dot(g.ba_vec, g.cp_vec))
-        cutpoints.append(t2_at_t3_is_zero)
+        self.A = np.dot(self.ap_vec, self.ap_vec)
+        self.B = np.dot(self.ap_vec, self.ba_vec)
+        self.C = np.dot(self.ba_vec, self.ba_vec)
+        self.D = np.dot(self.ap_vec, self.dc_vec)
+        self.E = np.dot(self.ba_vec, self.dc_vec)
 
-      t2_at_t3_is_one_denominator = np.dot(self.ba_vec, self.dp_vec)
-      if t2_at_t3_is_one_denominator != 0:
-        t2_at_t3_is_one = - np.dot(self.ap_vec, self.dp_vec) / t2_at_t3_is_one_denominator
-        cutpoints.append(t2_at_t3_is_one)        
-    return cutpoints
+        self.F = -np.dot(self.cp_vec, self.ap_vec)
+        self.G = -np.dot(self.cp_vec, self.ba_vec)
+        self.K = cross2d(self.cp_vec, self.dc_vec)
 
-  def get_t2_cutpoints_from_edge_halfplane_constraints(self):
-    cutpoints = []
-    for (X, Y) in self.edges:
-      edge = Y - X
-      A_i = cross2d(edge, self.pt_a - X) # contact_point_1 - X + a - contact_point_1)
-      B_i = cross2d(edge, self.ba_vec)
-      C_i = -np.dot(edge, self.ap_vec)
-      D_i = -np.dot(edge, self.ba_vec)
+    def get_t2_cutpoints_from_third_edge_bounds(self):
+        cutpoints = []
+        if self.contact_edge1_idx != self.contact_edge2_idx:
+            if self.G != 0:
+                t2_at_t3_is_zero = (
+                    -self.F / self.G
+                )  # np.dot(g.ap_vec, g.cp_vec) / ( np.dot(g.ba_vec, g.cp_vec))
+                cutpoints.append(t2_at_t3_is_zero)
 
-      quad_A = B_i * self.E
-      if quad_A == 0:
-        continue
+            t2_at_t3_is_one_denominator = np.dot(self.ba_vec, self.dp_vec)
+            if t2_at_t3_is_one_denominator != 0:
+                t2_at_t3_is_one = (
+                    -np.dot(self.ap_vec, self.dp_vec) / t2_at_t3_is_one_denominator
+                )
+                cutpoints.append(t2_at_t3_is_one)
+        return cutpoints
 
-      quad_B = (B_i * self.D + A_i * self.E + self.K * D_i)
-      quad_C = (A_i * self.D + self.K * C_i)
-      discriminant = quad_B**2 - 4 * quad_A * quad_C
-      if discriminant <= 0:
-        continue
-      soln1 = (-quad_B + np.sqrt(discriminant)) / (2 * quad_A)
-      soln2 = (-quad_B - np.sqrt(discriminant)) / (2 * quad_A)
+    def get_t2_cutpoints_from_edge_halfplane_constraints(self):
+        cutpoints = []
+        for X, Y in self.edges:
+            edge = Y - X
+            A_i = cross2d(
+                edge, self.pt_a - X
+            )  # contact_point_1 - X + a - contact_point_1)
+            B_i = cross2d(edge, self.ba_vec)
+            C_i = -np.dot(edge, self.ap_vec)
+            D_i = -np.dot(edge, self.ba_vec)
 
-      cutpoints.append(soln1)      
-      cutpoints.append(soln2)
+            quad_A = B_i * self.E
+            if quad_A == 0:
+                continue
 
-      #print("edge", X, Y, "quad_A", quad_A, "soln1", soln1, "soln2", soln2)
+            quad_B = B_i * self.D + A_i * self.E + self.K * D_i
+            quad_C = A_i * self.D + self.K * C_i
+            discriminant = quad_B**2 - 4 * quad_A * quad_C
+            if discriminant <= 0:
+                continue
+            soln1 = (-quad_B + np.sqrt(discriminant)) / (2 * quad_A)
+            soln2 = (-quad_B - np.sqrt(discriminant)) / (2 * quad_A)
 
-    return cutpoints
+            cutpoints.append(soln1)
+            cutpoints.append(soln2)
 
-      
-  def get_t2_cutpoints(self):
-    """Compute points where t2 may switch between feasible and infeasible."""
-    cutpoints = [0., 1.]
-    cutpoints += self.get_t2_cutpoints_from_third_edge_bounds()
-    cutpoints += self.get_t2_cutpoints_from_edge_halfplane_constraints()
-    cutpoints = sorted([float(x) for x in cutpoints if x >= 0 and x <= 1])
-    return cutpoints
+            # print("edge", X, Y, "quad_A", quad_A, "soln1", soln1, "soln2", soln2)
 
-  def get_feasible_t2s(self, sorted_cutpoints=None, eps=1e-10):
-    if sorted_cutpoints is None:
-      sorted_cutpoints = self.get_t2_cutpoints()
-    valid_intervals = []
-    for i in range(len(sorted_cutpoints) - 1):
-      # For each pair of adjacent cutpoints, test a candidate t2.
-      test_t2 = (sorted_cutpoints[i] + sorted_cutpoints[i + 1]) / 2
+        return cutpoints
 
-      # Check that we hit the third contact edge at t3 in [0, 1].
-      #alpha = -g.K / (g.D + g.E * test_t2)
-      #print(f"alpha at t2={test_t2}: {alpha}")
-      t3_denominator = (self.D + self.E * test_t2)
-      if np.abs(t3_denominator) <= eps:
-        continue
-      t3 = (self.F + self.G * test_t2) / t3_denominator
-      
-      # print(f"t3 at t2={test_t2}: {t3} from num {(self.F + self.G * test_t2)} denom {t3_denominator}")
-      if t3 < 0 or t3 > 1:
-        continue
+    def get_t2_cutpoints(self):
+        """Compute points where t2 may switch between feasible and infeasible."""
+        cutpoints = [0.0, 1.0]
+        cutpoints += self.get_t2_cutpoints_from_third_edge_bounds()
+        cutpoints += self.get_t2_cutpoints_from_edge_halfplane_constraints()
+        cutpoints = sorted([float(x) for x in cutpoints if x >= 0 and x <= 1])
+        return cutpoints
 
-      # Then test the halfplane constraints on `p4` for all four edges.
-      contact_point_2 = (1 - test_t2) * self.pt_a + test_t2 * self.pt_b
-      contact_point_3 = (1 - t3) * self.pt_c + t3 * self.pt_d
-      point4 = (self.contact_point_1 + 
-                (contact_point_2 - self.contact_point_1) + 
-                (contact_point_3 - self.contact_point_1))
-      # print(f"candidate point4 {point4}")
-      is_valid = True
-      for (X, Y) in self.edges:
-        edge = Y - X
-        cond = cross2d(edge, point4 - X)
+    def get_feasible_t2s(self, sorted_cutpoints=None, eps=1e-10):
+        if sorted_cutpoints is None:
+            sorted_cutpoints = self.get_t2_cutpoints()
+        valid_intervals = []
+        for i in range(len(sorted_cutpoints) - 1):
+            # For each pair of adjacent cutpoints, test a candidate t2.
+            test_t2 = (sorted_cutpoints[i] + sorted_cutpoints[i + 1]) / 2
 
-        # equiv_cond = A_i + B_i * test_t2 - alpha * (C_i + D_i * test_t2)
-        # cond_h = (A_i + B_i * test_t2) * (D + E * test_t2) + K * (C_i + D_i * test_t2)
-        # DEt = D + E * test_t2
-        #print(f"cond {cond} equiv {equiv_cond} cond_h {cond_h} DEt {DEt} cond_h_equiv {cond_h / DEt}")
+            # Check that we hit the third contact edge at t3 in [0, 1].
+            # alpha = -g.K / (g.D + g.E * test_t2)
+            # print(f"alpha at t2={test_t2}: {alpha}")
+            t3_denominator = self.D + self.E * test_t2
+            if np.abs(t3_denominator) <= eps:
+                continue
+            t3 = (self.F + self.G * test_t2) / t3_denominator
 
-        # print(f"edge {X} {Y} tests {edge} x {point4 - X} = {cond}")
-        if cond < 0:
-          is_valid = False
-          break
-      if is_valid:
-        valid_intervals.append((sorted_cutpoints[i], sorted_cutpoints[i + 1]))
+            # print(f"t3 at t2={test_t2}: {t3} from num {(self.F + self.G * test_t2)} denom {t3_denominator}")
+            if t3 < 0 or t3 > 1:
+                continue
 
-    # Merge redundant cases like `[(0, 0.4), (0.4, 0.6)]` => `[(0, 0.6)]`.
-    valid_intervals = merge_adjacent_intervals(valid_intervals)
+            # Then test the halfplane constraints on `p4` for all four edges.
+            contact_point_2 = (1 - test_t2) * self.pt_a + test_t2 * self.pt_b
+            contact_point_3 = (1 - t3) * self.pt_c + t3 * self.pt_d
+            point4 = (
+                self.contact_point_1
+                + (contact_point_2 - self.contact_point_1)
+                + (contact_point_3 - self.contact_point_1)
+            )
+            # print(f"candidate point4 {point4}")
+            is_valid = True
+            for X, Y in self.edges:
+                edge = Y - X
+                cond = cross2d(edge, point4 - X)
 
-    #print("valid intervals", valid_intervals)
-    return valid_intervals
+                # equiv_cond = A_i + B_i * test_t2 - alpha * (C_i + D_i * test_t2)
+                # cond_h = (A_i + B_i * test_t2) * (D + E * test_t2) + K * (C_i + D_i * test_t2)
+                # DEt = D + E * test_t2
+                # print(f"cond {cond} equiv {equiv_cond} cond_h {cond_h} DEt {DEt} cond_h_equiv {cond_h / DEt}")
 
-  def critical_points_of_area_wrt_t2(self):
-    quad_A = self.C * self.E
-    quad_B = 2 * self.C * self.D
-    quad_C = (2 * self.B * self.D - self.E * self.A)
-    discriminant = quad_B**2 - 4 * quad_A * quad_C
+                # print(f"edge {X} {Y} tests {edge} x {point4 - X} = {cond}")
+                if cond < 0:
+                    is_valid = False
+                    break
+            if is_valid:
+                valid_intervals.append((sorted_cutpoints[i], sorted_cutpoints[i + 1]))
 
-    if discriminant <= 0:
-      return []
-    if quad_A == 0:
-      return []
+        # Merge redundant cases like `[(0, 0.4), (0.4, 0.6)]` => `[(0, 0.6)]`.
+        valid_intervals = merge_adjacent_intervals(valid_intervals)
 
-    soln1 = (-quad_B + np.sqrt(discriminant)) / (2 * quad_A)
-    soln2 = (-quad_B - np.sqrt(discriminant)) / (2 * quad_A)
-    return [soln1, soln2]
+        # print("valid intervals", valid_intervals)
+        return valid_intervals
 
-  def rect_from_t2(self, t2, eps=1e-8):
-    contact_point_2 = (1 - t2) * self.pt_a + t2 * self.pt_b
-    rect_side1 = contact_point_2 - self.contact_point_1
-    if np.linalg.norm(rect_side1) < eps:
-        # perpendicular direction is not defined
-        raise NotFeasibleException()
-    # TODO: handle case where denominator is zero
-    t3 = - ( np.dot(rect_side1, self.cp_vec)) / (np.dot(rect_side1, self.dc_vec) )# + eps)
-    contact_point_3 = (1 - t3) * self.pt_c + t3 * self.pt_d
-    rect_side2 = contact_point_3 - self.contact_point_1
-    point4 = self.contact_point_1 + rect_side1 + rect_side2
-    # return points in clockwise order (TODO test this)
-    return np.array([self.contact_point_1, contact_point_3, point4, contact_point_2])
+    def critical_points_of_area_wrt_t2(self):
+        quad_A = self.C * self.E
+        quad_B = 2 * self.C * self.D
+        quad_C = 2 * self.B * self.D - self.E * self.A
+        discriminant = quad_B**2 - 4 * quad_A * quad_C
 
-  def inscribed_area(self, t2, eps=1e-8):
-    contact_point_2 = (1 - t2) * self.pt_a+ t2 * self.pt_b
-    rect_side1 = contact_point_2 - self.contact_point_1
-    side1_norm2 = np.linalg.norm(rect_side1)**2
-    if side1_norm2 < 1e-8:
-        return 0.
-    # print("side1", rect_side1)
-    # print("cp_vec", cp_vec)
-    # print("dc_vec", dc_vec)
-    # TODO handle case where alpha denominator is zero
-    alpha = (self.K) / np.dot(rect_side1, self.dc_vec) #+ eps)
-    # print("alpha", alpha)
-    
-    side2_norm2_alpha = alpha**2 * side1_norm2
-    return np.sqrt(side1_norm2 * side2_norm2_alpha)
+        if discriminant <= 0:
+            return []
+        if quad_A == 0:
+            return []
+
+        soln1 = (-quad_B + np.sqrt(discriminant)) / (2 * quad_A)
+        soln2 = (-quad_B - np.sqrt(discriminant)) / (2 * quad_A)
+        return [soln1, soln2]
+
+    def rect_from_t2(self, t2, eps=1e-8):
+        contact_point_2 = (1 - t2) * self.pt_a + t2 * self.pt_b
+        rect_side1 = contact_point_2 - self.contact_point_1
+        if np.linalg.norm(rect_side1) < eps:
+            # perpendicular direction is not defined
+            raise NotFeasibleException()
+        # TODO: handle case where denominator is zero
+        t3 = -(np.dot(rect_side1, self.cp_vec)) / (
+            np.dot(rect_side1, self.dc_vec)
+        )  # + eps)
+        contact_point_3 = (1 - t3) * self.pt_c + t3 * self.pt_d
+        rect_side2 = contact_point_3 - self.contact_point_1
+        point4 = self.contact_point_1 + rect_side1 + rect_side2
+        # return points in clockwise order (TODO test this)
+        return np.array(
+            [self.contact_point_1, contact_point_3, point4, contact_point_2]
+        )
+
+    def inscribed_area(self, t2, eps=1e-8):
+        contact_point_2 = (1 - t2) * self.pt_a + t2 * self.pt_b
+        rect_side1 = contact_point_2 - self.contact_point_1
+        side1_norm2 = np.linalg.norm(rect_side1) ** 2
+        if side1_norm2 < 1e-8:
+            return 0.0
+        # print("side1", rect_side1)
+        # print("cp_vec", cp_vec)
+        # print("dc_vec", dc_vec)
+        # TODO handle case where alpha denominator is zero
+        alpha = (self.K) / np.dot(rect_side1, self.dc_vec)  # + eps)
+        # print("alpha", alpha)
+
+        side2_norm2_alpha = alpha**2 * side1_norm2
+        return np.sqrt(side1_norm2 * side2_norm2_alpha)
+
+    def get_optimal_t2_and_area(self, valid_t2_intervals=None):
+        if valid_t2_intervals is None:
+            valid_t2_intervals = self.get_feasible_t2s()
+        critical_points = self.critical_points_of_area_wrt_t2()
+
+        candidate_t2s = []
+        for t2_min, t2_max in valid_t2_intervals:
+            candidate_t2s.append(t2_min)
+            candidate_t2s.append(t2_max)
+            for crit in critical_points:
+                if crit > t2_min and crit < t2_max:
+                    candidate_t2s.append(crit)
+
+        if len(candidate_t2s) == 0:
+            raise NotFeasibleException()
+
+        areas = [self.inscribed_area(t2) for t2 in candidate_t2s]
+        # ("candtdates", candidate_t2s)
+        # print("areas", areas)
+        best_t2_idx = np.nanargmax(areas)
+        return candidate_t2s[best_t2_idx], areas[best_t2_idx]
+
+    def plot(self, t2=None, ax=None):
+        from matplotlib import pylab as plt
+
+        if ax is None:
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+
+        centroid = np.mean(self.quad, axis=0)
+        radius = np.max(np.linalg.norm(self.quad - centroid, axis=-1))
+
+        for edge in self.edges:
+            ax.plot([edge[0][0], edge[1][0]], [edge[0][1], edge[1][1]], "k-")
+        for label, pt in zip("ABCD", (self.pt_a, self.pt_b, self.pt_c, self.pt_d)):
+            outwards = pt - centroid
+            label_point = pt + 0.1 * outwards
+            ax.text(label_point[0], label_point[1], label)
+
+        if t2 == "optimize":
+            t2, _ = self.get_optimal_t2_and_area()
+
+        if t2 is not None:
+            [p1, p3, p4, p2] = self.rect_from_t2(t2)
+            print("plotting inscribed rect", [p1, p3, p4, p2])
+            for rect_edge in [(p1, p2), (p1, p3), (p2, p4), (p3, p4)]:
+                if np.linalg.norm(rect_edge[0] - centroid) >= 3 * radius:
+                    continue
+                if np.linalg.norm(rect_edge[1] - centroid) >= 3 * radius:
+                    continue
+                ax.plot(
+                    [rect_edge[0][0], rect_edge[1][0]],
+                    [rect_edge[0][1], rect_edge[1][1]],
+                    "r--",
+                )
+            for label, pt in zip(("p1", "p2", "p3", "p4"), (p1, p2, p3, p4)):
+                outwards = pt - centroid
+                if np.linalg.norm(outwards) >= 3 * radius:
+                    continue
+                label_point = pt + 0.1 * outwards
+                ax.text(label_point[0], label_point[1], label)
+        else:
+            p1 = self.contact_point_1
+            outwards = p1 - centroid
+            label_p1 = p1 + 0.1 * outwards
+            ax.text(label_p1[0], label_p1[1], "p1")
+        ax.grid(True)
+        ax.axis("equal")  # Ensures equal scaling of axes
+        # ax.set_xlim([centroid[0] -radius * 1.2, centroid[0] + radius * 1.2])
+        # ax.set_ylim([centroid[1]-radius * 1.2, centroid[1] + radius * 1.2])
+        plt.show()
 
 
-  def get_optimal_t2_and_area(self, valid_t2_intervals=None):
-    if valid_t2_intervals is None:
-      valid_t2_intervals = self.get_feasible_t2s()
-    critical_points = self.critical_points_of_area_wrt_t2()
-    
-    candidate_t2s = []
-    for (t2_min, t2_max) in valid_t2_intervals:
-      candidate_t2s.append(t2_min)
-      candidate_t2s.append(t2_max)
-      for crit in critical_points:
-        if crit > t2_min and crit < t2_max:
-          candidate_t2s.append(crit)
-      
-    if len(candidate_t2s) == 0:
-        raise NotFeasibleException()
-      
-    areas = [self.inscribed_area(t2) for t2 in candidate_t2s]
-    #("candtdates", candidate_t2s)
-    #print("areas", areas)
-    best_t2_idx = np.nanargmax(areas)
-    return candidate_t2s[best_t2_idx], areas[best_t2_idx]
-
-  def plot(self, t2=None, ax=None):
-      
-    from matplotlib import pylab as plt
-      
-    if ax is None:
-      fig = plt.figure()
-      ax = fig.add_subplot(111)
-
-    centroid = np.mean(self.quad, axis=0)
-    radius = np.max(np.linalg.norm(self.quad - centroid, axis=-1))
-
-    for edge in self.edges:
-      ax.plot([edge[0][0], edge[1][0]], [edge[0][1], edge[1][1]], 'k-')
-    for label, pt in zip("ABCD", (self.pt_a, self.pt_b, self.pt_c, self.pt_d)):
-      outwards = pt - centroid
-      label_point = pt + 0.1 * outwards
-      ax.text(label_point[0], label_point[1], label)
-
-    if t2 == "optimize":
-      t2, _ = self.get_optimal_t2_and_area()
-    
-    if t2 is not None:
-      [p1, p3, p4, p2] = self.rect_from_t2(t2)
-      print("plotting inscribed rect", [p1, p3, p4, p2])
-      for rect_edge in [(p1, p2), (p1, p3), (p2, p4), (p3, p4)]:
-        if np.linalg.norm(rect_edge[0] - centroid) >= 3 * radius:
-          continue
-        if np.linalg.norm(rect_edge[1] - centroid) >= 3 * radius:
-          continue
-        ax.plot([rect_edge[0][0], rect_edge[1][0]], [rect_edge[0][1], rect_edge[1][1]], 'r--')
-      for label, pt in zip(('p1', 'p2', 'p3', 'p4'), (p1, p2, p3, p4)):
-        outwards = pt - centroid
-        if np.linalg.norm(outwards) >= 3 * radius:
-          continue
-        label_point = pt + 0.1 * outwards
-        ax.text(label_point[0], label_point[1], label)
-    else:
-      p1 = self.contact_point_1
-      outwards = p1 - centroid
-      label_p1 = p1 + 0.1 * outwards
-      ax.text(label_p1[0], label_p1[1], 'p1')
-    ax.grid(True)
-    ax.axis('equal') # Ensures equal scaling of axes
-    #ax.set_xlim([centroid[0] -radius * 1.2, centroid[0] + radius * 1.2])
-    #ax.set_ylim([centroid[1]-radius * 1.2, centroid[1] + radius * 1.2])
-    plt.show()
-    
-    
 def enumerate_three_contact_edges():
     """Enumerate all plausible triples of edges for contact points.
-    
+
     There are 24 possibilities: twelve in which we have three unique edges,
     and twelve more in which two points lie on the same edge.
-    
+
     Three unique edges: we have four choices for the initial edge containing
     the 'pivot' point p1. For each of these, there are (3 choose 2) = 3 possible
     choices for the remaining two contact edges (order doesn't matter).
-    
+
     One doubled edge: again we have four choices for the edge
     that will contain both the 'pivot' point p1 and its adjecent contact point
     p2. For each of these, we choose one of the three remaining edges for
@@ -461,29 +482,31 @@ def enumerate_three_contact_edges():
                     continue
                 yield (i, j, k)
 
+
 def largest_inscribed_rectangle(
-    corner_points : BoundingBoxAny, num_eval_points=11) -> Tuple[QuadArray, float]:
+    corner_points: BoundingBoxAny, num_eval_points=11
+) -> tuple[QuadArray, float]:
     corner_points = bounding_box_as_array(corner_points)
     corner_points = geometry.sort_clockwise(corner_points)
-    
-    best_area = -1.
+
+    best_area = -1.0
     best_contacts = (None, None, None)
     best_t1 = None
-    
-    for (i, j, k) in enumerate_three_contact_edges():
-        
+
+    for i, j, k in enumerate_three_contact_edges():
+
         def negative_area_fn(t1):
-            #print("trying with", i, j, k, t1)
-            g = InscriptionGeometry(corner_points, i, j, k, t1 = t1)
+            # print("trying with", i, j, k, t1)
+            g = InscriptionGeometry(corner_points, i, j, k, t1=t1)
             try:
                 _, area = g.get_optimal_t2_and_area()
             except NotFeasibleException:
-                area = -1.
+                area = -1.0
             return -area
-        
-        r = minimize_scalar_multimodal(negative_area_fn,
-                                       bounds=[0, 1],
-                                       n_eval_points=num_eval_points)
+
+        r = minimize_scalar_multimodal(
+            negative_area_fn, bounds=[0, 1], n_eval_points=num_eval_points
+        )
         area = -r.fun
         if area > best_area:
             best_area = area
@@ -491,8 +514,8 @@ def largest_inscribed_rectangle(
             best_t1 = r.x
 
     best_i, best_j, best_k = best_contacts
-    best_g = InscriptionGeometry(corner_points, best_i, best_j, best_k, t1 = best_t1)
-    #print("trying with best", best_i, best_j, best_k, best_t1)
+    best_g = InscriptionGeometry(corner_points, best_i, best_j, best_k, t1=best_t1)
+    # print("trying with best", best_i, best_j, best_k, best_t1)
     t2, _ = best_g.get_optimal_t2_and_area()
     best_rect = best_g.rect_from_t2(t2=t2)
     return best_rect, best_area

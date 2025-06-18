@@ -2,62 +2,80 @@
 Directory sidebar widget for browsing images.
 """
 
-import os
 import glob
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, 
-                             QListWidget, QListWidgetItem, QFileDialog)
+import os
+
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import (
+    QFileDialog,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class DirectoryImageList(QWidget):
     """Sidebar widget showing images in the current directory."""
-    
+
     image_selected = pyqtSignal(str)  # Emits the full path of selected image
     directory_changed = pyqtSignal(str)  # Emits when user selects new directory
     batch_detect_requested = pyqtSignal()  # Emits when batch detect is requested
     batch_extract_requested = pyqtSignal()  # Emits when batch extract is requested
-    
+
     def __init__(self):
         super().__init__()
         self.current_directory = None
-        self.supported_formats = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif', '.gif'}
-        
+        self.supported_formats = {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".bmp",
+            ".tiff",
+            ".tif",
+            ".gif",
+        }
+
         # Set up the widget
         self.setMaximumWidth(250)
         self.setMinimumWidth(200)
-        
+
         # Create layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(5)
-        
+
         # Open directory button
         self.open_dir_btn = QPushButton("Open Directory")
         self.open_dir_btn.clicked.connect(self.open_directory)
         layout.addWidget(self.open_dir_btn)
-        
+
         # Current directory label
         self.dir_label = QLabel("No directory selected")
         self.dir_label.setWordWrap(True)
-        self.dir_label.setStyleSheet("QLabel { font-size: 9pt; color: #666; padding: 5px; }")
+        self.dir_label.setStyleSheet(
+            "QLabel { font-size: 9pt; color: #666; padding: 5px; }"
+        )
         layout.addWidget(self.dir_label)
-        
+
         # Image list
         self.image_list = QListWidget()
         self.image_list.itemClicked.connect(self.on_item_clicked)
         layout.addWidget(self.image_list)
-        
+
         # Batch operation buttons
         self.batch_detect_btn = QPushButton("Detect in all")
         self.batch_detect_btn.clicked.connect(self.batch_detect_requested.emit)
         self.batch_detect_btn.setEnabled(False)
         layout.addWidget(self.batch_detect_btn)
-        
+
         self.batch_extract_btn = QPushButton("Extract from all")
         self.batch_extract_btn.clicked.connect(self.batch_extract_requested.emit)
         self.batch_extract_btn.setEnabled(False)
         layout.addWidget(self.batch_extract_btn)
-        
+
     def set_directory(self, directory):
         """Set the directory to display images from."""
         if directory != self.current_directory:
@@ -68,7 +86,7 @@ class DirectoryImageList(QWidget):
             has_directory = self.current_directory is not None
             self.batch_detect_btn.setEnabled(has_directory)
             self.batch_extract_btn.setEnabled(has_directory)
-            
+
     def update_directory_label(self):
         """Update the directory label with current path."""
         if self.current_directory:
@@ -86,14 +104,14 @@ class DirectoryImageList(QWidget):
         else:
             self.dir_label.setText("No directory selected")
             self.dir_label.setToolTip("")
-            
+
     def refresh_images(self):
         """Refresh the list of images in the current directory."""
         self.image_list.clear()
-        
+
         if not self.current_directory or not os.path.isdir(self.current_directory):
             return
-            
+
         # Find all image files in the directory
         image_files = []
         for ext in self.supported_formats:
@@ -101,23 +119,23 @@ class DirectoryImageList(QWidget):
             image_files.extend(glob.glob(pattern, recursive=False))
             pattern = os.path.join(self.current_directory, f"*{ext.upper()}")
             image_files.extend(glob.glob(pattern, recursive=False))
-            
+
         # Sort files alphabetically
         image_files.sort()
-        
+
         # Add items to the list
         for image_path in image_files:
             filename = os.path.basename(image_path)
             item = QListWidgetItem(filename)
             item.setData(Qt.ItemDataRole.UserRole, image_path)  # Store full path
             self.image_list.addItem(item)
-            
+
     def on_item_clicked(self, item):
         """Handle image selection."""
         image_path = item.data(Qt.ItemDataRole.UserRole)
         if image_path:
             self.image_selected.emit(image_path)
-            
+
     def select_image(self, image_path):
         """Select the specified image in the list."""
         filename = os.path.basename(image_path)
@@ -126,7 +144,7 @@ class DirectoryImageList(QWidget):
             if item.text() == filename:
                 self.image_list.setCurrentItem(item)
                 break
-                
+
     def open_directory(self):
         """Open directory selection dialog."""
         directory = QFileDialog.getExistingDirectory(
@@ -134,22 +152,22 @@ class DirectoryImageList(QWidget):
         )
         if directory:
             self.directory_changed.emit(directory)
-            
+
     def get_first_image(self):
         """Get the path of the first image in the current directory."""
         if self.image_list.count() > 0:
             first_item = self.image_list.item(0)
             return first_item.data(Qt.ItemDataRole.UserRole)
         return None
-        
+
     def currentRow(self):
         """Get the current row for navigation."""
         return self.image_list.currentRow()
-        
+
     def count(self):
         """Get the count of images."""
         return self.image_list.count()
-        
+
     def item(self, row):
         """Get item at specified row."""
         return self.image_list.item(row)

@@ -2,7 +2,6 @@
 Tests for image loading functionality in the photo extractor app.
 """
 
-import logging
 import os
 import shutil
 import sys
@@ -10,66 +9,67 @@ import tempfile
 
 import piexif
 import pytest
-import pytest_mock as mock
 from PIL import Image
-from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QMessageBox
 
 # Add parent directory to path to import app modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from gui.main_window import PhotoExtractorApp
-from image_processing import image_processor
 
 
 class TestMainWindowWorkflow:
     """Test image loading through the main application window."""
-    
+
     @pytest.fixture
     def app(self, qtbot, mocker):
         """Create application instance for testing."""
         test_app = PhotoExtractorApp()
         qtbot.addWidget(test_app)
-        mocker.patch.object(QMessageBox, 'warning', return_value=None)
-        mocker.patch.object(QMessageBox, 'information', return_value=None)
+        mocker.patch.object(QMessageBox, "warning", return_value=None)
+        mocker.patch.object(QMessageBox, "information", return_value=None)
         return test_app
 
     @pytest.fixture
     def test_images_dir(self):
         """Path to test images directory."""
-        return os.path.join(os.path.dirname(__file__), '..', 'test_data', 'album1')
-    
+        return os.path.join(os.path.dirname(__file__), "..", "test_data", "album1")
+
     @pytest.fixture
     def temp_output_dir(self):
         """Create temporary directory for output testing."""
         temp_dir = tempfile.mkdtemp()
         yield temp_dir
         shutil.rmtree(temp_dir)
-    
-    def test_load_refine_and_extract(self, app, test_images_dir, temp_output_dir, qtbot):
+
+    def test_load_refine_and_extract(
+        self, app, test_images_dir, temp_output_dir, qtbot
+    ):
         """Test loading image from path through main window."""
-        jpeg_path = os.path.join(test_images_dir, 'album_page1.jpg')
-        
+        jpeg_path = os.path.join(test_images_dir, "album_page1.jpg")
+
         app.load_image_from_path(jpeg_path)
-        
+
         # Wait for any async operations
         qtbot.wait(100)
-        
+
         assert app.current_image_path == jpeg_path
         assert app.current_image is not None
-        
+
         # Should load stored boxes.
         assert len(app.image_view.bounding_boxes) == 3
         attributes = [box.get_attributes() for box in app.image_view.bounding_boxes]
         read_date = (attributes[0]["date_time"]) == "1985-06-20"
-        read_comments = (attributes[0]["comments"]) == "Birthday party - Sarah blowing out candles"
+        read_comments = (
+            (attributes[0]["comments"]) == "Birthday party - Sarah blowing out candles"
+        )
         assert read_date
         assert read_comments
 
         # Refine the stored boxes. This shouldn't change them much.
         app.refine_all_boxes()
         assert len(app.image_view.bounding_boxes) == 3
-        
+
         saved_files = app.extract_photos(output_directory=temp_output_dir)
         assert len(saved_files) == 3
         # TODO check the extracted photos have expected sizes
@@ -80,16 +80,26 @@ class TestMainWindowWorkflow:
         assert extracted_img.height > 0
 
         # Check for EXIF data
-        expected_descriptions = [b'Family group photo after party', 
-                                 b'Birthday party - Sarah blowing out candles',
-                                 b'Birthday cake - chocolate with strawberries']
-        expected_datetimes =  ['1985:06:21 00:00:00', '1985:06:20 00:00:00', '1985:06:20 00:00:00']
+        expected_descriptions = [
+            b"Family group photo after party",
+            b"Birthday party - Sarah blowing out candles",
+            b"Birthday cake - chocolate with strawberries",
+        ]
+        expected_datetimes = [
+            "1985:06:21 00:00:00",
+            "1985:06:20 00:00:00",
+            "1985:06:20 00:00:00",
+        ]
         exif_dicts = [piexif.load(filename) for filename in saved_files]
         for exif_dict in exif_dicts:
-            description = exif_dict['0th'][piexif.ImageIFD.ImageDescription]
+            description = exif_dict["0th"][piexif.ImageIFD.ImageDescription]
             assert description in expected_descriptions
-            expected_datetime = expected_datetimes[expected_descriptions.index(description)]
-            assert exif_dict['0th'][piexif.ImageIFD.DateTime] == expected_datetime.encode()
-            assert exif_dict['0th'][piexif.ImageIFD.Software] == b'Photo Album Extractor'
-
-
+            expected_datetime = expected_datetimes[
+                expected_descriptions.index(description)
+            ]
+            assert (
+                exif_dict["0th"][piexif.ImageIFD.DateTime] == expected_datetime.encode()
+            )
+            assert (
+                exif_dict["0th"][piexif.ImageIFD.Software] == b"Photo Album Extractor"
+            )

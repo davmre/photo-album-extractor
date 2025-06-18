@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pyright]
+pythonVersion = "3.9"
+typeCheckingMode = "basic"
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportUnusedImport = true
+reportUnusedVariable = true
+
+[tool.ruff]
+# Assume Python 3.9+
+target-version = "py39"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "N",   # pep8-naming
+    "W",
+]
+
+[tool.ruff.format]
+# Enable auto-formatting of code examples in docstrings
+docstring-code-format = true
+
+[tool.ruff.lint.isort]
+known-first-party = ["gui", "image_processing", "storage", "photo_types"]

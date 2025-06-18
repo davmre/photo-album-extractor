@@ -1,24 +1,30 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional
 
 import numpy as np
-import numpy.typing as npt
-from numpy import float32, float64, ndarray
+from numpy import ndarray
 
 # Import semantic types from photo_types for consistency
-from photo_types import QuadArray, TransformMatrix, BoundingBoxAny, bounding_box_as_array
+from photo_types import (
+    BoundingBoxAny,
+    QuadArray,
+    TransformMatrix,
+    bounding_box_as_array,
+)
 
-UNIT_SQUARE = np.array([(0., 0.), (1., 0.), (1., 1.), (0., 1.)])
+UNIT_SQUARE = np.array([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
 
-def dimension_bounds(rect: BoundingBoxAny) -> Tuple[float, float]:
+
+def dimension_bounds(rect: BoundingBoxAny) -> tuple[float, float]:
     rect = bounding_box_as_array(rect)
     width1 = np.linalg.norm(rect[1] - rect[0])
     width2 = np.linalg.norm(rect[2] - rect[3])
     height1 = np.linalg.norm(rect[3] - rect[0])
     height2 = np.linalg.norm(rect[2] - rect[1])
-    
+
     return float(max(width1, width2)), float(max(height1, height2))
+
 
 def quad_to_unit_square_transform(quad: QuadArray) -> TransformMatrix:
     """
@@ -43,12 +49,15 @@ def quad_to_unit_square_transform(quad: QuadArray) -> TransformMatrix:
 
     # Define unit square corners (destination points)
     # Order should match the ordering of input quad points
-    dst_points = np.array([
-        [0, 0],  # bottom-left
-        [1, 0],  # bottom-right
-        [1, 1],  # top-right
-        [0, 1]   # top-left
-    ], dtype=np.float32)
+    dst_points = np.array(
+        [
+            [0, 0],  # bottom-left
+            [1, 0],  # bottom-right
+            [1, 1],  # top-right
+            [0, 1],  # top-left
+        ],
+        dtype=np.float32,
+    )
 
     # Set up the system of equations for homography
     # For each point correspondence (xi, yi) -> (ui, vi):
@@ -62,11 +71,11 @@ def quad_to_unit_square_transform(quad: QuadArray) -> TransformMatrix:
 
         # First equation: u = (h1*x + h2*y + h3) / (h7*x + h8*y + h9)
         # Rearranged: h1*x + h2*y + h3 - u*h7*x - u*h8*y - u*h9 = 0
-        A.append([x, y, 1, 0, 0, 0, -u*x, -u*y, -u])
+        A.append([x, y, 1, 0, 0, 0, -u * x, -u * y, -u])
 
         # Second equation: v = (h4*x + h5*y + h6) / (h7*x + h8*y + h9)
         # Rearranged: h4*x + h5*y + h6 - v*h7*x - v*h8*y - v*h9 = 0
-        A.append([0, 0, 0, x, y, 1, -v*x, -v*y, -v])
+        A.append([0, 0, 0, x, y, 1, -v * x, -v * y, -v])
 
     A = np.array(A)
 
@@ -78,6 +87,7 @@ def quad_to_unit_square_transform(quad: QuadArray) -> TransformMatrix:
     H = h.reshape(3, 3)
 
     return H
+
 
 def apply_transform(H: TransformMatrix, points: QuadArray) -> QuadArray:
     """
@@ -102,27 +112,30 @@ def apply_transform(H: TransformMatrix, points: QuadArray) -> QuadArray:
     transformed_homogeneous = (H @ homogeneous_points.T).T
 
     # Convert back to Cartesian coordinates
-    transformed_points = transformed_homogeneous[:, :2] / transformed_homogeneous[:, 2:3]
+    transformed_points = (
+        transformed_homogeneous[:, :2] / transformed_homogeneous[:, 2:3]
+    )
 
     return transformed_points
 
 
-class PatchCoordinatesConverter(object):
-    
+class PatchCoordinatesConverter:
     def __init__(self, rect: QuadArray) -> None:
         self.H = quad_to_unit_square_transform(rect)
         self.H_inv = np.linalg.inv(self.H)
-        
+
     def image_to_unit_square(self, pts: QuadArray) -> QuadArray:
         pts = np.asarray(pts)
         return apply_transform(self.H, pts)
-    
+
     def unit_square_to_image(self, pts: QuadArray) -> QuadArray:
         pts = np.asarray(pts)
         return apply_transform(self.H_inv, pts)
 
 
-def line_intersection(p1: ndarray, p2: ndarray, p3: ndarray, p4: ndarray) -> Optional[ndarray]:
+def line_intersection(
+    p1: ndarray, p2: ndarray, p3: ndarray, p4: ndarray
+) -> Optional[ndarray]:
     """
     Find the intersection point of two lines using parametric form.
 
@@ -158,8 +171,7 @@ def line_intersection(p1: ndarray, p2: ndarray, p3: ndarray, p4: ndarray) -> Opt
     # [d1[0]  -d2[0]] [t1]   [p3[0] - p1[0]]
     # [d1[1]  -d2[1]] [t2] = [p3[1] - p1[1]]
 
-    A = np.array([[d1[0], -d2[0]],
-                  [d1[1], -d2[1]]])
+    A = np.array([[d1[0], -d2[0]], [d1[1], -d2[1]]])
     b = p3 - p1
 
     # Solve for parameters t1 and t2
@@ -172,52 +184,57 @@ def line_intersection(p1: ndarray, p2: ndarray, p3: ndarray, p4: ndarray) -> Opt
     return intersection
 
 
-
-def line_integral_vectorized(image: ndarray, start_points: ndarray, end_points: ndarray, num_samples: int=100) -> ndarray:
+def line_integral_vectorized(
+    image: ndarray, start_points: ndarray, end_points: ndarray, num_samples: int = 100
+) -> ndarray:
     """
     Fully vectorized version - maximum performance for large N.
-    
+
     Args:
         image: 2D numpy array
-        start_points: (N, 2) array of start coordinates  
+        start_points: (N, 2) array of start coordinates
         end_points: (N, 2) array of end coordinates
         num_samples: number of sample points along each line
-    
+
     Returns:
         (N,) array of line integral values
     """
     N = start_points.shape[0]
-    
+
     # Extract coordinates - shape (N,)
     x0, y0 = start_points[:, 0], start_points[:, 1]
     x1, y1 = end_points[:, 0], end_points[:, 1]
-    
+
     # Generate sample points - broadcast to shape (N, num_samples)
     t = np.linspace(0, 1, num_samples)  # shape (num_samples,)
     x_coords = x0[:, None] + t[None, :] * (x1 - x0)[:, None]
     y_coords = y0[:, None] + t[None, :] * (y1 - y0)[:, None]
-    
+
     # Round to nearest pixel coordinates
     x_indices = np.round(x_coords).astype(int)
     y_indices = np.round(y_coords).astype(int)
-    
+
     # Create mask for valid coordinates - shape (N, num_samples)
-    mask = ((y_indices >= 0) & (y_indices < image.shape[0]) &
-            (x_indices >= 0) & (x_indices < image.shape[1]))
-    
+    mask = (
+        (y_indices >= 0)
+        & (y_indices < image.shape[0])
+        & (x_indices >= 0)
+        & (x_indices < image.shape[1])
+    )
+
     # Use safe indexing - replace invalid indices with 0 (any valid index)
     safe_y = np.where(mask, y_indices, 0)
     safe_x = np.where(mask, x_indices, 0)
-    
+
     # Sample from image - advanced indexing gives shape (N, num_samples)
     sampled = image[safe_y, safe_x]
-    
+
     # Zero out samples that were out of bounds
     sampled = np.where(mask, sampled, 0)
-    
+
     # Sum along the samples dimension to get integral for each line
     results = np.sum(sampled, axis=1)
-    
+
     return results
 
 
@@ -238,8 +255,12 @@ def line_integral_simple(image, start_point, end_point, num_samples=100):
     y_indices = np.round(y_coords).astype(int)
 
     # Filter out-of-bounds indices
-    mask = ((y_indices >= 0) & (y_indices < image.shape[0]) &
-            (x_indices >= 0) & (x_indices < image.shape[1]))
+    mask = (
+        (y_indices >= 0)
+        & (y_indices < image.shape[0])
+        & (x_indices >= 0)
+        & (x_indices < image.shape[1])
+    )
 
     valid_y = y_indices[mask]
     valid_x = x_indices[mask]
@@ -251,47 +272,50 @@ def line_integral_simple(image, start_point, end_point, num_samples=100):
 
     return total_value
 
-def minimum_bounding_rectangle(points: BoundingBoxAny) -> Tuple[QuadArray, float]:
+
+def minimum_bounding_rectangle(points: BoundingBoxAny) -> tuple[QuadArray, float]:
     # Convert QuadArray to CornerPoints for internal processing
     points = bounding_box_as_array(points)
     n = points.shape[0]
-    
-    min_area = float('inf')
+
+    min_area = float("inf")
     best_rect = None
-    
+
     for i in range(n):
         # Get edge vector
         p1 = points[i]
         p2 = points[(i + 1) % n]
         edge_vector = p2 - p1
-        
+
         # Normalize edge vector to get unit vector
         length = np.linalg.norm(edge_vector)
         if length == 0:
             continue
         unit_vector = edge_vector / length
-        
+
         # Perpendicular vector
         perp_vector = np.array((-unit_vector[1], unit_vector[0]))
-        
+
         # Project all points onto both axes
         u_coords = np.dot(points, unit_vector)
         v_coords = np.dot(points, perp_vector)
-        
+
         # Get bounding box in this coordinate system
         u_min, u_max = np.min(u_coords), np.max(u_coords)
         v_min, v_max = np.min(v_coords), np.max(v_coords)
-        
+
         # Calculate area
         area = (u_max - u_min) * (v_max - v_min)
-        
+
         if area < min_area:
             min_area = area
             # Convert back to original coordinate system
             # Rectangle corners in (u,v) coordinates
             rect_corners_uv = [
-                (u_min, v_min), (u_max, v_min),
-                (u_max, v_max), (u_min, v_max)
+                (u_min, v_min),
+                (u_max, v_min),
+                (u_max, v_max),
+                (u_min, v_max),
             ]
             # Transform back to (x,y)
             best_rect = []
@@ -299,17 +323,17 @@ def minimum_bounding_rectangle(points: BoundingBoxAny) -> Tuple[QuadArray, float
                 x = u * unit_vector[0] + v * perp_vector[0]
                 y = u * unit_vector[1] + v * perp_vector[1]
                 best_rect.append((x, y))
-    
-    return np.array(best_rect), min_area
 
+    return np.array(best_rect), min_area
 
 
 def clockwise_corner_permutation(rect: QuadArray) -> ndarray:
     # rect: array of shape [4, 2]
-    centroid = np.sum(rect, axis=0) / 4.
+    centroid = np.sum(rect, axis=0) / 4.0
     delta = rect - centroid
     angles = np.atan2(delta[:, 1], delta[:, 0])
     return np.argsort(angles)
+
 
 def sort_clockwise(rect: BoundingBoxAny) -> QuadArray:
     rect = bounding_box_as_array(rect)

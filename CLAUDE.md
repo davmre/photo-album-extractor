@@ -20,6 +20,26 @@ before any other Python commands.
 python3 main.py
 ```
 
+### Code Formatting
+
+Format code with Ruff:
+
+```bash
+ruff format .
+```
+
+Check for linting issues:
+
+```bash
+ruff check .
+```
+
+Fix auto-fixable linting issues:
+
+```bash
+ruff check . --fix
+```
+
 ### Testing
 
 To run a quick integration test of much of the main workflow (opening the app,
