@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (QGraphicsPixmapItem, QGraphicsScene,
                              QGraphicsView, QMenu, QMessageBox)
 
 import image_processing.geometry as geometry
+import image_processing.inscribed_rectangle as inscribed_rectangle
 import image_processing.refine_bounds as refine_bounds
 from gui.quad_bounding_box import QuadBoundingBox
 from gui.settings_dialog import Settings
@@ -233,10 +234,8 @@ class ImageView(QGraphicsView):
             return
         corner_coords = box.get_ordered_corners_for_extraction()
         if inner:
-            # TODO: implement maximum inscribed rectangle
-            QMessageBox.warning(self, "Not implemented", 
-                                  "inner/inset rectangles not yet implemented!")
-            return
+            rect_array, _ = inscribed_rectangle.largest_inscribed_rectangle(
+                corner_coords)
         else:
             rect_array, _ = geometry.minimum_bounding_rectangle(corner_coords)
         box.set_corners(rect_array)

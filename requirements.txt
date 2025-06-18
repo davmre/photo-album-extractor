@@ -1,6 +1,7 @@
 PyQt6>=6.5.0
 Pillow>=9.0.0
 numpy>=1.21.0
+scipy>=1.13.0
 opencv-python>=4.5.0
 google-generativeai>=0.3.0
 piexif>=1.1.3
