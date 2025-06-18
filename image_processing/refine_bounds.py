@@ -512,7 +512,7 @@ def extract_border_strips(image: Union[Image.Image, UInt8Array],
     else:
         pil_image = image
         
-    image_shape = (pil_image.width, pil_image.height)
+    image_shape = (pil_image.height, pil_image.width)
     
     # Ensure rect is sorted clockwise
     rect = geometry.sort_clockwise(rect)
@@ -596,6 +596,7 @@ def extract_border_strips(image: Union[Image.Image, UInt8Array],
             image_shape=image_shape,
             patch_shape=pixels_array.shape,
             image_to_patch_coords=image_to_strip_transform)
+
         edge_response = detect_edges_color(
             pixels_array,
             horizontal=(name in ['top', 'bottom']),
