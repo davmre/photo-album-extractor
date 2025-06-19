@@ -22,15 +22,16 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core import images
+from core.bounding_box_storage import BoundingBoxStorage
+from core.settings import AppSettings
 from gui.attributes_sidebar import AttributesSidebar
 from gui.directory_sidebar import DirectoryImageList
 from gui.image_view import ImageView
 from gui.quad_bounding_box import QuadBoundingBox
-from gui.settings_dialog import Settings, SettingsDialog
-from image_processing import image_processor
+from gui.settings_dialog import SettingsDialog
 from image_processing.detection_strategies import DETECTION_STRATEGIES
 from image_processing.refine_bounds import REFINEMENT_STRATEGIES
-from storage.bounding_box_storage import BoundingBoxStorage
 
 
 class PhotoExtractorApp(QMainWindow):
@@ -50,7 +51,7 @@ class PhotoExtractorApp(QMainWindow):
         self.current_image: PIL.Image.Image | None = None
         self.current_directory: str | None = None
         self.bounding_box_storage: BoundingBoxStorage | None = None
-        self.settings = Settings()
+        self.settings = AppSettings.load_from_file()
 
         # GUI components (will be initialized in init_ui)
         self.image_view: ImageView
@@ -246,7 +247,7 @@ class PhotoExtractorApp(QMainWindow):
             self.save_current_bounding_boxes()
 
         try:
-            image = image_processor.load_image(file_path)
+            image = images.load_image(file_path)
             self.image_view.set_image(image)
             if self.refine_debug_dir:
                 self.image_view.refine_debug_dir = os.path.join(
@@ -361,7 +362,7 @@ class PhotoExtractorApp(QMainWindow):
             return
 
         # Get the selected strategy from settings
-        strategy_name = self.settings.get("detection_strategy", "")
+        strategy_name = self.settings.detection_strategy
         selected_strategy = None
         for strategy in DETECTION_STRATEGIES:
             if strategy.name == strategy_name:
@@ -393,9 +394,8 @@ class PhotoExtractorApp(QMainWindow):
 
         # Configure API key for strategies that need it
         if hasattr(selected_strategy, "set_api_key"):
-            api_key = self.settings.get("gemini_api_key", "")
-            if api_key:
-                selected_strategy.set_api_key(api_key)
+            if self.settings.gemini_api_key:
+                selected_strategy.set_api_key(self.settings.gemini_api_key)
             else:
                 QMessageBox.warning(
                     self,
@@ -427,7 +427,7 @@ class PhotoExtractorApp(QMainWindow):
             )
 
             # Auto-refine if enabled in settings
-            if self.settings.get("auto_refine_detection", False) and detected_quads:
+            if self.settings.auto_refine_detection and detected_quads:
                 self.refine_all_boxes()
                 self.status_bar.showMessage(
                     f"Detected and refined {len(detected_quads)} photos using {selected_strategy.name}"
@@ -472,7 +472,7 @@ class PhotoExtractorApp(QMainWindow):
 
         # Extract and save photos with attributes
         base_name = "photo"
-        saved_files = image_processor.save_cropped_images(
+        saved_files = images.save_cropped_images(
             self.current_image,
             corner_points,
             output_directory,
@@ -582,7 +582,7 @@ class PhotoExtractorApp(QMainWindow):
             return
 
         # Get the selected strategy from settings
-        strategy_name = self.settings.get("detection_strategy", "")
+        strategy_name = self.settings.detection_strategy
         selected_strategy = None
         for strategy in DETECTION_STRATEGIES:
             if strategy.name == strategy_name:
@@ -616,9 +616,8 @@ class PhotoExtractorApp(QMainWindow):
 
         # Configure API key for strategies that need it
         if hasattr(selected_strategy, "set_api_key"):
-            api_key = self.settings.get("gemini_api_key", "")
-            if api_key:
-                selected_strategy.set_api_key(api_key)
+            if self.settings.gemini_api_key:
+                selected_strategy.set_api_key(self.settings.gemini_api_key)
             else:
                 QMessageBox.warning(
                     self,
@@ -647,7 +646,7 @@ class PhotoExtractorApp(QMainWindow):
 
             try:
                 # Load image temporarily to get dimensions
-                image = image_processor.load_image(image_path)
+                image = images.load_image(image_path)
                 if image:
                     # Run detection strategy
                     detected_quads = selected_strategy.detect_photos(image)
@@ -771,7 +770,7 @@ class PhotoExtractorApp(QMainWindow):
 
             try:
                 # Load image temporarily
-                image = image_processor.load_image(image_path)
+                image = images.load_image(image_path)
                 if image:
                     # Convert saved boxes to crop data format and collect attributes
                     crop_data = []
@@ -795,7 +794,7 @@ class PhotoExtractorApp(QMainWindow):
                         base_name = os.path.splitext(filename)[0]
 
                         # Extract and save photos with attributes
-                        saved_files = image_processor.save_cropped_images(
+                        saved_files = images.save_cropped_images(
                             image,
                             crop_data,
                             output_directory,

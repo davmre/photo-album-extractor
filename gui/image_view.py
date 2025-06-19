@@ -11,18 +11,13 @@ import numpy as np
 from PIL import Image, ImageQt
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QPixmap
-from PyQt6.QtWidgets import (
-    QGraphicsPixmapItem,
-    QGraphicsScene,
-    QGraphicsView,
-    QMenu,
-)
+from PyQt6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QMenu
 
 import image_processing.geometry as geometry
 import image_processing.inscribed_rectangle as inscribed_rectangle
 import image_processing.refine_bounds as refine_bounds
+from core.settings import AppSettings
 from gui.quad_bounding_box import QuadBoundingBox
-from gui.settings_dialog import Settings
 
 
 class ImageView(QGraphicsView):
@@ -43,7 +38,7 @@ class ImageView(QGraphicsView):
     # Signal emitted when mouse enters viewport
     mouse_entered_viewport = pyqtSignal()
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: AppSettings) -> None:
         super().__init__()
         self.settings = settings
         self.selected_box: QuadBoundingBox | None = None
@@ -258,9 +253,7 @@ class ImageView(QGraphicsView):
         if not self.image_item or not isinstance(box, QuadBoundingBox):
             return
 
-        strategy_name = (
-            self.settings.get("refinement_strategy") or "Original (multiscale)"
-        )
+        strategy_name = self.settings.refinement_strategy or "Original (multiscale)"
         refine_fn = refine_bounds.REFINEMENT_STRATEGIES[strategy_name]
 
         # Get the current image as numpy array
@@ -277,13 +270,7 @@ class ImageView(QGraphicsView):
             refined_corners = refine_fn(  # type: ignore[reportCallIssue]
                 image_bgr, corner_coords, debug_dir=debug_dir
             )
-
-            # Update box with refined corners
-            refined_qpoints = []
-            for corner in refined_corners:
-                refined_qpoints.append(QPointF(float(corner[0]), float(corner[1])))
-
-            box.set_corners(refined_qpoints)
+            box.set_corners(refined_corners)
 
         except Exception as e:
             print(f"Error refining bounding box: {e}")

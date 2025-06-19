@@ -2,7 +2,6 @@
 Quadrilateral bounding box widget for arbitrary four-sided photo selection.
 """
 
-
 import uuid
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal

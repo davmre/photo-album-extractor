@@ -11,8 +11,8 @@ import numpy as np
 import PIL.Image
 from PIL import Image
 
+import core.images as images
 import image_processing.geometry as geometry
-import image_processing.image_processor as image_processor
 from photo_types import (
     AnyArray,
     BoundingBoxAny,
@@ -321,7 +321,7 @@ def refine_bounding_box(
     # use the same resolution in both dimensions so the extracted patch is a
     # (probably downscaled) square.
     patch_n = resolution + border_n * 2  # Total output pixels per side.
-    extracted_patch = image_processor.extract_perspective_image(
+    extracted_patch = images.extract_perspective_image(
         pil_image, expanded_rect, output_width=patch_n, output_height=patch_n
     )
     LOGGER.debug(
@@ -690,7 +690,7 @@ def extract_border_strips(
         LOGGER.debug(
             f"extracting strip {name} with corners {strip_corners_image} image width {width} height {height} strip width {strip_width} height {strip_height}"
         )
-        strip_pixels = image_processor.extract_perspective_image(
+        strip_pixels = images.extract_perspective_image(
             pil_image,
             strip_corners_image,
             output_width=strip_width,
