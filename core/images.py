@@ -4,15 +4,15 @@ Image processing utilities for loading, cropping, and saving photos.
 
 import os
 from datetime import datetime
-from typing import Union
+from typing import Optional
 
 import numpy as np
 import piexif
 import PIL.Image
 from PIL import Image
 
-import photo_types
-from image_processing import geometry
+import core.photo_types as photo_types
+from core import geometry
 
 # Semantic type aliases
 PILImage = PIL.Image.Image  # PIL/Pillow images
@@ -21,8 +21,8 @@ PILImage = PIL.Image.Image  # PIL/Pillow images
 def extract_perspective_image(
     image: PILImage,
     corner_points: photo_types.BoundingBoxAny,
-    output_width: Union[int, None] = None,
-    output_height: Union[int, None] = None,
+    output_width: Optional[int] = None,
+    output_height: Optional[int] = None,
     mode: PIL.Image.Resampling = Image.Resampling.BICUBIC,
 ) -> PILImage:
     """Crop image using four corner points."""
@@ -73,7 +73,7 @@ def save_cropped_images(
     crop_data: list[photo_types.QuadArray],
     output_dir: str,
     base_name: str = "photo",
-    attributes_list: Union[list[dict[str, str]], None] = None,
+    attributes_list: Optional[list[dict[str, str]]] = None,
 ) -> list[str]:
     """Save multiple cropped images to the specified directory.
 

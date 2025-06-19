@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 from numpy import ndarray
 
 # Import semantic types from photo_types for consistency
-from photo_types import (
+from core.photo_types import (
     BoundingBoxAny,
     QuadArray,
     TransformMatrix,

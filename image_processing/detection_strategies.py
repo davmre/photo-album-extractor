@@ -13,8 +13,8 @@ import numpy as np
 import PIL.Image
 
 from core.errors import AppError
+from core.photo_types import QuadArray
 from core.settings import AppSettings
-from photo_types import QuadArray
 
 
 class DetectionStrategy(ABC):

@@ -11,9 +11,9 @@ import numpy as np
 import PIL.Image
 from PIL import Image
 
+import core.geometry as geometry
 import core.images as images
-import image_processing.geometry as geometry
-from photo_types import (
+from core.photo_types import (
     AnyArray,
     BoundingBoxAny,
     FloatArray,

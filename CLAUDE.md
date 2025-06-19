@@ -74,31 +74,28 @@ you have no other means of persisting memory from session to session.
 
 ### Key Components
 
-1. **GUI Layer** (`gui/`): PyQt6-based interface
+1. **Core app functionality**:
+   - `bounding_box_storage.py` - Saves bounding boxes as JSON in `.photo_extractor_data.json` files per directory
+   - `images.py`: Handles perspective correction, EXIF metadata, and image saving
+   - `settings.py`: Defines app configuration.
+   - `photo_types.py` and `errors.py`: custom types and exceptions used throughout
+
+2. **GUI Layer** (`gui/`): PyQt6-based interface
    - `main_window.py`: Main application window orchestrating all components
    - `image_view.py`: Custom QGraphicsView handling image display and bounding box interactions
    - `quad_bounding_box.py`: Quadrilateral (4-point) bounding box implementation - NOT restricted to rectangles
 
-2. **Image Processing** (`image_processing/`): Core algorithms
-   - `image_processor.py`: Handles perspective correction, EXIF metadata, and image saving
+3. **Image Processing** (`image_processing/`): Core algorithms
    - `detection_strategies.py`: Multiple photo detection strategies including Gemini AI
    - `refine_bounds.py`: Multiple refinement algorithms (original, multiscale, strips-based)
 
-3. **Storage** (`storage/`): Data persistence
-   - Saves bounding boxes as JSON in `.photo_extractor_data.json` files per directory
-
 ### Important Patterns
 
-- **Quadrilateral Support**: Bounding boxes are 4-point quadrilaterals, not just rectangles, enabling perspective correction
-- **Strategy Pattern**: Used for both detection and refinement algorithms via abstract base classes
+- **Quadrilateral Support**: Bounding boxes are 4-point quadrilaterals. These are
+  typically represented as a Numpy array of floats in image coordinate space
+  (`QuadArray` in `photo_types.py`).
 - **PyQt Signals**: Extensive use of signals for GUI communication (e.g., `boundsChanged`, `metadataChanged`)
 - **EXIF Metadata**: All extracted photos preserve original EXIF data and add custom metadata
-
-### Key Technical Details
-
-- **Coordinate Systems**: Be careful with Qt's coordinate systems vs numpy array indexing
-- **Perspective Transform**: Uses `cv2.getPerspectiveTransform()` for non-rectangular regions
-- **JSON Storage**: Bounding boxes persist automatically on changes using Qt signals
 
 ## Type System Guidelines
 
@@ -117,6 +114,6 @@ The codebase uses `pyproject.toml` for pyright configuration with gradual typing
 **Type-First Development**: When adding new modules:
 
 1. Start with type definitions in appropriate module
-2. Import semantic types from `photo_types.py`
+2. Import semantic types from `core/photo_types.py`
 3. Add proper type annotations from the beginning
 4. Validate with `pyright` frequently

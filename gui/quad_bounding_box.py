@@ -8,8 +8,8 @@ from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QPen, QPolygonF
 from PyQt6.QtWidgets import QGraphicsItem, QGraphicsObject, QGraphicsRectItem
 
-import photo_types
-from image_processing import geometry
+import core.photo_types as photo_types
+from core import geometry
 
 
 class QuadBoundingBox(QGraphicsObject):

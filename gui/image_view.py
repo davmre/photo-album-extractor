@@ -5,7 +5,6 @@ Custom graphics view for displaying images with bounding box interaction.
 from __future__ import annotations
 
 import os
-from typing import Union
 
 import numpy as np
 from PIL import Image, ImageQt
@@ -13,7 +12,7 @@ from PyQt6.QtCore import QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QPixmap
 from PyQt6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QMenu
 
-import image_processing.geometry as geometry
+import core.geometry as geometry
 import image_processing.inscribed_rectangle as inscribed_rectangle
 import image_processing.refine_bounds as refine_bounds
 from core.settings import AppSettings

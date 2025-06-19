@@ -1,8 +1,8 @@
 import numpy as np
 import scipy.optimize
 
-from image_processing import geometry
-from photo_types import BoundingBoxAny, QuadArray, bounding_box_as_array
+from core import geometry
+from core.photo_types import BoundingBoxAny, QuadArray, bounding_box_as_array
 
 """
 Tools to compute the largest rectangle inscribable in a (convex) quadrilateral.
@@ -35,7 +35,9 @@ def cross2d(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     return x[..., 0] * y[..., 1] - x[..., 1] * y[..., 0]
 
 
-def merge_adjacent_intervals(intervals):
+def merge_adjacent_intervals(
+    intervals: list[tuple[float, float]],
+) -> list[tuple[float, float]]:
     merged = []
     for a, b in intervals:
         if not merged or merged[-1][1] < a:
