@@ -14,6 +14,8 @@ from PyQt6.QtWidgets import (
 )
 
 from core.settings import AppSettings
+from image_processing.detection_strategies import DETECTION_STRATEGIES
+from image_processing.refine_bounds import REFINEMENT_STRATEGIES
 
 
 class SettingsDialog(QDialog):
@@ -22,14 +24,12 @@ class SettingsDialog(QDialog):
     def __init__(
         self,
         settings: AppSettings,
-        detection_strategies,
-        refinement_strategy_names,
         parent=None,
     ):
         super().__init__(parent)
         self.settings = settings
-        self.detection_strategies = detection_strategies
-        self.refinement_strategy_names = refinement_strategy_names
+        self.detection_strategies = DETECTION_STRATEGIES
+        self.refinement_strategy_names = REFINEMENT_STRATEGIES.keys()
         self.init_ui()
 
     def init_ui(self):

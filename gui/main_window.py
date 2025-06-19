@@ -24,14 +24,14 @@ from PyQt6.QtWidgets import (
 
 from core import images
 from core.bounding_box_storage import BoundingBoxStorage
+from core.errors import AppError
 from core.settings import AppSettings
 from gui.attributes_sidebar import AttributesSidebar
 from gui.directory_sidebar import DirectoryImageList
 from gui.image_view import ImageView
 from gui.quad_bounding_box import QuadBoundingBox
 from gui.settings_dialog import SettingsDialog
-from image_processing.detection_strategies import DETECTION_STRATEGIES
-from image_processing.refine_bounds import REFINEMENT_STRATEGIES
+from image_processing.detection_strategies import configure_detection_strategy
 
 
 class PhotoExtractorApp(QMainWindow):
@@ -361,41 +361,14 @@ class PhotoExtractorApp(QMainWindow):
         if not self.current_image_path or not self.current_image:
             return
 
-        # Get the selected strategy from settings
-        strategy_name = self.settings.detection_strategy
-        selected_strategy = None
-        for strategy in DETECTION_STRATEGIES:
-            if strategy.name == strategy_name:
-                selected_strategy = strategy
-                break
+        try:
+            selected_strategy = configure_detection_strategy(self.settings)
+        except AppError as err:
+            err.show_warning(parent=self)
+            return
 
-        if not selected_strategy:
-            # Default to first strategy if none configured
-            if DETECTION_STRATEGIES:
-                selected_strategy = DETECTION_STRATEGIES[0]
-            else:
-                QMessageBox.warning(
-                    self,
-                    "No Detection Strategy",
-                    "No detection strategies available. Please check your configuration.",
-                )
-                return
-
-        # Clear existing boxes first
+        # Clear existing boxes
         self.image_view.clear_boxes()
-
-        # Configure API key for strategies that need it
-        if hasattr(selected_strategy, "set_api_key"):
-            if self.settings.gemini_api_key:
-                selected_strategy.set_api_key(self.settings.gemini_api_key)
-            else:
-                QMessageBox.warning(
-                    self,
-                    "API Key Required",
-                    f"The {selected_strategy.name} strategy requires an API key. "
-                    "Please configure it in Edit > Settings.",
-                )
-                return
 
         # Run detection strategy
         try:
@@ -829,7 +802,5 @@ class PhotoExtractorApp(QMainWindow):
 
     def open_settings(self):
         """Open the settings dialog."""
-        dialog = SettingsDialog(
-            self.settings, DETECTION_STRATEGIES, REFINEMENT_STRATEGIES.keys(), self
-        )
+        dialog = SettingsDialog(self.settings, self)
         dialog.exec()

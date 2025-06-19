@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Union
+from typing import Any
 
 import google.generativeai as genai  # type: ignore
 import numpy as np
 import PIL.Image
 
+from core.errors import AppError
+from core.settings import AppSettings
 from photo_types import QuadArray
 
 
@@ -157,3 +159,28 @@ JSON response, no additional text."""
 
 # Registry of all available strategies
 DETECTION_STRATEGIES = [GeminiDetectionStrategy()]
+
+
+def configure_detection_strategy(settings: AppSettings) -> DetectionStrategy:
+    # Get the selected strategy from settings
+    strategy_name = settings.detection_strategy
+    selected_strategy = None
+    for strategy in DETECTION_STRATEGIES:
+        if strategy.name == strategy_name:
+            selected_strategy = strategy
+            break
+    if not selected_strategy:
+        # Default to first strategy if none configured
+        selected_strategy = DETECTION_STRATEGIES[0]
+
+    # Configure API key for strategies that need it
+    if hasattr(selected_strategy, "set_api_key"):
+        if settings.gemini_api_key:
+            selected_strategy.set_api_key(settings.gemini_api_key)
+        else:
+            raise AppError(
+                msg=f"The {selected_strategy.name} strategy requires an API key. "
+                "Please configure it in Edit > Settings.",
+                title="API Key Required",
+            )
+    return selected_strategy
