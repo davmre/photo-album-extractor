@@ -56,7 +56,7 @@ def minimize_scalar_multimodal(fn, bounds, n_eval_points):
     )
 
 
-class NotFeasibleException(Exception):
+class GeometryNotFeasibleError(Exception):
     pass
 
 
@@ -366,7 +366,7 @@ class InscriptionGeometry:
         rect_side1 = contact_point_2 - self.contact_point_1
         if np.linalg.norm(rect_side1) < eps:
             # perpendicular direction is not defined
-            raise NotFeasibleException()
+            raise GeometryNotFeasibleError()
         # TODO: handle case where denominator is zero
         t3_denom = np.dot(rect_side1, self.dc_vec)
         if t3_denom == 0:
@@ -436,7 +436,7 @@ class InscriptionGeometry:
                     candidate_t2s.append(crit)
 
         if len(candidate_t2s) == 0:
-            raise NotFeasibleException()
+            raise GeometryNotFeasibleError()
 
         areas = [self.inscribed_area(t2) for t2 in candidate_t2s]
         # ("candtdates", candidate_t2s)
@@ -537,7 +537,7 @@ def largest_inscribed_rectangle(
             g = InscriptionGeometry(corner_points, i, j, k, t1=t1)
             try:
                 _, area = g.get_optimal_t2_and_area()
-            except NotFeasibleException:
+            except GeometryNotFeasibleError:
                 area = -1.0
             return -area
 
