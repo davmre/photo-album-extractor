@@ -25,7 +25,11 @@ select = [
     "B",   # flake8-bugbear
     "C4",  # flake8-comprehensions
     "N",   # pep8-naming
-    "W",
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "N802",  # function name should be lowercase (Qt method overrides)
 ]
 
 [tool.ruff.format]

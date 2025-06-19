@@ -5,7 +5,7 @@ Persistent storage for bounding box data per directory.
 import json
 import os
 import uuid
-from typing import Any, Dict, List
+from typing import Any
 
 from gui.quad_bounding_box import QuadBoundingBox
 
@@ -16,9 +16,9 @@ class BoundingBoxStorage:
     def __init__(self, directory: str) -> None:
         self.directory = directory
         self.data_file = os.path.join(directory, ".photo_extractor_data.json")
-        self.data: Dict[str, List[Dict[str, Any]]] = self.load_data()
+        self.data: dict[str, list[dict[str, Any]]] = self.load_data()
 
-    def load_data(self) -> Dict[str, List[Dict[str, Any]]]:
+    def load_data(self) -> dict[str, list[dict[str, Any]]]:
         """Load bounding box data from JSON file."""
         if os.path.exists(self.data_file):
             try:
@@ -37,7 +37,7 @@ class BoundingBoxStorage:
             print(f"Warning: Could not save bounding box data to {self.data_file}")
 
     def save_bounding_boxes(
-        self, image_filename: str, bounding_boxes: List[QuadBoundingBox]
+        self, image_filename: str, bounding_boxes: list[QuadBoundingBox]
     ) -> None:
         """Save bounding boxes for a specific image."""
         if not bounding_boxes:
@@ -65,7 +65,7 @@ class BoundingBoxStorage:
             self.data[image_filename] = box_data
         self.save_data()
 
-    def load_bounding_boxes(self, image_filename: str) -> List[Dict[str, Any]]:
+    def load_bounding_boxes(self, image_filename: str) -> list[dict[str, Any]]:
         """Load bounding boxes for a specific image."""
         return self.data.get(image_filename, [])
 
@@ -82,7 +82,7 @@ class BoundingBoxStorage:
         return {}
 
     def update_box_attributes(
-        self, image_filename: str, box_id: str, attributes: Dict[str, str]
+        self, image_filename: str, box_id: str, attributes: dict[str, str]
     ) -> bool:
         """Update attributes for a specific box."""
         if image_filename not in self.data:

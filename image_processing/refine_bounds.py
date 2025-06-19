@@ -4,7 +4,7 @@ import logging
 import os
 import pathlib
 import sys
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Union
 
 import cv2
 import numpy as np
@@ -28,7 +28,7 @@ LOGGER = logging.getLogger("logger")
 
 # Registry of all available strategies
 # Registry uses flexible typing since lambdas don't implement full Protocol
-REFINEMENT_STRATEGIES: Dict[str, Callable[..., QuadArray]] = {
+REFINEMENT_STRATEGIES: dict[str, Callable[..., QuadArray]] = {
     "Original (200px res)": (
         lambda image, corner_points, debug_dir=None: refine_bounding_box(
             image,
@@ -74,7 +74,7 @@ REFINEMENT_STRATEGIES: Dict[str, Callable[..., QuadArray]] = {
 
 def _candidate_edge_points(
     patch_n: int, border_n: int
-) -> Tuple[IntArray, IntArray, IntArray, IntArray]:
+) -> tuple[IntArray, IntArray, IntArray, IntArray]:
     """Enumerate potential endpoints for each of the four image borders.
 
     For each border, we consider N potential start points and N potential end
@@ -132,8 +132,8 @@ def signed_distance_from_border(
 
 
 def image_boundary_mask(
-    image_shape: Tuple[int, ...],
-    patch_shape: Tuple[int, ...],
+    image_shape: tuple[int, ...],
+    patch_shape: tuple[int, ...],
     image_to_patch_coords: Callable[[FloatArray], FloatArray],
     offset: int = -1,
 ) -> FloatArray:
@@ -170,7 +170,7 @@ def image_boundary_mask(
     return mask
 
 
-def get_best_edge(edge_weights: FloatArray, pts: IntArray) -> Tuple[IntArray, float]:
+def get_best_edge(edge_weights: FloatArray, pts: IntArray) -> tuple[IntArray, float]:
     # Get the edge point pairs that maximize the Sobel response.
     left_idx, right_idx = np.unravel_index(edge_weights.argmax(), edge_weights.shape)
     pt0 = pts[0, left_idx]
@@ -231,8 +231,8 @@ def search_best_rhombus(
 
 def annotate_image(
     img: AnyArray,
-    contours: Optional[List[Any]] = None,
-    edges: Optional[Union[List[IntArray], Tuple[IntArray, ...]]] = None,
+    contours: list[Any] | None = None,
+    edges: list[IntArray] | tuple[IntArray, ...] | None = None,
 ) -> AnyArray:
     img = img.copy()
     if contours:
@@ -253,7 +253,7 @@ def annotate_image(
     return img
 
 
-def save_image(file_path: str, img: Union[AnyArray, PIL.Image.Image]) -> None:
+def save_image(file_path: str, img: AnyArray | PIL.Image.Image) -> None:
     if not isinstance(img, Image.Image):
         img = Image.fromarray(img)
     if img.mode == "F":
@@ -265,12 +265,12 @@ def save_image(file_path: str, img: Union[AnyArray, PIL.Image.Image]) -> None:
 
 
 def refine_bounding_box(
-    image: Union[UInt8Array, Image.Image],
+    image: UInt8Array | Image.Image,
     corner_points: BoundingBoxAny,
     reltol: float = 0.05,
     resolution: int = 200,
     enforce_parallel_sides: bool = False,
-    debug_dir: Optional[str] = None,
+    debug_dir: str | None = None,
 ) -> QuadArray:
     if debug_dir is not None:
         pathlib.Path(debug_dir).mkdir(parents=True, exist_ok=True)
@@ -482,13 +482,13 @@ def refine_bounding_box(
 
 
 def refine_bounding_box_multiscale(
-    image: Union[UInt8Array, Image.Image],
+    image: UInt8Array | Image.Image,
     corner_points: BoundingBoxAny,
     reltol: float = 0.05,
     base_resolution: int = 200,
     scale_factor: int = 5,
     enforce_parallel_sides: bool = False,
-    debug_dir: Optional[str] = None,
+    debug_dir: str | None = None,
 ) -> QuadArray:
     """Coarse-to-fine refinement of bounding box edges."""
     corner_points = bounding_box_as_array(corner_points)
@@ -562,7 +562,7 @@ def detect_edges_sobel(pixels: UInt8Array, horizontal: bool = True) -> FloatArra
 
 
 def detect_edges_sharp(
-    pixels: UInt8Array, horizontal: bool = True, debug_dir: Optional[str] = None
+    pixels: UInt8Array, horizontal: bool = True, debug_dir: str | None = None
 ) -> FloatArray:
     # Convert to numpy array and compute edge response
     gray = np.asarray(cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY), dtype=np.float32)
@@ -581,7 +581,7 @@ def detect_edges_sharp(
 
 
 def detect_edges_color(
-    pixels: UInt8Array, horizontal: bool = True, mask: Optional[FloatArray] = None
+    pixels: UInt8Array, horizontal: bool = True, mask: FloatArray | None = None
 ) -> FloatArray:
     # Convert to numpy array and compute edge response
     if pixels.shape[-1] != 3:
@@ -604,13 +604,13 @@ def detect_edges_color(
 
 
 def extract_border_strips(
-    image: Union[Image.Image, UInt8Array],
+    image: Image.Image | UInt8Array,
     rect: QuadArray,
     reltol: float,
     resolution_scale_factor: float = 1.0,
     min_image_pixels: int = 8,
-    debug_dir: Optional[str] = None,
-) -> Dict[str, StripData]:
+    debug_dir: str | None = None,
+) -> dict[str, StripData]:
     """Extract four border strips from the image."""
     if isinstance(image, np.ndarray):
         pil_image = Image.fromarray(image)
@@ -941,12 +941,12 @@ def search_best_edge(strip, edge_is_horizontal=True):
 
 
 def refine_bounding_box_strips(
-    image: Union[Image.Image, UInt8Array],
+    image: Image.Image | UInt8Array,
     corner_points: BoundingBoxAny,
     reltol: float = 0.05,
     resolution_scale_factor: float = 1.0,
     enforce_parallel_sides: bool = False,
-    debug_dir: Optional[str] = None,
+    debug_dir: str | None = None,
 ) -> QuadArray:
     """Refine bounding box using strip-based edge detection."""
     corner_points = bounding_box_as_array(corner_points)
@@ -1072,7 +1072,7 @@ def refine_bounding_box_strips_multiscale(
     base_resolution: int = 200,
     scale_step: int = 4,
     enforce_parallel_sides: bool = False,
-    debug_dir: Optional[str] = None,
+    debug_dir: str | None = None,
 ) -> QuadArray:
     """Coarse-to-fine refinement using strip-based edge detection."""
     corner_points = bounding_box_as_array(corner_points)

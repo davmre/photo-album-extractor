@@ -5,7 +5,7 @@ Custom graphics view for displaying images with bounding box interaction.
 from __future__ import annotations
 
 import os
-from typing import List, Optional
+from typing import Union
 
 import numpy as np
 from PIL import Image, ImageQt
@@ -46,22 +46,22 @@ class ImageView(QGraphicsView):
     def __init__(self, settings: Settings) -> None:
         super().__init__()
         self.settings = settings
-        self.selected_box: Optional[QuadBoundingBox] = None
+        self.selected_box: QuadBoundingBox | None = None
 
-        self.refine_debug_dir: Optional[str] = None
+        self.refine_debug_dir: str | None = None
 
         # Set up the graphics scene
         self._scene = QGraphicsScene()
         self.setScene(self._scene)
 
         # Image item
-        self.image_item: Optional[QGraphicsPixmapItem] = None
-        self.bounding_boxes: List[QuadBoundingBox] = []
+        self.image_item: QGraphicsPixmapItem | None = None
+        self.bounding_boxes: list[QuadBoundingBox] = []
 
         # Drag state
         self.is_dragging: bool = False
-        self.drag_start_pos: Optional[QPointF] = None
-        self.temp_box: Optional[QuadBoundingBox] = None
+        self.drag_start_pos: QPointF | None = None
+        self.temp_box: QuadBoundingBox | None = None
 
         # View settings
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
@@ -86,7 +86,7 @@ class ImageView(QGraphicsView):
         # Enable keyboard focus for key events
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-    def set_image(self, image: Optional[Image.Image] = None):
+    def set_image(self, image: Image.Image | None = None):
         """Set the image to display."""
         # QPixmap uses implicit sharing semantics, so it seems we need to
         # keep a reference to the QImage so it doesn't get GC'd.

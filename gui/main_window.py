@@ -5,7 +5,6 @@ Main application window for the Photo Album Extractor.
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 import PIL.Image
 from PyQt6.QtCore import QPointF, Qt
@@ -39,18 +38,18 @@ class PhotoExtractorApp(QMainWindow):
 
     def __init__(
         self,
-        initial_image: Optional[str] = None,
-        initial_directory: Optional[str] = None,
-        refine_debug_dir: Optional[str] = None,
+        initial_image: str | None = None,
+        initial_directory: str | None = None,
+        refine_debug_dir: str | None = None,
     ) -> None:
         super().__init__()
 
         self.refine_debug_dir = refine_debug_dir
 
-        self.current_image_path: Optional[str] = None
-        self.current_image: Optional[PIL.Image.Image] = None
-        self.current_directory: Optional[str] = None
-        self.bounding_box_storage: Optional[BoundingBoxStorage] = None
+        self.current_image_path: str | None = None
+        self.current_image: PIL.Image.Image | None = None
+        self.current_directory: str | None = None
+        self.bounding_box_storage: BoundingBoxStorage | None = None
         self.settings = Settings()
 
         # GUI components (will be initialized in init_ui)

@@ -8,7 +8,7 @@ to provide clear interfaces and better type safety.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, List, NewType, Optional, Protocol, Tuple, Union
+from typing import Any, NewType, Protocol, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -18,7 +18,7 @@ from PyQt6.QtCore import QPointF
 # Semantic Types for Stronger Type Safety
 # =============================================================================
 
-ImageCoordinate = NewType("ImageCoordinate", Tuple[float, float])
+ImageCoordinate = NewType("ImageCoordinate", tuple[float, float])
 
 
 # File paths with semantic meaning
@@ -44,8 +44,8 @@ BGRImage = npt.NDArray[np.uint8]  # Shape: (H, W, 3) - BGR color image
 # Bounding box quadrilaterals
 # =============================================================================
 
-BoundingBoxFloatPoints = Sequence[Tuple[float, float]]
-BoundingBoxQPointF = List[QPointF]
+BoundingBoxFloatPoints = Sequence[tuple[float, float]]
+BoundingBoxQPointF = list[QPointF]
 
 BoundingBoxAny = Union[BoundingBoxFloatPoints, BoundingBoxQPointF, QuadArray]
 
@@ -90,7 +90,7 @@ class BoundaryRefinementStrategy(Protocol):
         self,
         image: BGRImage,
         initial_quad: QuadArray,
-        debug_dir: Optional[DirectoryPath] = None,
+        debug_dir: DirectoryPath | None = None,
         **kwargs: Any,
     ) -> QuadArray: ...
 

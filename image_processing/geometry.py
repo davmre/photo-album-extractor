@@ -135,7 +135,7 @@ class PatchCoordinatesConverter:
 
 def line_intersection(
     p1: ndarray, p2: ndarray, p3: ndarray, p4: ndarray
-) -> Optional[ndarray]:
+) -> ndarray | None:
     """
     Find the intersection point of two lines using parametric form.
 

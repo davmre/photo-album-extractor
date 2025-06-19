@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional, Tuple
+from typing import Any, Union
 
 import google.generativeai as genai  # type: ignore
 import PIL.Image
@@ -29,7 +29,7 @@ class DetectionStrategy(ABC):
         pass
 
     @abstractmethod
-    def detect_photos(self, image: PIL.Image.Image) -> List[List[QPointF]]:
+    def detect_photos(self, image: PIL.Image.Image) -> list[list[QPointF]]:
         """
         Detect photos in an image and return their bounding quadrilaterals.
 
@@ -49,8 +49,8 @@ class GeminiDetectionStrategy(DetectionStrategy):
     """Gemini AI-based strategy for detecting photos in album pages."""
 
     def __init__(self) -> None:
-        self._model: Optional[Any] = None
-        self._api_key: Optional[str] = None
+        self._model: Any | None = None
+        self._api_key: str | None = None
 
     def set_api_key(self, api_key: str) -> None:
         """Set the API key and reinitialize the model."""
@@ -80,7 +80,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
     def description(self) -> str:
         return "Use Gemini AI to intelligently detect photos in album pages"
 
-    def _parse_as_json(self, response: Any) -> List[dict[str, Any]]:
+    def _parse_as_json(self, response: Any) -> list[dict[str, Any]]:
         # Extract JSON from response (remove any markdown formatting)
         json_text = response.text.strip()
         if json_text.startswith("```json"):
@@ -91,22 +91,22 @@ class GeminiDetectionStrategy(DetectionStrategy):
         return json.loads(json_text)
 
     def _corner_points_from_bbox(
-        self, box_2d: List[float]
-    ) -> List[Tuple[float, float]]:
+        self, box_2d: list[float]
+    ) -> list[tuple[float, float]]:
         y_min, x_min, y_max, x_max = box_2d
         return [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
 
     def _unnormalize_coords(
         self,
-        coords: List[Tuple[float, float]],
+        coords: list[tuple[float, float]],
         normalized_width: int = 1000,
         normalized_height: int = 1000,
-    ) -> List[QPointF]:
+    ) -> list[QPointF]:
         xscale = 1.0 / normalized_width
         yscale = 1.0 / normalized_height
         return [QPointF(p[0] * xscale, p[1] * yscale) for p in coords]
 
-    def detect_photos(self, image: PIL.Image.Image) -> List[List[QPointF]]:
+    def detect_photos(self, image: PIL.Image.Image) -> list[list[QPointF]]:
         if not image or not self._model:
             return []
 

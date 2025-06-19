@@ -4,7 +4,7 @@ Image processing utilities for loading, cropping, and saving photos.
 
 import os
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Union
 
 import numpy as np
 import piexif
@@ -21,8 +21,8 @@ PILImage = PIL.Image.Image  # PIL/Pillow images
 def extract_perspective_image(
     image: PILImage,
     corner_points: photo_types.BoundingBoxAny,
-    output_width: Optional[int] = None,
-    output_height: Optional[int] = None,
+    output_width: Union[int, None] = None,
+    output_height: Union[int, None] = None,
     mode: PIL.Image.Resampling = Image.Resampling.BICUBIC,
 ) -> PILImage:
     """Crop image using four corner points."""
@@ -70,11 +70,11 @@ def load_image(filepath: str) -> PILImage:
 
 def save_cropped_images(
     image: PILImage,
-    crop_data: List[photo_types.QuadArray],
+    crop_data: list[photo_types.QuadArray],
     output_dir: str,
     base_name: str = "photo",
-    attributes_list: Optional[List[Dict[str, str]]] = None,
-) -> List[str]:
+    attributes_list: Union[list[dict[str, str]], None] = None,
+) -> list[str]:
     """Save multiple cropped images to the specified directory.
 
     Args:
@@ -128,7 +128,7 @@ def save_cropped_images(
 
 
 def save_image_with_exif(
-    image: PILImage, filepath: str, attributes: Dict[str, str], jpeg_quality: int = 95
+    image: PILImage, filepath: str, attributes: dict[str, str], jpeg_quality: int = 95
 ) -> None:
     """Save image with EXIF data from attributes."""
     try:
