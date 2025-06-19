@@ -7,6 +7,7 @@ import os
 import uuid
 from typing import Any
 
+from core.photo_types import PhotoAttributes
 from gui.quad_bounding_box import QuadBoundingBox
 
 
@@ -59,7 +60,7 @@ class BoundingBoxStorage:
                         box_entry["id"] = box.box_id
 
                     if hasattr(box, "attributes") and box.attributes:
-                        box_entry["attributes"] = box.attributes.copy()
+                        box_entry["attributes"] = box.attributes.to_dict()
 
                     box_data.append(box_entry)
             self.data[image_filename] = box_data
@@ -73,24 +74,27 @@ class BoundingBoxStorage:
         """Generate a unique box ID."""
         return str(uuid.uuid4())
 
-    def get_box_attributes(self, image_filename, box_id):
+    def get_box_attributes(self, image_filename: str, box_id: str) -> PhotoAttributes:
         """Get attributes for a specific box."""
         boxes = self.load_bounding_boxes(image_filename)
         for box_data in boxes:
             if box_data.get("id") == box_id:
-                return box_data.get("attributes", {})
-        return {}
+                attributes_dict = box_data.get("attributes", {})
+                return PhotoAttributes.from_dict(attributes_dict)
+        return PhotoAttributes()
 
     def update_box_attributes(
-        self, image_filename: str, box_id: str, attributes: dict[str, str]
+        self, image_filename: str, box_id: str, attributes: PhotoAttributes
     ) -> bool:
         """Update attributes for a specific box."""
         if image_filename not in self.data:
             return False
 
+        attributes_dict = attributes.to_dict()
+
         for box_data in self.data[image_filename]:
             if box_data.get("id") == box_id:
-                box_data["attributes"] = attributes.copy()
+                box_data["attributes"] = attributes_dict
                 self.save_data()
                 return True
         return False

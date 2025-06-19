@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, 
 import core.geometry as geometry
 import photo_detection.inscribed_rectangle as inscribed_rectangle
 import photo_detection.refine_bounds as refine_bounds
+from core.photo_types import PhotoAttributes
 from core.settings import AppSettings
 from gui.quad_bounding_box import QuadBoundingBox
 
@@ -26,8 +27,8 @@ class ImageView(QGraphicsView):
     boxes_changed = pyqtSignal()
     # Signal emitted when a box is selected
     box_selected = pyqtSignal(
-        str, dict, list
-    )  # Emits (box_id, attributes, coordinates)
+        str, object, list
+    )  # Emits (box_id, PhotoAttributes, coordinates)
     # Signal emitted when no box is selected
     box_deselected = pyqtSignal()
     # Signal emitted when mouse moves over image
@@ -315,7 +316,7 @@ class ImageView(QGraphicsView):
         """Get the currently selected box."""
         return self.selected_box
 
-    def update_box_attributes(self, box_id, attributes):
+    def update_box_attributes(self, box_id: str, attributes: PhotoAttributes):
         """Update attributes for a specific box."""
         for box in self.bounding_boxes:
             if isinstance(box, QuadBoundingBox) and box.box_id == box_id:

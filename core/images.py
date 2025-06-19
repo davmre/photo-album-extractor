@@ -13,6 +13,7 @@ from PIL import Image
 
 import core.photo_types as photo_types
 from core import geometry
+from core.photo_types import PhotoAttributes
 
 # Semantic type aliases
 PILImage = PIL.Image.Image  # PIL/Pillow images
@@ -73,7 +74,7 @@ def save_cropped_images(
     crop_data: list[photo_types.QuadArray],
     output_dir: str,
     base_name: str = "photo",
-    attributes_list: Optional[list[dict[str, str]]] = None,
+    attributes_list: Optional[list[PhotoAttributes]] = None,
 ) -> list[str]:
     """Save multiple cropped images to the specified directory.
 
@@ -83,7 +84,7 @@ def save_cropped_images(
             a list of four `(x, y)` corner points in relative coordinates.
         output_dir: Directory to save images
         base_name: Base name for files
-        attributes_list: List of attribute dictionaries (one per crop)
+        attributes_list: List of PhotoAttributes objects (one per crop)
     """
     saved_files = []
     img_width, img_height = image.size
@@ -95,9 +96,9 @@ def save_cropped_images(
         cropped = None
 
         # Get attributes for this crop if available
-        attributes = {}
-        if attributes_list and i - 1 < len(attributes_list):
-            attributes = attributes_list[i - 1] or {}
+        attributes = PhotoAttributes()
+        if attributes_list and i < len(attributes_list):
+            attributes = attributes_list[i] or PhotoAttributes()
 
         # Convert relative coordinates to absolute pixel coordinates for quadrilateral
         cropped = extract_perspective_image(image, crop_rect)
@@ -128,7 +129,7 @@ def save_cropped_images(
 
 
 def save_image_with_exif(
-    image: PILImage, filepath: str, attributes: dict[str, str], jpeg_quality: int = 95
+    image: PILImage, filepath: str, attributes: PhotoAttributes, jpeg_quality: int = 95
 ) -> None:
     """Save image with EXIF data from attributes."""
     try:
@@ -136,12 +137,10 @@ def save_image_with_exif(
         exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
 
         # Add date/time if available
-        if "date_time" in attributes and attributes["date_time"]:
+        if attributes.date_time:
             try:
                 # Parse ISO date string and convert to EXIF format
-                dt = datetime.fromisoformat(
-                    attributes["date_time"].replace("Z", "+00:00")
-                )
+                dt = datetime.fromisoformat(attributes.date_time.replace("Z", "+00:00"))
                 exif_datetime = dt.strftime("%Y:%m:%d %H:%M:%S")
 
                 # Set multiple date fields for maximum compatibility
@@ -149,11 +148,11 @@ def save_image_with_exif(
                 exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = exif_datetime
                 exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = exif_datetime
             except (ValueError, AttributeError) as e:
-                print(f"Warning: Could not parse date '{attributes['date_time']}': {e}")
+                print(f"Warning: Could not parse date '{attributes.date_time}': {e}")
 
         # Add comments if available
-        if "comments" in attributes and attributes["comments"]:
-            comments = attributes["comments"][:65535]  # EXIF comment limit
+        if attributes.comments:
+            comments = attributes.comments[:65535]  # EXIF comment limit
             # Use UserComment for better unicode support
             exif_dict["Exif"][piexif.ExifIFD.UserComment] = comments.encode("utf-8")
             # Also set ImageDescription for wider compatibility

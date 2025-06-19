@@ -59,9 +59,9 @@ class TestMainWindowWorkflow:
         # Should load stored boxes.
         assert len(app.image_view.bounding_boxes) == 3
         attributes = [box.get_attributes() for box in app.image_view.bounding_boxes]
-        read_date = (attributes[0]["date_time"]) == "1985-06-20"
+        read_date = attributes[0].date_time == "1985-06-20"
         read_comments = (
-            (attributes[0]["comments"]) == "Birthday party - Sarah blowing out candles"
+            attributes[0].comments == "Birthday party - Sarah blowing out candles"
         )
         assert read_date
         assert read_comments

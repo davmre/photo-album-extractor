@@ -8,6 +8,7 @@ to provide clear interfaces and better type safety.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, NewType, Protocol, Union
 
 import numpy as np
@@ -48,6 +49,31 @@ BoundingBoxFloatPoints = Sequence[tuple[float, float]]
 BoundingBoxQPointF = list[QPointF]
 
 BoundingBoxAny = Union[BoundingBoxFloatPoints, BoundingBoxQPointF, QuadArray]
+
+
+# =============================================================================
+# Photo Attributes
+# =============================================================================
+
+
+@dataclass
+class PhotoAttributes:
+    """Attributes associated with a photo bounding box."""
+
+    date_time: str = ""
+    comments: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, str]) -> PhotoAttributes:
+        return cls(
+            date_time=data.get("date_time", ""), comments=data.get("comments", "")
+        )
+
+    def to_dict(self) -> dict[str, str]:
+        return {"date_time": self.date_time, "comments": self.comments}
+
+    def __bool__(self) -> bool:
+        return bool(self.date_time or self.comments)
 
 
 def bounding_box_as_array(corner_points: BoundingBoxAny) -> QuadArray:

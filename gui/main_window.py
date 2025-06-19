@@ -25,13 +25,14 @@ from PyQt6.QtWidgets import (
 from core import images
 from core.bounding_box_storage import BoundingBoxStorage
 from core.errors import AppError
+from core.photo_types import PhotoAttributes
 from core.settings import AppSettings
 from gui.attributes_sidebar import AttributesSidebar
 from gui.directory_sidebar import DirectoryImageList
 from gui.image_view import ImageView
 from gui.quad_bounding_box import QuadBoundingBox
 from gui.settings_dialog import SettingsDialog
-from photo_detection.detection_strategies import configure_detection_strategy
+from photo_detection.detection_strategies import configure_detection_strategy, DETECTION_STRATEGIES
 
 
 class PhotoExtractorApp(QMainWindow):
@@ -326,7 +327,7 @@ class PhotoExtractorApp(QMainWindow):
         """Clear all bounding boxes."""
         self.image_view.clear_boxes()
 
-    def on_box_selected(self, box_id, attributes, coordinates):
+    def on_box_selected(self, box_id: str, attributes: PhotoAttributes, coordinates):
         """Handle box selection from ImageView."""
         self.attributes_sidebar.show_attributes(box_id, attributes)
         self.attributes_sidebar.update_coordinates(coordinates)
@@ -335,7 +336,7 @@ class PhotoExtractorApp(QMainWindow):
         """Handle box deselection from ImageView."""
         self.attributes_sidebar.show_no_selection()
 
-    def on_attributes_changed(self, box_id, attributes):
+    def on_attributes_changed(self, box_id: str, attributes: PhotoAttributes):
         """Handle attribute changes from AttributesSidebar."""
         # Update the box attributes
         self.image_view.update_box_attributes(box_id, attributes)

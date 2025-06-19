@@ -15,13 +15,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.photo_types import PhotoAttributes
 from gui.magnifier_widget import MagnifierWidget
 
 
 class AttributesSidebar(QWidget):
     """Sidebar widget for editing bounding box attributes."""
 
-    attributes_changed = pyqtSignal(str, dict)  # Emits (box_id, attributes)
+    attributes_changed = pyqtSignal(str, PhotoAttributes)  # Emits (box_id, attributes)
     coordinates_changed = pyqtSignal(str, list)  # Emits (box_id, coordinates)
 
     def __init__(self):
@@ -163,10 +164,11 @@ class AttributesSidebar(QWidget):
             scroll_area.hide()
         self.no_selection_label.show()
 
-    def show_attributes(self, box_id, attributes):
+    def show_attributes(self, box_id: str, attributes: PhotoAttributes):
         """Show attributes for the selected box."""
         self.updating_ui = True
         self.current_box_id = box_id
+        self._current_attributes = attributes
 
         # Hide no selection label and show attributes
         self.no_selection_label.hide()
@@ -175,7 +177,7 @@ class AttributesSidebar(QWidget):
             scroll_area.show()
 
         # Update datetime
-        datetime_str = attributes.get("date_time", "")
+        datetime_str = attributes.date_time
         if datetime_str:
             try:
                 dt = QDateTime.fromString(datetime_str, Qt.DateFormat.ISODate)
@@ -189,8 +191,7 @@ class AttributesSidebar(QWidget):
             self.datetime_edit.setDateTime(QDateTime.currentDateTime())
 
         # Update comments
-        comments = attributes.get("comments", "")
-        self.comments_edit.setPlainText(comments)
+        self.comments_edit.setPlainText(attributes.comments)
 
         self.updating_ui = False
 
@@ -211,35 +212,32 @@ class AttributesSidebar(QWidget):
         if self.current_box_id:
             self.emit_attributes_changed("date_time", "")
 
-    def emit_attributes_changed(self, key, value):
+    def emit_attributes_changed(self, key: str, value: str):
         """Emit attribute change with current box ID."""
         if self.current_box_id:
-            # Get current attributes and update the specific key
-            current_attrs = {}
+            # Update current attributes
             if hasattr(self, "_current_attributes"):
-                current_attrs = self._current_attributes.copy()
-            current_attrs[key] = value
-            self._current_attributes = current_attrs
-            self.attributes_changed.emit(self.current_box_id, current_attrs)
+                attrs = self._current_attributes
+            else:
+                attrs = PhotoAttributes()
 
-    def get_current_attributes(self):
+            # Set the specific attribute
+            setattr(attrs, key, value)
+            self._current_attributes = attrs
+            self.attributes_changed.emit(self.current_box_id, attrs)
+
+    def get_current_attributes(self) -> PhotoAttributes:
         """Get the current attributes from the UI."""
         if not self.current_box_id:
-            return {}
-
-        attributes = {}
+            return PhotoAttributes()
 
         # Get datetime
         dt_string = self.datetime_edit.dateTime().toString(Qt.DateFormat.ISODate)
-        if dt_string:
-            attributes["date_time"] = dt_string
 
         # Get comments
         comments = self.comments_edit.toPlainText().strip()
-        if comments:
-            attributes["comments"] = comments
 
-        return attributes
+        return PhotoAttributes(date_time=dt_string, comments=comments)
 
     def on_coordinate_changed(self, corner_index, coord_type, value):
         """Handle coordinate changes."""

@@ -4,7 +4,7 @@ import logging
 import os
 import pathlib
 import sys
-from typing import Any, Callable, Union
+from typing import Any, Callable
 
 import cv2
 import numpy as np

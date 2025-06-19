@@ -3,6 +3,7 @@ Quadrilateral bounding box widget for arbitrary four-sided photo selection.
 """
 
 import uuid
+from typing import Optional
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QPen, QPolygonF
@@ -10,6 +11,7 @@ from PyQt6.QtWidgets import QGraphicsItem, QGraphicsObject, QGraphicsRectItem
 
 import core.photo_types as photo_types
 from core import geometry
+from core.photo_types import PhotoAttributes
 
 
 class QuadBoundingBox(QGraphicsObject):
@@ -23,7 +25,7 @@ class QuadBoundingBox(QGraphicsObject):
         corners: photo_types.BoundingBoxAny,
         parent=None,
         box_id=None,
-        attributes=None,
+        attributes: Optional[PhotoAttributes] = None,
     ):
         super().__init__(parent)
 
@@ -32,7 +34,7 @@ class QuadBoundingBox(QGraphicsObject):
 
         # Unique identifier and attributes
         self.box_id = box_id or str(uuid.uuid4())
-        self.attributes = attributes or {}
+        self.attributes = attributes or PhotoAttributes()
         self._is_selected = False
 
         # Visual styling
@@ -184,21 +186,21 @@ class QuadBoundingBox(QGraphicsObject):
         """Return whether this bounding box is selected."""
         return self._is_selected
 
-    def get_attributes(self):
-        """Get the attributes dictionary."""
-        return self.attributes.copy()
+    def get_attributes(self) -> PhotoAttributes:
+        """Get the photo attributes."""
+        return self.attributes
 
-    def set_attributes(self, attributes):
-        """Set the attributes dictionary."""
-        self.attributes = attributes.copy()
+    def set_attributes(self, attributes: PhotoAttributes):
+        """Set the photo attributes."""
+        self.attributes = attributes
 
-    def get_attribute(self, key, default=None):
+    def get_attribute(self, key: str, default=None):
         """Get a specific attribute value."""
-        return self.attributes.get(key, default)
+        return getattr(self.attributes, key, default)
 
-    def set_attribute(self, key, value):
+    def set_attribute(self, key: str, value: str):
         """Set a specific attribute value."""
-        self.attributes[key] = value
+        setattr(self.attributes, key, value)
 
     def mousePressEvent(self, event):
         """Handle mouse press for selection."""
