@@ -14,8 +14,8 @@ from PyQt6.QtWidgets import (
 )
 
 from core.settings import AppSettings
-from image_processing.detection_strategies import DETECTION_STRATEGIES
-from image_processing.refine_bounds import REFINEMENT_STRATEGIES
+from photo_detection.detection_strategies import DETECTION_STRATEGIES
+from photo_detection.refine_bounds import REFINEMENT_STRATEGIES
 
 
 class SettingsDialog(QDialog):

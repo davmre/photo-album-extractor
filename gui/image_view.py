@@ -13,8 +13,8 @@ from PyQt6.QtGui import QPainter, QPixmap
 from PyQt6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QMenu
 
 import core.geometry as geometry
-import image_processing.inscribed_rectangle as inscribed_rectangle
-import image_processing.refine_bounds as refine_bounds
+import photo_detection.inscribed_rectangle as inscribed_rectangle
+import photo_detection.refine_bounds as refine_bounds
 from core.settings import AppSettings
 from gui.quad_bounding_box import QuadBoundingBox
 

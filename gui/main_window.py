@@ -31,7 +31,7 @@ from gui.directory_sidebar import DirectoryImageList
 from gui.image_view import ImageView
 from gui.quad_bounding_box import QuadBoundingBox
 from gui.settings_dialog import SettingsDialog
-from image_processing.detection_strategies import configure_detection_strategy
+from photo_detection.detection_strategies import configure_detection_strategy
 
 
 class PhotoExtractorApp(QMainWindow):

@@ -85,7 +85,7 @@ you have no other means of persisting memory from session to session.
    - `image_view.py`: Custom QGraphicsView handling image display and bounding box interactions
    - `quad_bounding_box.py`: Quadrilateral (4-point) bounding box implementation - NOT restricted to rectangles
 
-3. **Image Processing** (`image_processing/`): Core algorithms
+3. **Photo detection** (`photo_detection/`): Methods to detect and refine photo bounding boxes
    - `detection_strategies.py`: Multiple photo detection strategies including Gemini AI
    - `refine_bounds.py`: Multiple refinement algorithms (original, multiscale, strips-based)
 
