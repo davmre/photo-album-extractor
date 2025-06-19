@@ -60,6 +60,24 @@ class NotFeasibleException(Exception):
     pass
 
 
+def get_real_roots_of_quadratic_equation(A, B, C):
+    """Computes real values t where `A * t**2 + B * t + C = 0`."""
+    if A == 0:  # We actually just have a linear equation Bt + C = 0.
+        if B == 0:
+            return []
+        return [-C / B]
+    discriminant = B**2 - 4 * A * C
+    if discriminant < 0:  # No real roots.
+        return []
+    elif discriminant == 0:  # One real root.
+        return [-B / (2 * A)]
+    else:  # Two real roots
+        return [
+            (-B + np.sqrt(discriminant)) / (2 * A),
+            (-B - np.sqrt(discriminant)) / (2 * A),
+        ]
+
+
 class InscriptionGeometry:
     """
   Assume we are given a quadrilateral with four points in counterclockwise
@@ -231,7 +249,7 @@ class InscriptionGeometry:
         self.G = -np.dot(self.cp_vec, self.ba_vec)
         self.K = cross2d(self.cp_vec, self.dc_vec)
 
-    def get_t2_cutpoints_from_third_edge_bounds(self):
+    def get_t2_cutpoints_from_third_edge_bounds(self) -> list[float]:
         cutpoints = []
         if self.contact_edge1_idx != self.contact_edge2_idx:
             if self.G != 0:
@@ -248,42 +266,39 @@ class InscriptionGeometry:
                 cutpoints.append(t2_at_t3_is_one)
         return cutpoints
 
-    def get_t2_cutpoints_from_edge_halfplane_constraints(self):
+    def get_t2_cutpoints_from_edge_halfplane_constraints(self) -> list[float]:
         cutpoints = []
-        for X, Y in self.edges:
+        for X, Y in self.edges:  # Each edge contributes a halfplane constraint to p4.
             edge = Y - X
-            A_i = cross2d(
-                edge, self.pt_a - X
-            )  # contact_point_1 - X + a - contact_point_1)
+
+            A_i = cross2d(edge, self.pt_a - X)
             B_i = cross2d(edge, self.ba_vec)
             C_i = -np.dot(edge, self.ap_vec)
             D_i = -np.dot(edge, self.ba_vec)
 
+            # The halfplane constraint for each edge $i$ looks like
+            # $h(t2) = (A_i + B_i t2)(self.D + self.E t2) - self.K (C_i + D_i t2) <= 0$.
+            # We can rearrange this as a quadratic equation in t2, of the form
+            # (quad_A) t2**2 + (quad_B) t2 + quad_C with the following coefficients:
             quad_A = B_i * self.E
-            if quad_A == 0:
-                continue
-
             quad_B = B_i * self.D + A_i * self.E + self.K * D_i
             quad_C = A_i * self.D + self.K * C_i
-            discriminant = quad_B**2 - 4 * quad_A * quad_C
-            if discriminant <= 0:
-                continue
-            soln1 = (-quad_B + np.sqrt(discriminant)) / (2 * quad_A)
-            soln2 = (-quad_B - np.sqrt(discriminant)) / (2 * quad_A)
 
-            cutpoints.append(soln1)
-            cutpoints.append(soln2)
-
-            # print("edge", X, Y, "quad_A", quad_A, "soln1", soln1, "soln2", soln2)
+            # The sign of this quantity corresponds to which side of edge $i$ our
+            # point p4 lies. So we solve for the zeros, as the locations where the
+            # sign may change.
+            cutpoints += get_real_roots_of_quadratic_equation(quad_A, quad_B, quad_C)
 
         return cutpoints
 
     def get_t2_cutpoints(self):
         """Compute points where t2 may switch between feasible and infeasible."""
-        cutpoints = [0.0, 1.0]
+        cutpoints = []
         cutpoints += self.get_t2_cutpoints_from_third_edge_bounds()
         cutpoints += self.get_t2_cutpoints_from_edge_halfplane_constraints()
-        cutpoints = sorted([float(x) for x in cutpoints if x >= 0 and x <= 1])
+        cutpoints = (
+            [0.0] + sorted({float(x) for x in cutpoints if x >= 0 and x <= 1}) + [1.0]
+        )
         return cutpoints
 
     def get_feasible_t2s(self, sorted_cutpoints=None, eps=1e-10):
@@ -302,7 +317,9 @@ class InscriptionGeometry:
                 continue
             t3 = (self.F + self.G * test_t2) / t3_denominator
 
-            # print(f"t3 at t2={test_t2}: {t3} from num {(self.F + self.G * test_t2)} denom {t3_denominator}")
+            # print(
+            #    f"t3 at t2={test_t2}: {t3} from num {(self.F + self.G * test_t2)} denom {t3_denominator}"
+            # )
             if t3 < 0 or t3 > 1:
                 continue
 
@@ -314,18 +331,18 @@ class InscriptionGeometry:
                 + (contact_point_2 - self.contact_point_1)
                 + (contact_point_3 - self.contact_point_1)
             )
-            # print(f"candidate point4 {point4}")
+
             is_valid = True
             for X, Y in self.edges:
                 edge = Y - X
                 cond = cross2d(edge, point4 - X)
 
                 # equiv_cond = A_i + B_i * test_t2 - alpha * (C_i + D_i * test_t2)
-                # cond_h = (A_i + B_i * test_t2) * (D + E * test_t2) + K * (C_i + D_i * test_t2)
-                # DEt = D + E * test_t2
+                # cond_h = (A_i + B_i * test_t2) * (self.D + self.E * test_t2) + self.K * (C_i + D_i * test_t2)
+                # DEt = self.D + self.E * test_t2
                 # print(f"cond {cond} equiv {equiv_cond} cond_h {cond_h} DEt {DEt} cond_h_equiv {cond_h / DEt}")
 
-                # print(f"edge {X} {Y} tests {edge} x {point4 - X} = {cond}")
+                # print(f"edge {X} {Y} tests {edge} x {point4} - X = {cond}")
                 if cond < 0:
                     is_valid = False
                     break
@@ -342,16 +359,7 @@ class InscriptionGeometry:
         quad_A = self.C * self.E
         quad_B = 2 * self.C * self.D
         quad_C = 2 * self.B * self.D - self.E * self.A
-        discriminant = quad_B**2 - 4 * quad_A * quad_C
-
-        if discriminant <= 0:
-            return []
-        if quad_A == 0:
-            return []
-
-        soln1 = (-quad_B + np.sqrt(discriminant)) / (2 * quad_A)
-        soln2 = (-quad_B - np.sqrt(discriminant)) / (2 * quad_A)
-        return [soln1, soln2]
+        return get_real_roots_of_quadratic_equation(quad_A, quad_B, quad_C)
 
     def rect_from_t2(self, t2, eps=1e-8):
         contact_point_2 = (1 - t2) * self.pt_a + t2 * self.pt_b
@@ -360,9 +368,19 @@ class InscriptionGeometry:
             # perpendicular direction is not defined
             raise NotFeasibleException()
         # TODO: handle case where denominator is zero
-        t3 = -(np.dot(rect_side1, self.cp_vec)) / (
-            np.dot(rect_side1, self.dc_vec)
-        )  # + eps)
+        t3_denom = np.dot(rect_side1, self.dc_vec)
+        if t3_denom == 0:
+            # Return the trivial rectangle in this degenerate case. See the comment in
+            # `inscribed_area` about the geometry of this situation.
+            return np.array(
+                [
+                    self.contact_point_1,
+                    self.contact_point_1,
+                    self.contact_point_1,
+                    self.contact_point_1,
+                ]
+            )
+        t3 = -(np.dot(rect_side1, self.cp_vec)) / t3_denom
         contact_point_3 = (1 - t3) * self.pt_c + t3 * self.pt_d
         rect_side2 = contact_point_3 - self.contact_point_1
         point4 = self.contact_point_1 + rect_side1 + rect_side2
@@ -377,13 +395,30 @@ class InscriptionGeometry:
         side1_norm2 = np.linalg.norm(rect_side1) ** 2
         if side1_norm2 < 1e-8:
             return 0.0
-        # print("side1", rect_side1)
-        # print("cp_vec", cp_vec)
-        # print("dc_vec", dc_vec)
-        # TODO handle case where alpha denominator is zero
-        alpha = (self.K) / np.dot(rect_side1, self.dc_vec)  # + eps)
-        # print("alpha", alpha)
 
+        # If (p2 - p1) is perpendicular to CD (`alpha_denom == 0` below), the third
+        # contact point (and thus the inscribed area) is undetermined. For example, in
+        # the unit square with pivot point p1 along the bottom edge,
+        #
+        # C-------B
+        # |       |
+        # |       |
+        # |       |
+        # D-------A (p2)
+        # (p1)
+        #
+        # this edge case arises when t1 = 0.0 (so p1 == D), t2 = 0 (so p2 == A),
+        # and so the normal to p2 - p1 is the entire segment CD. The maximum-area choice
+        # would be to take the far vertex p3 == C as the third contact point. However,
+        # we choose not to indulge this degenerate setup and so instead return an area
+        # of zero (implicitly taking p3 == D, which is also valid) in this case.
+        # This encourages the contact-point setup where p3 contacts along the top
+        # edge rather than the left edge, which recovers the same solution without
+        # the degenerate math.
+        alpha_denom = np.dot(rect_side1, self.dc_vec)
+        if alpha_denom == 0:
+            return 0.0
+        alpha = (self.K) / alpha_denom
         side2_norm2_alpha = alpha**2 * side1_norm2
         return np.sqrt(side1_norm2 * side2_norm2_alpha)
 
@@ -487,7 +522,8 @@ def largest_inscribed_rectangle(
     corner_points: BoundingBoxAny, num_eval_points=11
 ) -> tuple[QuadArray, float]:
     corner_points = bounding_box_as_array(corner_points)
-    corner_points = geometry.sort_clockwise(corner_points)
+    corner_points = geometry.sort_counterclockwise(corner_points)
+    print("corner points", corner_points)
 
     best_area = -1.0
     best_contacts = (None, None, None)
@@ -518,4 +554,7 @@ def largest_inscribed_rectangle(
     # print("trying with best", best_i, best_j, best_k, best_t1)
     t2, _ = best_g.get_optimal_t2_and_area()
     best_rect = best_g.rect_from_t2(t2=t2)
+    # print("best rect", best_rect)
+    # print("best area", best_area)
+    # print("best t2", t2)
     return best_rect, best_area
