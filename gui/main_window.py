@@ -381,14 +381,6 @@ class PhotoExtractorApp(QMainWindow):
                 )
                 return
 
-        # Get image dimensions
-        if not self.image_view.image_item:
-            return
-
-        pixmap = self.image_view.image_item.pixmap()
-        image_width = pixmap.width()
-        image_height = pixmap.height()
-
         # Clear existing boxes first
         self.image_view.clear_boxes()
 
@@ -409,17 +401,9 @@ class PhotoExtractorApp(QMainWindow):
         try:
             detected_quads = selected_strategy.detect_photos(self.current_image)
 
-            # Convert relative coordinates to scene coordinates and create boxes
+            # Create bounding boxes
             for quad_corners in detected_quads:
-                # Convert relative coordinates (0-1) to scene coordinates
-                scene_corners = []
-                for corner in quad_corners:
-                    scene_x = corner.x() * image_width
-                    scene_y = corner.y() * image_height
-                    scene_corners.append(QPointF(scene_x, scene_y))
-
-                # Create the bounding box
-                box = QuadBoundingBox(scene_corners)
+                box = QuadBoundingBox(quad_corners)
                 self.image_view.add_bounding_box_object(box)
 
             self.status_bar.showMessage(

@@ -18,7 +18,13 @@ class QuadBoundingBox(QGraphicsObject):
     changed = pyqtSignal()
     selected_changed = pyqtSignal(str)  # Emits box_id when selection changes
 
-    def __init__(self, corners, parent=None, box_id=None, attributes=None):
+    def __init__(
+        self,
+        corners: photo_types.BoundingBoxAny,
+        parent=None,
+        box_id=None,
+        attributes=None,
+    ):
         super().__init__(parent)
 
         # Store the four corner points

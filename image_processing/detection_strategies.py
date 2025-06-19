@@ -9,8 +9,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Union
 
 import google.generativeai as genai  # type: ignore
+import numpy as np
 import PIL.Image
-from PyQt6.QtCore import QPointF
+
+from photo_types import QuadArray
 
 
 class DetectionStrategy(ABC):
@@ -29,7 +31,7 @@ class DetectionStrategy(ABC):
         pass
 
     @abstractmethod
-    def detect_photos(self, image: PIL.Image.Image) -> list[list[QPointF]]:
+    def detect_photos(self, image: PIL.Image.Image) -> list[QuadArray]:
         """
         Detect photos in an image and return their bounding quadrilaterals.
 
@@ -90,25 +92,17 @@ class GeminiDetectionStrategy(DetectionStrategy):
         json_text = json_text.strip()
         return json.loads(json_text)
 
-    def _corner_points_from_bbox(
-        self, box_2d: list[float]
-    ) -> list[tuple[float, float]]:
+    def _corner_points_from_bbox(self, box_2d: list[float]) -> QuadArray:
         y_min, x_min, y_max, x_max = box_2d
-        return [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
+        return np.array(
+            [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
+        )
 
-    def _unnormalize_coords(
-        self,
-        coords: list[tuple[float, float]],
-        normalized_width: int = 1000,
-        normalized_height: int = 1000,
-    ) -> list[QPointF]:
-        xscale = 1.0 / normalized_width
-        yscale = 1.0 / normalized_height
-        return [QPointF(p[0] * xscale, p[1] * yscale) for p in coords]
-
-    def detect_photos(self, image: PIL.Image.Image) -> list[list[QPointF]]:
+    def detect_photos(self, image: PIL.Image.Image) -> list[QuadArray]:
         if not image or not self._model:
             return []
+
+        image_width, image_height = image.width, image.height
 
         try:
             # If the image is very large, no need to send the whole thing.
@@ -136,14 +130,18 @@ JSON response, no additional text."""
                 print(result)
 
                 rectangles = []
-                bboxes = {}
                 for entry in result:
                     if "box_2d" in entry:
                         rectangles.append(
                             self._corner_points_from_bbox(entry["box_2d"])
                         )
                 print("Parsed rectangles", rectangles)
-                image_coords = [self._unnormalize_coords(r) for r in rectangles]
+
+                unnormalize_coords = np.array(
+                    [image_width / 1000.0, image_height / 1000.0]
+                )
+
+                image_coords = [unnormalize_coords * r for r in rectangles]
                 print("As image coords", image_coords)
                 return image_coords
 
