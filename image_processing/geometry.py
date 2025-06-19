@@ -328,7 +328,8 @@ def minimum_bounding_rectangle(points: BoundingBoxAny) -> tuple[QuadArray, float
 
 
 def clockwise_corner_permutation(rect: QuadArray) -> ndarray:
-    # rect: array of shape [4, 2]
+    # Sort corners clockwise in *image coordinates* (y increases downwards).
+    # Equivalent to counterclockwise in Cartesian coordinates.
     centroid = np.sum(rect, axis=0) / 4.0
     delta = rect - centroid
     angles = np.atan2(delta[:, 1], delta[:, 0])

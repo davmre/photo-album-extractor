@@ -124,7 +124,7 @@ class TestLargestInscribedRectangle:
         )
 
     def test_irregular_quadrilateral(self):
-        quad_vertices = geometry.sort_counterclockwise(
+        quad_vertices = geometry.sort_clockwise(
             np.array([(-5.0, -5.0), (-4.0, 5.0), (5.0, 4.0), (2.0, -4.0)])
         )
         rect, area = inscribed_rectangle.largest_inscribed_rectangle(quad_vertices)

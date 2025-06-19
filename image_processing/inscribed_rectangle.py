@@ -196,7 +196,7 @@ class InscriptionGeometry:
   t2. The optimal t2 will thus lie either at a critical point of the area
   function *or* at a boundary point of the feasible region. Thus to find the
   optimal t2, we check all of these possibilities and simply choose the one with
-  the largest area. 
+  the largest area.
 
   """
 
@@ -208,13 +208,13 @@ class InscriptionGeometry:
         contact_edge3_idx,
         t1,
     ):
+        # Note that counterclockwise in Cartesian coordinates (used here) is equivalent
+        # to clockwise in image coordinates (used elsewhere in this codebase). We
+        # require this ordering convention so that the normal vectors to edges
+        # always point inwards, but we don't explicitly check the condition here
+        # because we assume it is enforced by an outer-loop optimizer.
         quad = np.array(quad_counterclockwise)
         self.quad = quad
-        # Ensure that points are in counterclockwise order so that the normals point
-        # inwards.
-        # quad_counterclockwise = sort_counterclockwise(quad)
-        # if np.sum(np.abs(quad - quad_counterclockwise)) > 1e-6:
-        #  raise ValueError("quad points not in clockwise order")
 
         x1, x2, x3, x4 = [np.asarray(p) for p in quad]
         self.edges = [(x1, x2), (x2, x3), (x3, x4), (x4, x1)]
@@ -445,6 +445,7 @@ class InscriptionGeometry:
         return candidate_t2s[best_t2_idx], areas[best_t2_idx]
 
     def plot(self, t2=None, ax=None):
+        """Plots the geometry of this setup."""
         from matplotlib import pylab as plt
 
         if ax is None:
@@ -522,8 +523,8 @@ def largest_inscribed_rectangle(
     corner_points: BoundingBoxAny, num_eval_points=11
 ) -> tuple[QuadArray, float]:
     corner_points = bounding_box_as_array(corner_points)
-    corner_points = geometry.sort_counterclockwise(corner_points)
-    print("corner points", corner_points)
+    # Note that
+    corner_points = geometry.sort_clockwise(corner_points)
 
     best_area = -1.0
     best_contacts = (None, None, None)
