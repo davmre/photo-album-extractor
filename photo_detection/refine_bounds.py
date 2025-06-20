@@ -25,7 +25,6 @@ from core.photo_types import (
 )
 from PIL import Image
 
-logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 LOGGER = logging.getLogger("logger")
 
 # Registry of all available strategies

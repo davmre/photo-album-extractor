@@ -4,6 +4,8 @@ Detection command implementation for CLI.
 
 from __future__ import annotations
 
+import logging
+
 import PIL.Image
 
 from cli.utils import get_image_files
@@ -14,6 +16,9 @@ from photo_detection.detection_strategies import configure_detection_strategy
 
 def cmd_detect(paths: list[str], force: bool = False) -> int:
     """Run photo detection on specified images."""
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting detection on {len(paths)} path(s)")
+
     image_files = get_image_files(paths)
     if image_files is None:
         return 1
@@ -26,7 +31,7 @@ def cmd_detect(paths: list[str], force: bool = False) -> int:
     try:
         settings = AppSettings.load_from_file()
         detection_strategy = configure_detection_strategy(settings)
-        print(f"Using detection strategy: {detection_strategy.name}")
+        logger.info(f"Configured detection strategy: {detection_strategy.name}")
     except Exception as e:
         print(f"Error configuring detection strategy: {e}")
         return 1
@@ -52,6 +57,7 @@ def cmd_detect(paths: list[str], force: bool = False) -> int:
 
         # Load and process image
         try:
+            logger.info(f"Processing image: {image_path}")
             print(f"Processing {image_path}...")
             with PIL.Image.open(image_path) as image:
                 # Run detection

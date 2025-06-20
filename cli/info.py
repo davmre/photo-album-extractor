@@ -4,12 +4,17 @@ Info command implementation for CLI.
 
 from __future__ import annotations
 
+import logging
+
 from cli.utils import get_image_files
 from core.bounding_box_storage import BoundingBoxStorage
 
 
 def cmd_info(paths: list[str]) -> int:
     """Show bounding box information for specified images."""
+    logger = logging.getLogger(__name__)
+    logger.info(f"Getting info for {len(paths)} path(s)")
+
     image_files = get_image_files(paths)
     if image_files is None:
         return 1

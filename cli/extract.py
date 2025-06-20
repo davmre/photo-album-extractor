@@ -4,6 +4,7 @@ Extract command implementation for CLI.
 
 from __future__ import annotations
 
+import logging
 import os
 
 import PIL.Image
@@ -15,6 +16,9 @@ from core.images import save_cropped_images
 
 def cmd_extract(paths: list[str], output_dir: str, base_name: str | None) -> int:
     """Extract photos from images using stored bounding box data."""
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting extraction for {len(paths)} path(s) to {output_dir}")
+
     image_files = get_image_files(paths)
     if image_files is None:
         return 1
