@@ -13,7 +13,7 @@ import numpy as np
 import PIL.Image
 
 from core.errors import AppError
-from core.photo_types import QuadArray
+from core.photo_types import BoundingBoxData, QuadArray
 from core.settings import AppSettings
 
 
@@ -33,7 +33,7 @@ class DetectionStrategy(ABC):
         pass
 
     @abstractmethod
-    def detect_photos(self, image: PIL.Image.Image) -> list[QuadArray]:
+    def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBoxData]:
         """
         Detect photos in an image and return their bounding quadrilaterals.
 
@@ -100,7 +100,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
             [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
         )
 
-    def detect_photos(self, image: PIL.Image.Image) -> list[QuadArray]:
+    def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBoxData]:
         if not image or not self._model:
             return []
 
@@ -145,7 +145,9 @@ JSON response, no additional text."""
 
                 image_coords = [unnormalize_coords * r for r in rectangles]
                 print("As image coords", image_coords)
-                return image_coords
+                return [
+                    BoundingBoxData.new(corners=corners) for corners in image_coords
+                ]
 
             except json.JSONDecodeError as e:
                 print(f"Failed to parse Gemini JSON response: {e}")

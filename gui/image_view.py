@@ -9,13 +9,20 @@ import os
 import numpy as np
 from PIL import Image, ImageQt
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
-from PyQt6.QtGui import QPainter, QPixmap
+from PyQt6.QtGui import (
+    QEnterEvent,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPixmap,
+    QWheelEvent,
+)
 from PyQt6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QMenu
 
 import core.geometry as geometry
 import photo_detection.inscribed_rectangle as inscribed_rectangle
 import photo_detection.refine_bounds as refine_bounds
-from core.photo_types import PhotoAttributes
+from core.photo_types import BoundingBoxData, PhotoAttributes
 from core.settings import AppSettings
 from gui.quad_bounding_box import QuadBoundingBox
 
@@ -26,9 +33,7 @@ class ImageView(QGraphicsView):
     # Signal emitted when boxes are added or removed
     boxes_changed = pyqtSignal()
     # Signal emitted when a box is selected
-    box_selected = pyqtSignal(
-        str, object, list
-    )  # Emits (box_id, PhotoAttributes, coordinates)
+    box_selected = pyqtSignal(BoundingBoxData)  # Emits (box_id, BoundingBoxData)
     # Signal emitted when no box is selected
     box_deselected = pyqtSignal()
     # Signal emitted when mouse moves over image
@@ -109,11 +114,12 @@ class ImageView(QGraphicsView):
         # Emit signal for magnifier
         self.image_updated.emit()
 
-    def add_bounding_box_object(self, box):
+    def add_bounding_box(self, box_data: BoundingBoxData):
         """Add a pre-created bounding box object to the scene."""
         if self.image_item is None:
             return None
 
+        box = QuadBoundingBox(box_data=box_data)
         self._scene.addItem(box)
 
         # Add handles to scene
@@ -125,9 +131,7 @@ class ImageView(QGraphicsView):
 
         # Connect signals
         box.changed.connect(self.box_changed)
-        if isinstance(box, QuadBoundingBox):
-            # Connect selection signal
-            box.selected_changed.connect(self.on_box_selection_changed)
+        box.selected_changed.connect(self.on_box_selection_changed)
 
         # Emit signal that boxes changed
         self.boxes_changed.emit()
@@ -149,6 +153,7 @@ class ImageView(QGraphicsView):
 
             # Emit signal that boxes changed
             self.boxes_changed.emit()
+            self.image_updated.emit()
 
     def clear_boxes(self):
         """Remove all bounding boxes."""
@@ -159,18 +164,9 @@ class ImageView(QGraphicsView):
                 self.remove_bounding_box(box)
             # Note: remove_bounding_box already emits boxes_changed for each removal
 
-    def get_crop_corner_points_with_attributes(self):
-        """Get all bounding box crop data along with their attributes."""
-        corner_points = []
-        attributes_list = []
-
-        for box in self.bounding_boxes:
-            # Get corner points for quadrilateral box in proper extraction order
-            corners = box.get_ordered_corners_for_extraction()
-            corner_points.append(corners)
-            attributes_list.append(box.get_attributes())
-
-        return corner_points, attributes_list
+    def get_bounding_box_data_list(self) -> list[BoundingBoxData]:
+        """Get all bounding box data for extraction."""
+        return [box.get_bounding_box_data() for box in self.bounding_boxes]
 
     def show_context_menu(self, position):
         """Show context menu for adding/removing boxes."""
@@ -216,6 +212,8 @@ class ImageView(QGraphicsView):
 
     def image_as_numpy(self, format="rgb"):
         image = self._image_qt
+        if image is None:
+            raise ValueError("no image loaded!")
         width = image.width()
         height = image.height()
 
@@ -281,7 +279,7 @@ class ImageView(QGraphicsView):
             if isinstance(box, QuadBoundingBox):
                 self.refine_bounding_box(box)
 
-    def on_box_selection_changed(self, box_id):
+    def on_box_selection_changed(self, box_id: str):
         """Handle box selection changes."""
         # Find the box with this ID
         selected_box = None
@@ -298,10 +296,9 @@ class ImageView(QGraphicsView):
 
         # Emit appropriate signal
         if selected_box:
-            # Get coordinates in scene coordinates
-            corners = selected_box.get_corner_points()
-            coordinates = [[corner.x(), corner.y()] for corner in corners]
-            self.box_selected.emit(box_id, selected_box.get_attributes(), coordinates)
+            # Emit the complete bounding box data
+            bounding_box_data = selected_box.get_bounding_box_data()
+            self.box_selected.emit(bounding_box_data)
         else:
             self.box_deselected.emit()
 
@@ -316,37 +313,19 @@ class ImageView(QGraphicsView):
         """Get the currently selected box."""
         return self.selected_box
 
-    def update_box_attributes(self, box_id: str, attributes: PhotoAttributes):
-        """Update attributes for a specific box."""
+    def update_box_data(self, bounding_box_data: BoundingBoxData):
+        """Update complete bounding box data for a specific box."""
         for box in self.bounding_boxes:
-            if isinstance(box, QuadBoundingBox) and box.box_id == box_id:
-                box.set_attributes(attributes)
-                break
-
-    def update_box_coordinates(self, box_id, coordinates):
-        """Update coordinates for a specific box."""
-        for box in self.bounding_boxes:
-            if isinstance(box, QuadBoundingBox) and box.box_id == box_id:
-                # Convert coordinates to QPointF and set corners
-                from PyQt6.QtCore import QPointF
-
-                corner_points = [QPointF(coord[0], coord[1]) for coord in coordinates]
-                box.set_corners(corner_points)
-
+            if (
+                isinstance(box, QuadBoundingBox)
+                and box.box_id == bounding_box_data.box_id
+            ):
+                box.set_bounding_box_data(bounding_box_data)
                 # Update magnifier
                 self.image_updated.emit()
                 break
 
-    def get_bounding_box_corners(self):
-        """Get all bounding box corners for the magnifier overlay."""
-        all_corners = []
-        for box in self.bounding_boxes:
-            if isinstance(box, QuadBoundingBox):
-                corners = box.get_corner_points()  # Get world coordinates
-                all_corners.append(corners)
-        return all_corners
-
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press for starting box creation."""
         if event.button() == Qt.MouseButton.LeftButton:
             # Ensure ImageView has focus for keyboard events
@@ -366,7 +345,7 @@ class ImageView(QGraphicsView):
 
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event: QMouseEvent):
         """Handle mouse move for box creation and magnifier updates."""
         scene_pos = self.mapToScene(event.position().toPoint())
 
@@ -374,29 +353,30 @@ class ImageView(QGraphicsView):
         self.mouse_moved.emit(scene_pos)
 
         if self.is_dragging and self.drag_start_pos is not None:
-            # Remove temporary box if it exists
-            if self.temp_box:
-                self._scene.removeItem(self.temp_box)
-                self.temp_box = None
-
-            # Create temporary quadrilateral box for preview
             corners = [
                 self.drag_start_pos,
                 QPointF(scene_pos.x(), self.drag_start_pos.y()),
                 scene_pos,
                 QPointF(self.drag_start_pos.x(), scene_pos.y()),
             ]
-            self.temp_box = QuadBoundingBox(corners)
-            self._scene.addItem(self.temp_box)
+
+            # Create or update temporary box for preview.
+            if self.temp_box:
+                # self._scene.removeItem(self.temp_box)
+                # self.temp_box = None
+                self.temp_box.set_corners(corners)
+            else:
+                self.temp_box = QuadBoundingBox(BoundingBoxData.new(corners=corners))
+                self._scene.addItem(self.temp_box)
 
         super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release for finishing box creation."""
         if event.button() == Qt.MouseButton.LeftButton and self.is_dragging:
             scene_pos = self.mapToScene(event.position().toPoint())
 
-            # Remove temporary box
+            # Remove temporary box if it exists
             if self.temp_box:
                 self._scene.removeItem(self.temp_box)
                 self.temp_box = None
@@ -416,8 +396,8 @@ class ImageView(QGraphicsView):
                         QPointF(self.drag_start_pos.x(), scene_pos.y()),
                     ]
                     # Create new box with unique ID
-                    box = QuadBoundingBox(corners)
-                    self.add_bounding_box_object(box)
+                    box_data = BoundingBoxData.new(corners=corners)
+                    self.add_bounding_box(box_data)
 
             # Reset drag state
             self.is_dragging = False
@@ -428,7 +408,7 @@ class ImageView(QGraphicsView):
 
         super().mouseReleaseEvent(event)
 
-    def wheelEvent(self, event):
+    def wheelEvent(self, event: QWheelEvent):
         """Handle zoom with mouse wheel or trackpad."""
         # On macOS, distinguish between scroll and zoom gestures
         # If Ctrl/Cmd is held down, zoom; otherwise, scroll normally
@@ -444,7 +424,7 @@ class ImageView(QGraphicsView):
             # Normal scrolling behavior
             super().wheelEvent(event)
 
-    def enterEvent(self, event):
+    def enterEvent(self, event: QEnterEvent):
         """Handle mouse entering the viewport."""
         # Signal that cursor tracking should resume
         self.mouse_entered = True
@@ -457,7 +437,7 @@ class ImageView(QGraphicsView):
         self.mouse_entered = False
         super().leaveEvent(event)
 
-    def keyPressEvent(self, event):
+    def keyPressEvent(self, event: QKeyEvent):
         """Handle key press events."""
         if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
             # Delete the currently selected box

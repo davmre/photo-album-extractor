@@ -4,11 +4,9 @@ Persistent storage for bounding box data per directory.
 
 import json
 import os
-import uuid
 from typing import Any
 
-from core.photo_types import PhotoAttributes
-from gui.quad_bounding_box import QuadBoundingBox
+from core.photo_types import BoundingBoxData, PhotoAttributes
 
 
 class BoundingBoxStorage:
@@ -38,7 +36,7 @@ class BoundingBoxStorage:
             print(f"Warning: Could not save bounding box data to {self.data_file}")
 
     def save_bounding_boxes(
-        self, image_filename: str, bounding_boxes: list[QuadBoundingBox]
+        self, image_filename: str, bounding_boxes: list[BoundingBoxData]
     ) -> None:
         """Save bounding boxes for a specific image."""
         if not bounding_boxes:
@@ -46,55 +44,63 @@ class BoundingBoxStorage:
             self.data.pop(image_filename, None)
         else:
             # Convert bounding boxes to serializable format
-            box_data = []
-            for box in bounding_boxes:
-                if isinstance(box, QuadBoundingBox):
-                    corners = box.get_ordered_corners_for_extraction()
-                    corner_coords = [[corner[0], corner[1]] for corner in corners]
+            boxes_dicts = []
+            for bbox_data in bounding_boxes:
+                # Get unified bounding box data
+                corner_coords = [[corner[0], corner[1]] for corner in bbox_data.corners]
 
-                    # Build box data with attributes
-                    box_entry = {"type": "quad", "corners": corner_coords}
-
-                    # Add attributes if they exist
-                    if hasattr(box, "box_id") and box.box_id:
-                        box_entry["id"] = box.box_id
-
-                    if hasattr(box, "attributes") and box.attributes:
-                        box_entry["attributes"] = box.attributes.to_dict()
-
-                    box_data.append(box_entry)
-            self.data[image_filename] = box_data
+                # Build box data entry
+                box_entry = {
+                    "type": "quad",
+                    "corners": corner_coords,
+                    "attributes": bbox_data.attributes.to_dict(),
+                    "id": bbox_data.box_id,
+                }
+                boxes_dicts.append(box_entry)
+            self.data[image_filename] = boxes_dicts
         self.save_data()
 
-    def load_bounding_boxes(self, image_filename: str) -> list[dict[str, Any]]:
-        """Load bounding boxes for a specific image."""
-        return self.data.get(image_filename, [])
+    def load_bounding_boxes(self, image_filename: str) -> list[BoundingBoxData]:
+        """Load bounding box data with IDs for a specific image."""
+        boxes = self.data.get(image_filename, [])
+        result = []
 
-    def generate_box_id(self):
-        """Generate a unique box ID."""
-        return str(uuid.uuid4())
+        for box_dict in boxes:
+            # Extract corners and convert to numpy array
+            corners = box_dict.get("corners", [])
+            import numpy as np
 
-    def get_box_attributes(self, image_filename: str, box_id: str) -> PhotoAttributes:
-        """Get attributes for a specific box."""
-        boxes = self.load_bounding_boxes(image_filename)
-        for box_data in boxes:
-            if box_data.get("id") == box_id:
-                attributes_dict = box_data.get("attributes", {})
-                return PhotoAttributes.from_dict(attributes_dict)
-        return PhotoAttributes()
+            corners_array = np.array(corners, dtype=np.float64)
 
-    def update_box_attributes(
-        self, image_filename: str, box_id: str, attributes: PhotoAttributes
+            # Extract attributes
+            attributes_dict = box_dict.get("attributes", {})
+            attributes = PhotoAttributes.from_dict(attributes_dict)
+
+            # Create BoundingBoxData
+            bbox_data = BoundingBoxData(
+                corners=corners_array,
+                box_id=box_dict["id"],
+                attributes=attributes,
+            )
+
+            result.append(bbox_data)
+
+        return result
+
+    def update_box_data(
+        self, image_filename: str, bounding_box_data: BoundingBoxData
     ) -> bool:
-        """Update attributes for a specific box."""
+        """Update complete bounding box data for a specific box."""
         if image_filename not in self.data:
             return False
 
-        attributes_dict = attributes.to_dict()
+        corner_coords = [[corner[0], corner[1]] for corner in bounding_box_data.corners]
+        attributes_dict = bounding_box_data.attributes.to_dict()
 
-        for box_data in self.data[image_filename]:
-            if box_data.get("id") == box_id:
-                box_data["attributes"] = attributes_dict
+        for saved_box_data in self.data[image_filename]:
+            if saved_box_data.get("id") == bounding_box_data.box_id:
+                saved_box_data["corners"] = corner_coords
+                saved_box_data["attributes"] = attributes_dict
                 self.save_data()
                 return True
         return False

@@ -7,14 +7,13 @@ from __future__ import annotations
 import os
 
 import PIL.Image
-from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QMainWindow,
     QMessageBox,
-    QProgressDialog,
     QPushButton,
     QSplitter,
     QStatusBar,
@@ -25,14 +24,13 @@ from PyQt6.QtWidgets import (
 from core import images
 from core.bounding_box_storage import BoundingBoxStorage
 from core.errors import AppError
-from core.photo_types import PhotoAttributes
+from core.photo_types import BoundingBoxData, PhotoAttributes
 from core.settings import AppSettings
 from gui.attributes_sidebar import AttributesSidebar
 from gui.directory_sidebar import DirectoryImageList
 from gui.image_view import ImageView
-from gui.quad_bounding_box import QuadBoundingBox
 from gui.settings_dialog import SettingsDialog
-from photo_detection.detection_strategies import configure_detection_strategy, DETECTION_STRATEGIES
+from photo_detection.detection_strategies import configure_detection_strategy
 
 
 class PhotoExtractorApp(QMainWindow):
@@ -128,8 +126,8 @@ class PhotoExtractorApp(QMainWindow):
         self.directory_list = DirectoryImageList()
         self.directory_list.image_selected.connect(self.on_image_selected)
         self.directory_list.directory_changed.connect(self.on_directory_changed)
-        self.directory_list.batch_detect_requested.connect(self.batch_detect_photos)
-        self.directory_list.batch_extract_requested.connect(self.batch_extract_photos)
+        # self.directory_list.batch_detect_requested.connect(self.batch_detect_photos)
+        # self.directory_list.batch_extract_requested.connect(self.batch_extract_photos)
         main_splitter.addWidget(self.directory_list)
 
         # Create image view (center panel)
@@ -220,12 +218,12 @@ class PhotoExtractorApp(QMainWindow):
         view_menu.addSeparator()
 
         prev_image_action = QAction("Previous Image", self)
-        prev_image_action.setShortcut("Left")
+        prev_image_action.setShortcut("Ctrl+Left")
         prev_image_action.triggered.connect(self.previous_image)
         view_menu.addAction(prev_image_action)
 
         next_image_action = QAction("Next Image", self)
-        next_image_action.setShortcut("Right")
+        next_image_action.setShortcut("Ctrl+Right")
         next_image_action.triggered.connect(self.next_image)
         view_menu.addAction(next_image_action)
 
@@ -327,10 +325,10 @@ class PhotoExtractorApp(QMainWindow):
         """Clear all bounding boxes."""
         self.image_view.clear_boxes()
 
-    def on_box_selected(self, box_id: str, attributes: PhotoAttributes, coordinates):
+    def on_box_selected(self, bounding_box_data: BoundingBoxData):
         """Handle box selection from ImageView."""
-        self.attributes_sidebar.show_attributes(box_id, attributes)
-        self.attributes_sidebar.update_coordinates(coordinates)
+        # Extract coordinates for the sidebar coordinate display
+        self.attributes_sidebar.show_box_data(bounding_box_data)
 
     def on_box_deselected(self):
         """Handle box deselection from ImageView."""
@@ -338,24 +336,44 @@ class PhotoExtractorApp(QMainWindow):
 
     def on_attributes_changed(self, box_id: str, attributes: PhotoAttributes):
         """Handle attribute changes from AttributesSidebar."""
-        # Update the box attributes
-        self.image_view.update_box_attributes(box_id, attributes)
-
-        # Save to storage immediately for persistence
-        if self.current_image_path and self.bounding_box_storage:
-            filename = os.path.basename(self.current_image_path)
-            self.bounding_box_storage.update_box_attributes(
-                filename, box_id, attributes
+        # Get current box to extract its corners
+        selected_box = self.image_view.get_selected_box()
+        if selected_box and selected_box.box_id == box_id:
+            # Create updated BoundingBoxData with new attributes but existing corners
+            current_data = selected_box.get_bounding_box_data()
+            updated_data = BoundingBoxData(
+                corners=current_data.corners, box_id=box_id, attributes=attributes
             )
 
-    def on_coordinates_changed(self, box_id, coordinates):
-        """Handle coordinate changes from AttributesSidebar."""
-        # Update the box coordinates
-        self.image_view.update_box_coordinates(box_id, coordinates)
+            # Update the box and save
+            self.image_view.update_box_data(updated_data)
+            self._save_box_data_to_storage(updated_data)
 
-        # Save to storage immediately for persistence
+    def on_coordinates_changed(self, box_id: str, coordinates):
+        """Handle coordinate changes from AttributesSidebar."""
+        # Get current box to extract its attributes
+        selected_box = self.image_view.get_selected_box()
+        if selected_box and selected_box.box_id == box_id:
+            # Convert coordinates to numpy array
+            import numpy as np
+
+            corners_array = np.array(coordinates, dtype=np.float64)
+
+            # Create updated BoundingBoxData with new corners but existing attributes
+            current_data = selected_box.get_bounding_box_data()
+            updated_box = BoundingBoxData(
+                corners=corners_array, box_id=box_id, attributes=current_data.attributes
+            )
+
+            # Update the box and save
+            self.image_view.update_box_data(updated_box)
+            self._save_box_data_to_storage(updated_box)
+
+    def _save_box_data_to_storage(self, bounding_box_data: BoundingBoxData):
+        """Helper to save bounding box data to storage."""
         if self.current_image_path and self.bounding_box_storage:
-            self.save_current_bounding_boxes()
+            filename = os.path.basename(self.current_image_path)
+            self.bounding_box_storage.update_box_data(filename, bounding_box_data)
 
     def detect_photos(self):
         """Run the configured detection strategy to automatically detect photos."""
@@ -373,22 +391,21 @@ class PhotoExtractorApp(QMainWindow):
 
         # Run detection strategy
         try:
-            detected_quads = selected_strategy.detect_photos(self.current_image)
+            detected_boxes = selected_strategy.detect_photos(self.current_image)
 
             # Create bounding boxes
-            for quad_corners in detected_quads:
-                box = QuadBoundingBox(quad_corners)
-                self.image_view.add_bounding_box_object(box)
+            for box_data in detected_boxes:
+                self.image_view.add_bounding_box(box_data)
 
             self.status_bar.showMessage(
-                f"Detected {len(detected_quads)} photos using {selected_strategy.name}"
+                f"Detected {len(detected_boxes)} photos using {selected_strategy.name}"
             )
 
             # Auto-refine if enabled in settings
-            if self.settings.auto_refine_detection and detected_quads:
+            if self.settings.auto_refine_detection and detected_boxes:
                 self.refine_all_boxes()
                 self.status_bar.showMessage(
-                    f"Detected and refined {len(detected_quads)} photos using {selected_strategy.name}"
+                    f"Detected and refined {len(detected_boxes)} photos using {selected_strategy.name}"
                 )
 
         except Exception as e:
@@ -412,10 +429,8 @@ class PhotoExtractorApp(QMainWindow):
             QMessageBox.warning(self, "Error", "Please load an image first")
             return
 
-        corner_points, attributes_list = (
-            self.image_view.get_crop_corner_points_with_attributes()
-        )
-        if not corner_points:
+        bounding_box_data_list = self.image_view.get_bounding_box_data_list()
+        if not bounding_box_data_list:
             QMessageBox.warning(self, "Error", "No bounding boxes found")
             return
 
@@ -428,14 +443,13 @@ class PhotoExtractorApp(QMainWindow):
         if not output_directory:
             return []  # User cancelled
 
-        # Extract and save photos with attributes
+        # Extract and save photos with unified bounding box data
         base_name = "photo"
         saved_files = images.save_cropped_images(
             self.current_image,
-            corner_points,
+            bounding_box_data_list,
             output_directory,
             base_name,
-            attributes_list,
         )
 
         if saved_files:
@@ -476,33 +490,22 @@ class PhotoExtractorApp(QMainWindow):
         if self.current_image_path and self.bounding_box_storage:
             filename = os.path.basename(self.current_image_path)
             self.bounding_box_storage.save_bounding_boxes(
-                filename, self.image_view.bounding_boxes
+                filename, self.image_view.get_bounding_box_data_list()
             )
 
     def load_saved_bounding_boxes(self):
         """Load saved bounding boxes for the current image."""
         if self.current_image_path and self.bounding_box_storage:
             filename = os.path.basename(self.current_image_path)
-            saved_boxes = self.bounding_box_storage.load_bounding_boxes(filename)
+            saved_data = self.bounding_box_storage.load_bounding_boxes(filename)
 
             # Clear existing boxes
             self.image_view.clear_boxes()
 
-            # Load saved boxes
-            for box_data in saved_boxes:
-                if box_data.get("type") == "quad" and "corners" in box_data:
-                    corners = [
-                        QPointF(float(corner[0]), float(corner[1]))
-                        for corner in box_data["corners"]
-                    ]
-
-                    # Get box ID and attributes if they exist
-                    box_id = box_data.get("id")
-                    attributes = box_data.get("attributes", {})
-
-                    # Create box with ID and attributes
-                    box = QuadBoundingBox(corners, box_id=box_id, attributes=attributes)
-                    self.image_view.add_bounding_box_object(box)
+            # Load saved boxes using BoundingBoxData
+            for bbox_data in saved_data:
+                # Create box with BoundingBoxData
+                self.image_view.add_bounding_box(bbox_data)
 
     def closeEvent(self, event):
         """Save bounding boxes before closing the application."""
@@ -534,255 +537,6 @@ class PhotoExtractorApp(QMainWindow):
                 image_path = next_item.data(Qt.ItemDataRole.UserRole)
                 self.load_image_from_path(image_path)
 
-    def batch_detect_photos(self):
-        """Run detection strategy on all images in the current directory."""
-        if not self.current_directory:
-            return
-
-        # Get the selected strategy from settings
-        strategy_name = self.settings.detection_strategy
-        selected_strategy = None
-        for strategy in DETECTION_STRATEGIES:
-            if strategy.name == strategy_name:
-                selected_strategy = strategy
-                break
-
-        if not selected_strategy:
-            # Default to first strategy if none configured
-            if DETECTION_STRATEGIES:
-                selected_strategy = DETECTION_STRATEGIES[0]
-            else:
-                QMessageBox.warning(
-                    self,
-                    "No Detection Strategy",
-                    "No detection strategies available. Please check your configuration.",
-                )
-                return
-
-        # Get all images in the directory
-        all_image_paths = []
-        for i in range(self.directory_list.count()):
-            item = self.directory_list.item(i)
-            image_path = item.data(Qt.ItemDataRole.UserRole)
-            all_image_paths.append(image_path)
-
-        if not all_image_paths:
-            QMessageBox.information(
-                self, "No Images", "No images found in current directory"
-            )
-            return
-
-        # Configure API key for strategies that need it
-        if hasattr(selected_strategy, "set_api_key"):
-            if self.settings.gemini_api_key:
-                selected_strategy.set_api_key(self.settings.gemini_api_key)
-            else:
-                QMessageBox.warning(
-                    self,
-                    "API Key Required",
-                    f"The {selected_strategy.name} strategy requires an API key. "
-                    "Please configure it in Edit > Settings.",
-                )
-                return
-
-        # Create progress dialog
-        progress = QProgressDialog(
-            "Detecting photos...", "Cancel", 0, len(all_image_paths), self
-        )
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
-
-        successful_detections = 0
-        failed_detections = 0
-
-        for i, image_path in enumerate(all_image_paths):
-            if progress.wasCanceled():
-                break
-
-            progress.setValue(i)
-            progress.setLabelText(f"Processing {os.path.basename(image_path)}...")
-
-            try:
-                # Load image temporarily to get dimensions
-                image = images.load_image(image_path)
-                if image:
-                    # Run detection strategy
-                    detected_quads = selected_strategy.detect_photos(image)
-
-                    # Convert to storage format
-                    box_data = []
-                    for quad_corners in detected_quads:
-                        # Convert relative coordinates to absolute coordinates
-                        absolute_corners = []
-                        for corner in quad_corners:
-                            abs_x = corner.x() * image.width
-                            abs_y = corner.y() * image.height
-                            absolute_corners.append([abs_x, abs_y])
-                        box_data.append({"type": "quad", "corners": absolute_corners})
-
-                    # Save to storage
-                    filename = os.path.basename(image_path)
-                    self.bounding_box_storage.save_bounding_boxes(
-                        filename, []
-                    )  # Clear existing
-                    if box_data:
-                        self.bounding_box_storage.data[filename] = box_data
-                        self.bounding_box_storage.save_data()
-
-                    successful_detections += 1
-                else:
-                    failed_detections += 1
-
-            except Exception as e:
-                print(f"Failed to detect photos in {image_path}: {e}")
-                failed_detections += 1
-
-        progress.setValue(len(all_image_paths))
-        progress.close()
-
-        # Refresh current image if it has saved boxes
-        if self.current_image_path:
-            self.load_saved_bounding_boxes()
-
-        # Show results
-        total_processed = successful_detections + failed_detections
-        message = "Batch detection completed:\n\n"
-        message += f"Successfully processed: {successful_detections}/{total_processed} images\n"
-        message += f"Using strategy: {selected_strategy.name}"
-
-        if failed_detections > 0:
-            message += f"\n\nFailed to process: {failed_detections} images"
-
-        QMessageBox.information(self, "Batch Detection Complete", message)
-        self.status_bar.showMessage(
-            f"Batch detection: {successful_detections}/{total_processed} images processed"
-        )
-
-    def batch_extract_photos(self):
-        """Extract photos from all images in the current directory using stored bounding boxes."""
-        if not self.current_directory:
-            return
-
-        # Get all images in the directory
-        all_image_paths = []
-        for i in range(self.directory_list.count()):
-            item = self.directory_list.item(i)
-            image_path = item.data(Qt.ItemDataRole.UserRole)
-            all_image_paths.append(image_path)
-
-        if not all_image_paths:
-            QMessageBox.information(
-                self, "No Images", "No images found in current directory"
-            )
-            return
-
-        # Count images that have stored bounding boxes
-        images_with_boxes = 0
-        for image_path in all_image_paths:
-            filename = os.path.basename(image_path)
-            saved_boxes = self.bounding_box_storage.load_bounding_boxes(filename)
-            if saved_boxes:
-                images_with_boxes += 1
-
-        if images_with_boxes == 0:
-            QMessageBox.information(
-                self,
-                "No Bounding Boxes",
-                "No stored bounding boxes found for images in this directory. "
-                "Run 'Batch Detect' or manually add bounding boxes first.",
-            )
-            return
-
-        # Prompt for output directory
-        output_directory = QFileDialog.getExistingDirectory(
-            self, "Select Output Folder for Batch Extraction"
-        )
-
-        if not output_directory:
-            return  # User cancelled
-
-        # Create progress dialog
-        progress = QProgressDialog(
-            "Extracting photos...", "Cancel", 0, images_with_boxes, self
-        )
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
-
-        successful_extractions = 0
-        total_photos_extracted = 0
-        processed_images = 0
-
-        for image_path in all_image_paths:
-            filename = os.path.basename(image_path)
-            saved_boxes = self.bounding_box_storage.load_bounding_boxes(filename)
-
-            if not saved_boxes:
-                continue  # Skip images without bounding boxes
-
-            if progress.wasCanceled():
-                break
-
-            progress.setValue(processed_images)
-            progress.setLabelText(f"Extracting from {filename}...")
-            processed_images += 1
-
-            try:
-                # Load image temporarily
-                image = images.load_image(image_path)
-                if image:
-                    # Convert saved boxes to crop data format and collect attributes
-                    crop_data = []
-                    attributes_list = []
-                    for box_data in saved_boxes:
-                        if box_data.get("type") == "quad" and "corners" in box_data:
-                            # Convert absolute coordinates back to relative coordinates
-                            rel_corners = []
-                            for corner in box_data["corners"]:
-                                rel_x = float(corner[0]) / image.width
-                                rel_y = float(corner[1]) / image.height
-                                rel_corners.append((rel_x, rel_y))
-                            crop_data.append(("quad", rel_corners))
-
-                            # Get attributes for this box
-                            attributes = box_data.get("attributes", {})
-                            attributes_list.append(attributes)
-
-                    if crop_data:
-                        # Use filename without extension as base name
-                        base_name = os.path.splitext(filename)[0]
-
-                        # Extract and save photos with attributes
-                        saved_files = images.save_cropped_images(
-                            image,
-                            crop_data,
-                            output_directory,
-                            base_name,
-                            attributes_list,
-                        )
-
-                        if saved_files:
-                            successful_extractions += 1
-                            total_photos_extracted += len(saved_files)
-                        else:
-                            print(f"Failed to extract photos from {filename}")
-
-            except Exception as e:
-                print(f"Failed to extract photos from {image_path}: {e}")
-
-        progress.setValue(images_with_boxes)
-        progress.close()
-
-        # Show results
-        message = "Batch extraction completed:\n\n"
-        message += f"Successfully processed: {successful_extractions}/{images_with_boxes} images\n"
-        message += f"Total photos extracted: {total_photos_extracted}\n"
-        message += f"Output directory: {output_directory}"
-
-        QMessageBox.information(self, "Batch Extraction Complete", message)
-        self.status_bar.showMessage(
-            f"Batch extraction: {total_photos_extracted} photos from {successful_extractions} images"
-        )
-
     def update_magnifier(self):
         """Update the magnifier with current image and bounding boxes."""
         if self.image_view.image_item:
@@ -791,15 +545,15 @@ class PhotoExtractorApp(QMainWindow):
             self.attributes_sidebar.magnifier.set_source_image(pixmap)
 
             # Set bounding boxes
-            bounding_box_corners = self.image_view.get_bounding_box_corners()
-            self.attributes_sidebar.magnifier.set_bounding_boxes(bounding_box_corners)
+            bounding_box_data_list = self.image_view.get_bounding_box_data_list()
+            self.attributes_sidebar.magnifier.set_bounding_boxes(bounding_box_data_list)
 
             # Update coordinate fields if a box is selected
             selected_box = self.image_view.get_selected_box()
             if selected_box and self.attributes_sidebar.current_box_id:
-                corners = selected_box.get_corner_points()
-                coordinates = [[corner.x(), corner.y()] for corner in corners]
-                self.attributes_sidebar.update_coordinates(coordinates)
+                self.attributes_sidebar.show_box_data(
+                    selected_box.get_bounding_box_data()
+                )
 
     def open_settings(self):
         """Open the settings dialog."""

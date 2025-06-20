@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core.photo_types import PhotoAttributes
+from core.photo_types import BoundingBoxData, PhotoAttributes
 from gui.magnifier_widget import MagnifierWidget
 
 
@@ -164,11 +164,11 @@ class AttributesSidebar(QWidget):
             scroll_area.hide()
         self.no_selection_label.show()
 
-    def show_attributes(self, box_id: str, attributes: PhotoAttributes):
+    def show_box_data(self, box_data: BoundingBoxData):
         """Show attributes for the selected box."""
         self.updating_ui = True
-        self.current_box_id = box_id
-        self._current_attributes = attributes
+        self.current_box_id = box_data.box_id
+        self._current_attributes = box_data.attributes
 
         # Hide no selection label and show attributes
         self.no_selection_label.hide()
@@ -177,7 +177,7 @@ class AttributesSidebar(QWidget):
             scroll_area.show()
 
         # Update datetime
-        datetime_str = attributes.date_time
+        datetime_str = box_data.attributes.date_time
         if datetime_str:
             try:
                 dt = QDateTime.fromString(datetime_str, Qt.DateFormat.ISODate)
@@ -191,9 +191,18 @@ class AttributesSidebar(QWidget):
             self.datetime_edit.setDateTime(QDateTime.currentDateTime())
 
         # Update comments
-        self.comments_edit.setPlainText(attributes.comments)
+        current_comments = self.comments_edit.toPlainText()
+        new_comments = box_data.attributes.comments
+        if current_comments != new_comments:
+            self.comments_edit.setPlainText(box_data.attributes.comments)
 
-        self.updating_ui = False
+        try:
+            for i, (x_spinbox, y_spinbox) in enumerate(self.coordinate_spinboxes):
+                if i < len(box_data.corners):
+                    x_spinbox.setValue(box_data.corners[i][0])
+                    y_spinbox.setValue(box_data.corners[i][1])
+        finally:
+            self.updating_ui = False
 
     def on_datetime_changed(self):
         """Handle date/time changes."""
@@ -256,14 +265,3 @@ class AttributesSidebar(QWidget):
 
             # Emit coordinate change signal
             self.coordinates_changed.emit(self.current_box_id, coordinates)
-
-    def update_coordinates(self, coordinates):
-        """Update the coordinate spinboxes with new values."""
-        self.updating_ui = True
-        try:
-            for i, (x_spinbox, y_spinbox) in enumerate(self.coordinate_spinboxes):
-                if i < len(coordinates):
-                    x_spinbox.setValue(int(coordinates[i][0]))
-                    y_spinbox.setValue(int(coordinates[i][1]))
-        finally:
-            self.updating_ui = False

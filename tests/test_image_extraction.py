@@ -7,14 +7,17 @@ import shutil
 import sys
 import tempfile
 
+import numpy as np
 import piexif
 import pytest
 from PIL import Image
 
+from core.photo_types import BoundingBoxData, PhotoAttributes
+
 # Add parent directory to path to import app modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from image_processing import image_processor
+from core import images
 
 
 class TestPerspectiveExtraction:
@@ -39,14 +42,17 @@ class TestPerspectiveExtraction:
     def test_extract_rectangle(self, test_image):
         """Test extracting a rectangular region."""
         # Define a rectangular region (100x100 square in center)
-        corners = [
-            [150, 100],  # top-left
-            [250, 100],  # top-right
-            [250, 200],  # bottom-right
-            [150, 200],  # bottom-left
-        ]
+        corners = np.array(
+            [
+                [150, 100],  # top-left
+                [250, 100],  # top-right
+                [250, 200],  # bottom-right
+                [150, 200],  # bottom-left
+            ],
+            dtype=float,
+        )
 
-        extracted = image_processor.extract_perspective_image(test_image, corners)
+        extracted = images.extract_perspective_image(test_image, corners)
 
         assert extracted is not None
         assert isinstance(extracted, Image.Image)
@@ -57,14 +63,17 @@ class TestPerspectiveExtraction:
     def test_extract_skewed_quadrilateral(self, test_image):
         """Test extracting a skewed quadrilateral and correcting perspective."""
         # Define a skewed quadrilateral
-        corners = [
-            [100, 80],  # top-left (slightly skewed)
-            [280, 120],  # top-right
-            [260, 220],  # bottom-right
-            [120, 180],  # bottom-left
-        ]
+        corners = np.array(
+            [
+                [100, 80],  # top-left (slightly skewed)
+                [280, 120],  # top-right
+                [260, 220],  # bottom-right
+                [120, 180],  # bottom-left
+            ],
+            dtype=float,
+        )
 
-        extracted = image_processor.extract_perspective_image(test_image, corners)
+        extracted = images.extract_perspective_image(test_image, corners)
 
         assert extracted is not None
         assert isinstance(extracted, Image.Image)
@@ -73,9 +82,11 @@ class TestPerspectiveExtraction:
 
     def test_extract_with_specified_dimensions(self, test_image):
         """Test extraction with specified output dimensions."""
-        corners = [[100, 100], [200, 100], [200, 200], [100, 200]]
+        corners = np.array(
+            [[100, 100], [200, 100], [200, 200], [100, 200]], dtype=float
+        )
 
-        extracted = image_processor.extract_perspective_image(
+        extracted = images.extract_perspective_image(
             test_image, corners, output_width=150, output_height=150
         )
 
@@ -85,9 +96,9 @@ class TestPerspectiveExtraction:
     def test_extract_edge_cases(self, test_image):
         """Test extraction with edge case coordinates."""
         # Test with coordinates at image boundaries
-        corners = [[0, 0], [399, 0], [399, 299], [0, 299]]
+        corners = np.array([[0, 0], [399, 0], [399, 299], [0, 299]], dtype=float)
 
-        extracted = image_processor.extract_perspective_image(test_image, corners)
+        extracted = images.extract_perspective_image(test_image, corners)
 
         assert extracted is not None
         # Should be close to original dimensions
@@ -116,12 +127,20 @@ class TestImageProcessor:
         """Test saving cropped images without EXIF attributes."""
         # Load a test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = image_processor.load_image(test_image_path)
+        image = images.load_image(test_image_path)
 
         # Define crop data (simple rectangle)
-        crop_data = [[[100, 150], [400, 150], [400, 450], [100, 450]]]
+        crop_data = [
+            BoundingBoxData(
+                corners=np.array(
+                    [[100, 150], [400, 150], [400, 450], [100, 450]], dtype=float
+                ),
+                box_id="new",
+                attributes=PhotoAttributes(),
+            )
+        ]
         # Save cropped images
-        saved_files = image_processor.save_cropped_images(
+        saved_files = images.save_cropped_images(
             image, crop_data, temp_output_dir, base_name="test_photo"
         )
 
@@ -139,22 +158,25 @@ class TestImageProcessor:
         """Test saving cropped images with EXIF attributes."""
         # Load test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = image_processor.load_image(test_image_path)
+        image = images.load_image(test_image_path)
 
         # Define crop data with attributes
         h, w = 2400.0, 1800.0
-        crop_data = [[[100, 150], [400, 150], [400, 450], [100, 450]]]
-        attributes_list = [
-            {"date_time": "1985-06-20", "comments": "Test extraction with EXIF data"}
+        crop_data = [
+            BoundingBoxData.new(
+                corners=[(100, 150), (400, 150), (400, 450), (100, 450)],
+                attributes=PhotoAttributes(
+                    date_time="1985-06-20", comments="Test extraction with EXIF data"
+                ),
+            )
         ]
 
         # Save cropped images with attributes
-        saved_files = image_processor.save_cropped_images(
+        saved_files = images.save_cropped_images(
             image,
             crop_data,
             temp_output_dir,
             base_name="test_photo",
-            attributes_list=attributes_list,
         )
 
         assert len(saved_files) == 1
@@ -190,17 +212,20 @@ class TestImageProcessor:
         """Test saving multiple cropped images from one source."""
         # Load test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = image_processor.load_image(test_image_path)
+        image = images.load_image(test_image_path)
 
         # Define multiple crop regions
-        crop_data = [
+        corners = [
             [[100, 150], [400, 150], [400, 450], [100, 450]],
             [[500, 150], [800, 150], [800, 450], [500, 450]],
             [[100, 500], [400, 500], [400, 800], [100, 800]],
         ]
+        crop_data = [
+            BoundingBoxData.new(corners=np.array(c, dtype=float)) for c in corners
+        ]
 
         # Save all crops
-        saved_files = image_processor.save_cropped_images(
+        saved_files = images.save_cropped_images(
             image, crop_data, temp_output_dir, base_name="multi_photo"
         )
         assert len(saved_files) == 3
@@ -234,12 +259,12 @@ class TestEXIFHandling:
         """Test date format conversion in EXIF data."""
         test_filepath = os.path.join(temp_output_dir, "test_exif.jpg")
 
-        attributes = {
-            "date_time": "1985-12-25",  # ISO format
-            "comments": "Christmas photo",
-        }
+        attributes = PhotoAttributes(
+            date_time="1985-12-25",  # ISO format
+            comments="Christmas photo",
+        )
 
-        image_processor.save_image_with_exif(test_image, test_filepath, attributes)
+        images.save_image_with_exif(test_image, test_filepath, attributes)
 
         # Verify EXIF data
         exif_dict = piexif.load(test_filepath)
@@ -260,12 +285,12 @@ class TestEXIFHandling:
         """Test comment handling in EXIF data."""
         test_filepath = os.path.join(temp_output_dir, "test_comment.jpg")
 
-        attributes = {
-            "date_time": "2024-01-01",
-            "comments": "Test comment with special chars: äöü & symbols!",
-        }
+        attributes = PhotoAttributes(
+            date_time="2024-01-01",
+            comments="Test comment with special chars: äöü & symbols!",
+        )
 
-        image_processor.save_image_with_exif(test_image, test_filepath, attributes)
+        images.save_image_with_exif(test_image, test_filepath, attributes)
 
         # Verify comment in EXIF
         exif_dict = piexif.load(test_filepath)
@@ -284,43 +309,10 @@ class TestEXIFHandling:
         """Test software tag in EXIF data."""
         test_filepath = os.path.join(temp_output_dir, "test_software.jpg")
 
-        attributes = {"date_time": "2024-01-01", "comments": "Test"}
+        attributes = PhotoAttributes(date_time="2024-01-01", comments="Test")
 
-        image_processor.save_image_with_exif(test_image, test_filepath, attributes)
+        images.save_image_with_exif(test_image, test_filepath, attributes)
 
         # Verify software tag
         exif_dict = piexif.load(test_filepath)
         assert exif_dict["0th"][piexif.ImageIFD.Software] == b"Photo Album Extractor"
-
-    def test_save_image_exif_error_handling(self, temp_output_dir, test_image):
-        """Test error handling when EXIF writing fails."""
-        test_filepath = os.path.join(temp_output_dir, "test_error.jpg")
-
-        # Create malformed attributes to trigger errors
-        attributes = {"date": "invalid-date-format", "comment": "Test"}
-
-        # Should not raise exception, should fall back to saving without EXIF
-        try:
-            image_processor.save_image_with_exif(test_image, test_filepath, attributes)
-            # File should still be created
-            assert os.path.exists(test_filepath)
-
-            # Image should be readable
-            saved_image = Image.open(test_filepath)
-            assert saved_image.width == 300
-            assert saved_image.height == 300
-
-        except Exception as e:
-            pytest.fail(f"Should not raise exception, but got: {e}")
-
-    def test_save_image_without_attributes(self, temp_output_dir, test_image):
-        """Test saving image when no attributes are provided."""
-        test_filepath = os.path.join(temp_output_dir, "test_no_attrs.jpg")
-
-        # Save without attributes - should work fine
-        image_processor.save_image_with_exif(test_image, test_filepath, {})
-
-        assert os.path.exists(test_filepath)
-        saved_image = Image.open(test_filepath)
-        assert saved_image.width == 300
-        assert saved_image.height == 300

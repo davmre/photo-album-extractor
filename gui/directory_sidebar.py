@@ -22,8 +22,6 @@ class DirectoryImageList(QWidget):
 
     image_selected = pyqtSignal(str)  # Emits the full path of selected image
     directory_changed = pyqtSignal(str)  # Emits when user selects new directory
-    batch_detect_requested = pyqtSignal()  # Emits when batch detect is requested
-    batch_extract_requested = pyqtSignal()  # Emits when batch extract is requested
 
     def __init__(self):
         super().__init__()
@@ -65,27 +63,12 @@ class DirectoryImageList(QWidget):
         self.image_list.itemClicked.connect(self.on_item_clicked)
         layout.addWidget(self.image_list)
 
-        # Batch operation buttons
-        self.batch_detect_btn = QPushButton("Detect in all")
-        self.batch_detect_btn.clicked.connect(self.batch_detect_requested.emit)
-        self.batch_detect_btn.setEnabled(False)
-        layout.addWidget(self.batch_detect_btn)
-
-        self.batch_extract_btn = QPushButton("Extract from all")
-        self.batch_extract_btn.clicked.connect(self.batch_extract_requested.emit)
-        self.batch_extract_btn.setEnabled(False)
-        layout.addWidget(self.batch_extract_btn)
-
     def set_directory(self, directory):
         """Set the directory to display images from."""
         if directory != self.current_directory:
             self.current_directory = directory
             self.update_directory_label()
             self.refresh_images()
-            # Enable batch buttons when directory is set
-            has_directory = self.current_directory is not None
-            self.batch_detect_btn.setEnabled(has_directory)
-            self.batch_extract_btn.setEnabled(has_directory)
 
     def update_directory_label(self):
         """Update the directory label with current path."""

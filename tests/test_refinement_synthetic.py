@@ -4,8 +4,8 @@ import cv2
 import numpy as np
 import pytest
 
-import image_processing.geometry as geometry
-import image_processing.refine_bounds as refine_bounds
+import core.geometry as geometry
+import photo_detection.refine_bounds as refine_bounds
 
 DEBUG_IMAGES_BASE_DIR = (
     None  # "/Users/dave/photos_tests/"  # Edit to save debug images.

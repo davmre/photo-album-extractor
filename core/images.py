@@ -13,7 +13,7 @@ from PIL import Image
 
 import core.photo_types as photo_types
 from core import geometry
-from core.photo_types import PhotoAttributes
+from core.photo_types import BoundingBoxData, PhotoAttributes
 
 # Semantic type aliases
 PILImage = PIL.Image.Image  # PIL/Pillow images
@@ -49,7 +49,7 @@ def extract_perspective_image(
         for p1, p2 in zip(pa, pb):
             matrix.append([p1[0], p1[1], 1, 0, 0, 0, -p2[0] * p1[0], -p2[0] * p1[1]])
             matrix.append([0, 0, 0, p1[0], p1[1], 1, -p2[1] * p1[0], -p2[1] * p1[1]])
-        A = np.matrix(matrix, dtype=np.float32)
+        A = np.array(matrix, dtype=np.float32)
         B = np.array(corners.flatten(), dtype=np.float32)
         try:
             res = np.dot(np.linalg.inv(A.T @ A) @ A.T, B)
@@ -71,20 +71,18 @@ def load_image(filepath: str) -> PILImage:
 
 def save_cropped_images(
     image: PILImage,
-    crop_data: list[photo_types.QuadArray],
+    bounding_box_data_list: list[BoundingBoxData],
     output_dir: str,
     base_name: str = "photo",
-    attributes_list: Optional[list[PhotoAttributes]] = None,
 ) -> list[str]:
     """Save multiple cropped images to the specified directory.
 
     Args:
         image: image to crop from.
-        crop_data: List of quadrilaterals to crop. Each quadrilateral is
-            a list of four `(x, y)` corner points in relative coordinates.
+        bounding_box_data_list: List of BoundingBoxData objects containing
+            corners and attributes for each photo to extract.
         output_dir: Directory to save images
         base_name: Base name for files
-        attributes_list: List of PhotoAttributes objects (one per crop)
     """
     saved_files = []
     img_width, img_height = image.size
@@ -92,16 +90,12 @@ def save_cropped_images(
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
-    for i, crop_rect in enumerate(crop_data):
-        cropped = None
+    for i, bbox_data in enumerate(bounding_box_data_list):
+        # Extract the image using the corners
+        cropped = extract_perspective_image(image, bbox_data.corners)
 
-        # Get attributes for this crop if available
-        attributes = PhotoAttributes()
-        if attributes_list and i < len(attributes_list):
-            attributes = attributes_list[i] or PhotoAttributes()
-
-        # Convert relative coordinates to absolute pixel coordinates for quadrilateral
-        cropped = extract_perspective_image(image, crop_rect)
+        # Get attributes from the bounding box data
+        attributes = bbox_data.attributes
 
         # Generate filename
         filename = f"{base_name}_{i:03d}.jpg"

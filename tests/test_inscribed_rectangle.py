@@ -1,6 +1,7 @@
 import numpy as np
 
-from image_processing import geometry, inscribed_rectangle
+from core import geometry
+from photo_detection import inscribed_rectangle
 
 eps = 1e-4
 

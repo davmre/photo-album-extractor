@@ -7,11 +7,16 @@ from typing import Optional
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QPen, QPolygonF
-from PyQt6.QtWidgets import QGraphicsItem, QGraphicsObject, QGraphicsRectItem
+from PyQt6.QtWidgets import (
+    QGraphicsItem,
+    QGraphicsObject,
+    QGraphicsRectItem,
+    QGraphicsSceneMouseEvent,
+)
 
 import core.photo_types as photo_types
 from core import geometry
-from core.photo_types import PhotoAttributes
+from core.photo_types import BoundingBoxData, PhotoAttributes
 
 
 class QuadBoundingBox(QGraphicsObject):
@@ -20,21 +25,14 @@ class QuadBoundingBox(QGraphicsObject):
     changed = pyqtSignal()
     selected_changed = pyqtSignal(str)  # Emits box_id when selection changes
 
-    def __init__(
-        self,
-        corners: photo_types.BoundingBoxAny,
-        parent=None,
-        box_id=None,
-        attributes: Optional[PhotoAttributes] = None,
-    ):
+    def __init__(self, box_data: BoundingBoxData, parent=None):
         super().__init__(parent)
 
-        # Store the four corner points
-        self.corners = photo_types.bounding_box_as_list_of_qpointfs(corners)
+        # Store the four corner points, unique id, and attributes
+        self.corners = photo_types.bounding_box_as_list_of_qpointfs(box_data.corners)
+        self.box_id = box_data.box_id
+        self.attributes = box_data.attributes
 
-        # Unique identifier and attributes
-        self.box_id = box_id or str(uuid.uuid4())
-        self.attributes = attributes or PhotoAttributes()
         self._is_selected = False
 
         # Visual styling
@@ -129,27 +127,6 @@ class QuadBoundingBox(QGraphicsObject):
             world_corners.append(self.pos() + corner)
         return world_corners
 
-    def set_from_drag(self, start_point, end_point):
-        """Set initial rectangle from drag operation."""
-        # Create a rectangle from drag points
-        min_x = min(start_point.x(), end_point.x())
-        max_x = max(start_point.x(), end_point.x())
-        min_y = min(start_point.y(), end_point.y())
-        max_y = max(start_point.y(), end_point.y())
-
-        # Set corners in clockwise order: top-left, top-right, bottom-right, bottom-left
-        self.corners = [
-            QPointF(min_x, min_y),  # top-left
-            QPointF(max_x, min_y),  # top-right
-            QPointF(max_x, max_y),  # bottom-right
-            QPointF(min_x, max_y),  # bottom-left
-        ]
-
-        # Set position to origin since corners are in absolute coordinates
-        self.setPos(0, 0)
-        self.update_handles()
-        self.update()
-
     def move_corner(self, corner_id: int, new_position: QPointF):
         """Move a specific corner to a new position (in world coordinates)."""
         if 0 <= corner_id < 4:
@@ -194,15 +171,21 @@ class QuadBoundingBox(QGraphicsObject):
         """Set the photo attributes."""
         self.attributes = attributes
 
-    def get_attribute(self, key: str, default=None):
-        """Get a specific attribute value."""
-        return getattr(self.attributes, key, default)
+    def get_bounding_box_data(self) -> BoundingBoxData:
+        """Get the complete bounding box data (corners + attributes)."""
+        corners_array = self.get_ordered_corners_for_extraction()
+        return BoundingBoxData(
+            box_id=self.box_id, corners=corners_array, attributes=self.attributes
+        )
 
-    def set_attribute(self, key: str, value: str):
-        """Set a specific attribute value."""
-        setattr(self.attributes, key, value)
+    def set_bounding_box_data(self, data: BoundingBoxData):
+        """Set the complete bounding box data (corners + attributes)."""
+        if self.box_id != data.box_id:
+            raise ValueError("box id doesn't match!")
+        self.set_corners(data.corners)
+        self.attributes = data.attributes
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent):
         """Handle mouse press for selection."""
         if event.button() == Qt.MouseButton.LeftButton:
             # Emit selection signal

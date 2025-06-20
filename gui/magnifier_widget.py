@@ -6,6 +6,8 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+from core.photo_types import BoundingBoxData, bounding_box_as_list_of_qpointfs
+
 
 class MagnifierWidget(QWidget):
     """Widget that shows a magnified view around the cursor position."""
@@ -20,7 +22,7 @@ class MagnifierWidget(QWidget):
         self.source_pixmap = None
         self.cursor_pos = QPointF(0, 0)  # Cursor position in image coordinates
         self.image_rect = QRectF()  # Image bounds
-        self.bounding_boxes = []  # List of bounding box corners in image coordinates
+        self.bounding_boxes: list[BoundingBoxData] = []
 
         # Tracking mode
         self.tracking_mode = "cursor"  # "cursor" or "corner"
@@ -77,7 +79,7 @@ class MagnifierWidget(QWidget):
             self.tracking_mode = "cursor"
         self.update_magnifier()
 
-    def set_bounding_boxes(self, boxes):
+    def set_bounding_boxes(self, boxes: list[BoundingBoxData]):
         """Set the list of bounding boxes to overlay."""
         self.bounding_boxes = boxes
         self.update_magnifier()
@@ -131,9 +133,6 @@ class MagnifierWidget(QWidget):
             self.source_size,
         )
 
-        # Clamp to image bounds
-        source_rect = source_rect.intersected(self.image_rect)
-
         # Extract and scale the region
         magnified_pixmap = QPixmap(self.widget_size, self.widget_size - 20)
         magnified_pixmap.fill(QColor(255, 255, 255))
@@ -179,30 +178,31 @@ class MagnifierWidget(QWidget):
         scale_x = dest_rect.width() / source_rect.width()
         scale_y = dest_rect.height() / source_rect.height()
 
-        for box_corners in self.bounding_boxes:
+        for box_data in self.bounding_boxes:
+            box_corners = bounding_box_as_list_of_qpointfs(box_data.corners)
             if len(box_corners) >= 4:
                 # Draw edges of the quadrilateral
                 for i in range(4):
                     p1 = box_corners[i]
                     p2 = box_corners[(i + 1) % 4]
 
-                    # Check if this edge intersects our source region
-                    if self._line_intersects_rect(p1, p2, source_rect):
-                        # Transform to destination coordinates
-                        dest_p1 = QPointF(
-                            dest_rect.x() + (p1.x() - source_rect.x()) * scale_x,
-                            dest_rect.y() + (p1.y() - source_rect.y()) * scale_y,
-                        )
-                        dest_p2 = QPointF(
-                            dest_rect.x() + (p2.x() - source_rect.x()) * scale_x,
-                            dest_rect.y() + (p2.y() - source_rect.y()) * scale_y,
-                        )
+                    # Transform to destination coordinates
+                    dest_p1 = QPointF(
+                        dest_rect.x() + (p1.x() - source_rect.x()) * scale_x,
+                        dest_rect.y() + (p1.y() - source_rect.y()) * scale_y,
+                    )
+                    dest_p2 = QPointF(
+                        dest_rect.x() + (p2.x() - source_rect.x()) * scale_x,
+                        dest_rect.y() + (p2.y() - source_rect.y()) * scale_y,
+                    )
 
-                        painter.drawLine(dest_p1, dest_p2)
+                    painter.drawLine(dest_p1, dest_p2)
 
         painter.restore()
 
-    def _draw_crosshair(self, painter, source_rect, dest_rect):
+    def _draw_crosshair(
+        self, painter: QPainter, source_rect: QRectF, dest_rect: QRectF
+    ):
         """Draw crosshair at the focus position."""
         painter.save()
 
@@ -224,8 +224,12 @@ class MagnifierWidget(QWidget):
             scale_x = dest_rect.width() / source_rect.width()
             scale_y = dest_rect.height() / source_rect.height()
 
-            focus_dest_x = dest_rect.x() + (focus_pos.x() - source_rect.x()) * scale_x
-            focus_dest_y = dest_rect.y() + (focus_pos.y() - source_rect.y()) * scale_y
+            focus_dest_x = int(
+                dest_rect.x() + (focus_pos.x() - source_rect.x()) * scale_x
+            )
+            focus_dest_y = int(
+                dest_rect.y() + (focus_pos.y() - source_rect.y()) * scale_y
+            )
 
             # Draw crosshair
             crosshair_size = (
@@ -245,17 +249,6 @@ class MagnifierWidget(QWidget):
             )
 
         painter.restore()
-
-    def _line_intersects_rect(self, p1, p2, rect):
-        """Check if a line segment intersects with a rectangle."""
-        # Simple bounding box check first
-        line_rect = QRectF(
-            min(p1.x(), p2.x()),
-            min(p1.y(), p2.y()),
-            abs(p2.x() - p1.x()),
-            abs(p2.y() - p1.y()),
-        )
-        return rect.intersects(line_rect)
 
     def set_zoom_factor(self, factor):
         """Change the zoom factor."""

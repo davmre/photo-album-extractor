@@ -39,7 +39,7 @@ class TestMainWindow:
 
         assert app.current_image_path == jpeg_path
         assert app.current_image is not None
-        assert app.image_view.scene.items()  # Should have image item in scene
+        assert app.image_view._scene.items()  # Should have image item in scene
 
     def test_load_directory(self, app, test_images_dir, qtbot):
         """Test loading a directory of images."""

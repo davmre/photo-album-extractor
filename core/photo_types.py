@@ -7,6 +7,7 @@ to provide clear interfaces and better type safety.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, NewType, Protocol, Union
@@ -54,6 +55,23 @@ BoundingBoxAny = Union[BoundingBoxFloatPoints, BoundingBoxQPointF, QuadArray]
 # =============================================================================
 # Photo Attributes
 # =============================================================================
+
+
+@dataclass
+class BoundingBoxData:
+    """Data model for a photo bounding box."""
+
+    corners: QuadArray
+    box_id: str
+    attributes: PhotoAttributes
+
+    @classmethod
+    def new(cls, corners: BoundingBoxAny, attributes: PhotoAttributes | None = None):
+        return BoundingBoxData(
+            corners=bounding_box_as_array(corners),
+            box_id=str(uuid.uuid4()),
+            attributes=attributes if attributes else PhotoAttributes(),
+        )
 
 
 @dataclass

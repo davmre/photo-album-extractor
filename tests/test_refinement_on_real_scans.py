@@ -4,8 +4,8 @@ import os
 import numpy as np
 import PIL.Image as Image
 
-import image_processing.refine_bounds as refine_bounds
-from image_processing import geometry
+import photo_detection.refine_bounds as refine_bounds
+from core import geometry
 
 # Utility to evaluate refinement strategies by comparing results to gold boxes
 # on real scanned album pages.
