@@ -85,7 +85,7 @@ you have no other means of persisting memory from session to session.
 
 ### Key Components
 
-1. **Core app functionality**:
+1. **Core app functionality** (`core/`):
    - `bounding_box_storage.py` - Saves bounding boxes as JSON in `.photo_extractor_data.json` files per directory
    - `images.py`: Handles perspective correction, EXIF metadata, and image saving
    - `settings.py`: Defines app configuration.
@@ -96,7 +96,11 @@ you have no other means of persisting memory from session to session.
    - `image_view.py`: Custom QGraphicsView handling image display and bounding box interactions
    - `quad_bounding_box.py`: Quadrilateral (4-point) bounding box implementation - NOT restricted to rectangles
 
-3. **Photo detection** (`photo_detection/`): Methods to detect and refine photo bounding boxes
+3. **CLI Layer** (`cli/`): command-line interface
+   - Commands `info`, `detect`, `extract`, etc. operate on single images or batches of
+     images, using saved bounding-box data.
+
+4. **Photo detection** (`photo_detection/`): Methods to detect and refine photo bounding boxes
    - `detection_strategies.py`: Multiple photo detection strategies including Gemini AI
    - `refine_bounds.py`: Multiple refinement algorithms (original, multiscale, strips-based)
 
