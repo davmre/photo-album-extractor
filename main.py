@@ -21,7 +21,7 @@ from gui.main_window import PhotoExtractorApp
 
 def main():
     parser = argparse.ArgumentParser(description="Photo Album Extractor")
-    
+
     # Global arguments
     parser.add_argument(
         "--log-level",
@@ -29,7 +29,7 @@ def main():
         default="WARNING",
         help="Set the logging level (default: WARNING)",
     )
-    
+
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
     # GUI mode (default when no command specified)
@@ -72,7 +72,7 @@ def main():
 
     # Legacy support: if no subcommand, assume GUI mode
     args = parser.parse_args()
-    
+
     # Configure logging based on command line argument
     logging.basicConfig(
         level=getattr(logging, args.log_level),

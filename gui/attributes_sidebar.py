@@ -2,12 +2,17 @@
 Attributes sidebar for editing bounding box metadata.
 """
 
-from PyQt6.QtCore import QDateTime, Qt, pyqtSignal
+from datetime import datetime
+from typing import Optional
+
+from dateutil import parser as dateutil_parser
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QDateTimeEdit,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QMessageBox,
     QScrollArea,
     QSpinBox,
     QTextEdit,
@@ -19,11 +24,43 @@ from core.photo_types import BoundingBoxData, PhotoAttributes
 from gui.magnifier_widget import MagnifierWidget
 
 
+class SelectAllLineEdit(QLineEdit):
+    """QLineEdit that automatically selects all text when it gains focus."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._should_select_all_on_mouse_press = False
+
+    def focusInEvent(self, event):
+        """Override to set up select-all behavior when widget gains focus."""
+        super().focusInEvent(event)
+        # Flag that the next mouse press should select all (if there's text)
+        if self.text():
+            self._should_select_all_on_mouse_press = True
+
+    def mousePressEvent(self, event):
+        """Override to implement select-all-on-first-click behavior."""
+        if self._should_select_all_on_mouse_press and self.text():
+            # Select all text instead of positioning cursor at click location
+            self.selectAll()
+            self._should_select_all_on_mouse_press = False
+        else:
+            # Normal mouse press behavior (position cursor at click)
+            super().mousePressEvent(event)
+
+    def keyPressEvent(self, event):
+        """Override to cancel select-all behavior when user types."""
+        # Any key press means user is actively editing, so disable select-all
+        self._should_select_all_on_mouse_press = False
+        super().keyPressEvent(event)
+
+
 class AttributesSidebar(QWidget):
     """Sidebar widget for editing bounding box attributes."""
 
     attributes_changed = pyqtSignal(str, PhotoAttributes)  # Emits (box_id, attributes)
     coordinates_changed = pyqtSignal(str, list)  # Emits (box_id, coordinates)
+    bulk_datetime_update_requested = pyqtSignal(str)  # Emits (date_time_value)
 
     def __init__(self):
         super().__init__()
@@ -62,19 +99,29 @@ class AttributesSidebar(QWidget):
         datetime_group = QGroupBox("Date & Time")
         datetime_layout = QVBoxLayout(datetime_group)
 
-        self.datetime_edit = QDateTimeEdit()
-        self.datetime_edit.setCalendarPopup(True)
-        self.datetime_edit.setDateTime(QDateTime.currentDateTime())
-        self.datetime_edit.setDisplayFormat("M/d/yyyy h:mm")
-        self.datetime_edit.dateTimeChanged.connect(self.on_datetime_changed)
+        self.datetime_edit = SelectAllLineEdit()
+        self.datetime_edit.setPlaceholderText("e.g., May 2021, 1999-08-14, 2023")
+        self.datetime_edit.editingFinished.connect(self.on_datetime_changed)
         datetime_layout.addWidget(self.datetime_edit)
+
+        # Action buttons layout
+        buttons_layout = QHBoxLayout()
 
         # Clear date button
         self.clear_date_label = QLabel("<a href='#'>Clear date</a>")
         self.clear_date_label.setOpenExternalLinks(False)
         self.clear_date_label.linkActivated.connect(self.clear_datetime)
         self.clear_date_label.setStyleSheet("QLabel { color: #0066cc; }")
-        datetime_layout.addWidget(self.clear_date_label)
+        buttons_layout.addWidget(self.clear_date_label)
+
+        # Apply to all button
+        self.apply_to_all_label = QLabel("<a href='#'>Apply to all</a>")
+        self.apply_to_all_label.setOpenExternalLinks(False)
+        self.apply_to_all_label.linkActivated.connect(self.apply_to_all_datetime)
+        self.apply_to_all_label.setStyleSheet("QLabel { color: #0066cc; }")
+        buttons_layout.addWidget(self.apply_to_all_label)
+
+        datetime_layout.addLayout(buttons_layout)
 
         content_layout.addWidget(datetime_group)
 
@@ -164,7 +211,7 @@ class AttributesSidebar(QWidget):
             scroll_area.hide()
         self.no_selection_label.show()
 
-    def show_box_data(self, box_data: BoundingBoxData):
+    def set_box_data(self, box_data: BoundingBoxData):
         """Show attributes for the selected box."""
         self.updating_ui = True
         self.current_box_id = box_data.box_id
@@ -178,17 +225,7 @@ class AttributesSidebar(QWidget):
 
         # Update datetime
         datetime_str = box_data.attributes.date_time
-        if datetime_str:
-            try:
-                dt = QDateTime.fromString(datetime_str, Qt.DateFormat.ISODate)
-                if dt.isValid():
-                    self.datetime_edit.setDateTime(dt)
-                else:
-                    self.datetime_edit.setDateTime(QDateTime.currentDateTime())
-            except Exception:
-                self.datetime_edit.setDateTime(QDateTime.currentDateTime())
-        else:
-            self.datetime_edit.setDateTime(QDateTime.currentDateTime())
+        self.datetime_edit.setText(datetime_str)
 
         # Update comments
         current_comments = self.comments_edit.toPlainText()
@@ -204,11 +241,53 @@ class AttributesSidebar(QWidget):
         finally:
             self.updating_ui = False
 
+    def parse_flexible_date(self, user_input: str) -> Optional[str]:
+        """Parse flexible date input and return standardized format."""
+        user_input = user_input.strip()
+        if not user_input:
+            return ""
+
+        try:
+            # Parse with dateutil - it's very flexible
+            parsed_dt = dateutil_parser.parse(
+                user_input, default=datetime(1900, 1, 1, 0, 0, 0)
+            )
+            # Return in standard format: YYYY-MM-DD HH:MM:SS
+            return parsed_dt.strftime("%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError, dateutil_parser.ParserError):
+            # If parsing fails, return None to indicate error
+            return None
+
     def on_datetime_changed(self):
         """Handle date/time changes."""
         if not self.updating_ui and self.current_box_id:
-            dt_string = self.datetime_edit.dateTime().toString(Qt.DateFormat.ISODate)
-            self.emit_attributes_changed("date_time", dt_string)
+            user_input = self.datetime_edit.text().strip()
+
+            if not user_input:
+                # Empty input - clear the date
+                self.emit_attributes_changed("date_time", "")
+                return
+
+            parsed_date = self.parse_flexible_date(user_input)
+
+            if parsed_date is None:
+                # Show error message but keep user input
+                QMessageBox.warning(
+                    self,
+                    "Invalid Date",
+                    f"Could not parse '{user_input}' as a date. Please use a format like:\n"
+                    "• May 2021\n"
+                    "• 1999-08-14\n"
+                    "• 2023\n"
+                    "• August 15, 2020 3:30 PM",
+                )
+                return
+
+            # Update the text field with parsed format and save
+            self.updating_ui = True
+            self.datetime_edit.setText(parsed_date)
+            self.updating_ui = False
+            self.emit_attributes_changed("date_time", parsed_date)
 
     def on_comments_changed(self):
         """Handle comments changes."""
@@ -220,6 +299,32 @@ class AttributesSidebar(QWidget):
         """Clear the datetime field."""
         if self.current_box_id:
             self.emit_attributes_changed("date_time", "")
+
+    def apply_to_all_datetime(self):
+        """Apply current datetime to all bounding boxes."""
+        current_date = self.datetime_edit.text().strip()
+
+        if not current_date:
+            QMessageBox.information(
+                self,
+                "No Date to Apply",
+                "Please enter a date before applying to all boxes.",
+            )
+            return
+
+        # Parse the date to ensure it's valid before applying to all
+        parsed_date = self.parse_flexible_date(current_date)
+        if parsed_date is None:
+            QMessageBox.warning(
+                self,
+                "Invalid Date",
+                f"Cannot apply invalid date '{current_date}' to all boxes.\n"
+                "Please enter a valid date first.",
+            )
+            return
+
+        # Emit signal with the parsed date for bulk update
+        self.bulk_datetime_update_requested.emit(parsed_date)
 
     def emit_attributes_changed(self, key: str, value: str):
         """Emit attribute change with current box ID."""
@@ -240,8 +345,8 @@ class AttributesSidebar(QWidget):
         if not self.current_box_id:
             return PhotoAttributes()
 
-        # Get datetime
-        dt_string = self.datetime_edit.dateTime().toString(Qt.DateFormat.ISODate)
+        # Get datetime text directly
+        dt_string = self.datetime_edit.text().strip()
 
         # Get comments
         comments = self.comments_edit.toPlainText().strip()
