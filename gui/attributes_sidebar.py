@@ -2,10 +2,10 @@
 Attributes sidebar for editing bounding box metadata.
 """
 
-from datetime import datetime
-from typing import Optional
+from __future__ import annotations
 
-from dateutil import parser as dateutil_parser
+from datetime import datetime
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QGroupBox,
@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core import utils
 from core.photo_types import BoundingBoxData, PhotoAttributes
 from gui.magnifier_widget import MagnifierWidget
 
@@ -241,23 +242,6 @@ class AttributesSidebar(QWidget):
         finally:
             self.updating_ui = False
 
-    def parse_flexible_date(self, user_input: str) -> Optional[str]:
-        """Parse flexible date input and return standardized format."""
-        user_input = user_input.strip()
-        if not user_input:
-            return ""
-
-        try:
-            # Parse with dateutil - it's very flexible
-            parsed_dt = dateutil_parser.parse(
-                user_input, default=datetime(1900, 1, 1, 0, 0, 0)
-            )
-            # Return in standard format: YYYY-MM-DD HH:MM:SS
-            return parsed_dt.strftime("%Y-%m-%d %H:%M:%S")
-        except (ValueError, TypeError, dateutil_parser.ParserError):
-            # If parsing fails, return None to indicate error
-            return None
-
     def on_datetime_changed(self):
         """Handle date/time changes."""
         if not self.updating_ui and self.current_box_id:
@@ -268,7 +252,7 @@ class AttributesSidebar(QWidget):
                 self.emit_attributes_changed("date_time", "")
                 return
 
-            parsed_date = self.parse_flexible_date(user_input)
+            parsed_date = utils.parse_flexible_date(user_input)
 
             if parsed_date is None:
                 # Show error message but keep user input
@@ -313,7 +297,7 @@ class AttributesSidebar(QWidget):
             return
 
         # Parse the date to ensure it's valid before applying to all
-        parsed_date = self.parse_flexible_date(current_date)
+        parsed_date = utils.parse_flexible_date(current_date)
         if parsed_date is None:
             QMessageBox.warning(
                 self,
