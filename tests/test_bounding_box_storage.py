@@ -2,7 +2,6 @@
 Tests for bounding box storage and loading functionality.
 """
 
-import json
 import os
 import sys
 

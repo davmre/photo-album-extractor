@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, NewType, Protocol, Union
+from typing import Any, NewType, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -21,10 +21,6 @@ from PyQt6.QtCore import QPointF
 # =============================================================================
 
 ImageCoordinate = NewType("ImageCoordinate", tuple[float, float])
-
-
-# File paths with semantic meaning
-DirectoryPath = NewType("DirectoryPath", str)
 
 # =============================================================================
 # Array Types with Shape Constraints
@@ -98,7 +94,7 @@ def bounding_box_as_array(corner_points: BoundingBoxAny) -> QuadArray:
     try:
         # Handle arrays and lists-of-tuple-coordinates
         result = np.asarray(corner_points, dtype=float)
-    except:  # QpointF
+    except Exception:  # QpointF
         try:
             result = np.array(
                 [
@@ -107,10 +103,10 @@ def bounding_box_as_array(corner_points: BoundingBoxAny) -> QuadArray:
                 ],
                 dtype=float,
             )
-        except:
-            raise Exception(
+        except Exception:
+            raise ValueError(
                 f"Object {corner_points} not interpretable as a bounding box."
-            )
+            ) from None
     return result
 
 
@@ -120,26 +116,3 @@ def bounding_box_as_list_of_qpointfs(
     if isinstance(corner_points[0], QPointF):
         return corner_points  # type: ignore
     return [QPointF(float(p[0]), float(p[1])) for p in corner_points]  # type: ignore
-
-
-# =============================================================================
-# Protocol Definitions
-# =============================================================================
-
-
-class BoundaryRefinementStrategy(Protocol):
-    """Protocol for boundary refinement algorithms with semantic types."""
-
-    def refine_boundary(
-        self,
-        image: BGRImage,
-        initial_quad: QuadArray,
-        debug_dir: DirectoryPath | None = None,
-        **kwargs: Any,
-    ) -> QuadArray: ...
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def description(self) -> str: ...

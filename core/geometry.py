@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import numpy as np
-from numpy import ndarray
 
 # Import semantic types from photo_types for consistency
 from core.photo_types import (
@@ -10,6 +9,11 @@ from core.photo_types import (
     TransformMatrix,
     bounding_box_as_array,
 )
+from numpy import ndarray
+
+# Suppress lint errors from uppercase variable names
+# ruff: noqa N806, N803
+
 
 UNIT_SQUARE = np.array([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
 
@@ -197,8 +201,6 @@ def line_integral_vectorized(
     Returns:
         (N,) array of line integral values
     """
-    N = start_points.shape[0]
-
     # Extract coordinates - shape (N,)
     x0, y0 = start_points[:, 0], start_points[:, 1]
     x1, y1 = end_points[:, 0], end_points[:, 1]

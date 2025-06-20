@@ -28,7 +28,9 @@ def create_test_images():
         draw = ImageDraw.Draw(img)
 
         # Add album page border
-        draw.rectangle([20, 20, size[0] - 20, size[1] - 20], outline="gray", width=4)
+        draw.rectangle(
+            (20.0, 20.0, size[0] - 20.0, size[1] - 20.0), outline="gray", width=4
+        )
 
         # Add title
         draw.text((50, 50), f"Album Page: {filename}", fill="black")
@@ -43,13 +45,13 @@ def create_test_images():
 
         for i, (x1, y1, x2, y2) in enumerate(photo_positions):
             # Draw photo placeholder
-            draw.rectangle([x1, y1, x2, y2], fill="white", outline="black", width=2)
+            draw.rectangle((x1, y1, x2, y2), fill="white", outline="black", width=2)
             draw.text((x1 + 10, y1 + 10), f"Photo {i + 1}", fill="black")
 
             # Add some details inside each "photo"
             center_x, center_y = (x1 + x2) // 2, (y1 + y2) // 2
             draw.rectangle(
-                [center_x - 30, center_y - 30, center_x + 30, center_y + 30],
+                (center_x - 30, center_y - 30, center_x + 30, center_y + 30),
                 fill="lightblue",
                 outline="blue",
                 width=1,

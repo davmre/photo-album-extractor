@@ -161,7 +161,6 @@ class TestImageProcessor:
         image = images.load_image(test_image_path)
 
         # Define crop data with attributes
-        h, w = 2400.0, 1800.0
         crop_data = [
             BoundingBoxData.new(
                 corners=[(100, 150), (400, 150), (400, 450), (100, 450)],

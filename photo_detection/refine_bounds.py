@@ -1,18 +1,19 @@
+# Suppress lint errors from uppercase variable names
+# ruff: noqa N806, N803
+
 from __future__ import annotations
 
 import logging
 import os
 import pathlib
 import sys
-from typing import Any, Callable
-
-import cv2
-import numpy as np
-import PIL.Image
-from PIL import Image
+from typing import Callable
 
 import core.geometry as geometry
 import core.images as images
+import cv2
+import numpy as np
+import PIL.Image
 from core.photo_types import (
     AnyArray,
     BoundingBoxAny,
@@ -22,6 +23,7 @@ from core.photo_types import (
     UInt8Array,
     bounding_box_as_array,
 )
+from PIL import Image
 
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 LOGGER = logging.getLogger("logger")
@@ -207,7 +209,7 @@ def search_best_rhombus(
     best_offset_idx = np.argmax(offset_scores)
     best_offset = offsets[best_offset_idx]
     LOGGER.debug(f"best offset {best_offset}")
-    best_score = np.max(offset_scores)
+    # best_score = np.max(offset_scores)
     horizontal_offset_mask = (idxs2 - idxs1) == best_offset
     vertical_offset_mask = (idxs1 - idxs2) == best_offset
     top_edge, top_score = get_best_edge(
@@ -230,14 +232,20 @@ def search_best_rhombus(
 
 
 def annotate_image(
-    img: AnyArray,
-    contours: list[Any] | None = None,
+    img: AnyArray | PIL.Image.Image,
+    contours=None,
     edges: list[IntArray] | tuple[IntArray, ...] | None = None,
 ) -> AnyArray:
+    if isinstance(img, Image.Image):
+        img = np.array(img)
     img = img.copy()
     if contours:
         cv2.drawContours(
-            img, np.array(np.round(contours), dtype=int), -1, (0, 0, 255), 1
+            img,
+            np.array(np.round(contours), dtype=int),  # type: ignore
+            -1,
+            (0, 0, 255),
+            1,  # type: ignore
         )  # type: ignore
     if edges:
         colors = [
@@ -850,7 +858,7 @@ def get_edges_as_image_coordinates(edge_indices, strips, angle_offset, debug_dir
 
     # Top edge
     top_y = edge_indices["top"]
-    top_h, top_w = strips["top"].edge_response.shape
+    _, top_w = strips["top"].edge_response.shape
     top_y0 = top_y - top_w / 2 * np.tan(angle_offset)
     top_y1 = top_y + top_w / 2 * np.tan(angle_offset)
     edges_strip["top"] = (np.array([0, top_y0]), np.array([top_w - 1, top_y1]))
@@ -863,7 +871,7 @@ def get_edges_as_image_coordinates(edge_indices, strips, angle_offset, debug_dir
 
     # Left edge
     left_x = edge_indices["left"]
-    left_h, left_w = strips["left"].edge_response.shape
+    left_h, _ = strips["left"].edge_response.shape
     left_x0 = left_x + left_h / 2 * np.tan(angle_offset)
     left_x1 = left_x - left_h / 2 * np.tan(angle_offset)
     edges_strip["left"] = (np.array([left_x0, 0]), np.array([left_x1, left_h - 1]))

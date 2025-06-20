@@ -58,7 +58,7 @@ class ImageWithBoxes:
     def refine_all_boxes(self, refine_strategy: str):
         refine_fn = refine_bounds.REFINEMENT_STRATEGIES[refine_strategy]
         refined_boxes = []
-        for i, box in enumerate(self.init_boxes):
+        for box in self.init_boxes:
             refined = refine_fn(self.image, box, debug_dir=None)
             refined_boxes.append(refined)
         self.refined_boxes[refine_strategy] = refined_boxes

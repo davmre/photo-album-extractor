@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, 
 import core.geometry as geometry
 import photo_detection.inscribed_rectangle as inscribed_rectangle
 import photo_detection.refine_bounds as refine_bounds
-from core.photo_types import BoundingBoxData, PhotoAttributes
+from core.photo_types import BoundingBoxData
 from core.settings import AppSettings
 from gui.quad_bounding_box import QuadBoundingBox
 

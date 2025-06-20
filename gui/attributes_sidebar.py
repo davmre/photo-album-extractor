@@ -185,7 +185,7 @@ class AttributesSidebar(QWidget):
                     self.datetime_edit.setDateTime(dt)
                 else:
                     self.datetime_edit.setDateTime(QDateTime.currentDateTime())
-            except:
+            except Exception:
                 self.datetime_edit.setDateTime(QDateTime.currentDateTime())
         else:
             self.datetime_edit.setDateTime(QDateTime.currentDateTime())

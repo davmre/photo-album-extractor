@@ -2,18 +2,19 @@
 Image processing utilities for loading, cropping, and saving photos.
 """
 
+# ruff: noqa N806, N803
+
 import os
 from datetime import datetime
 from typing import Optional
 
+import core.photo_types as photo_types
 import numpy as np
 import piexif
 import PIL.Image
-from PIL import Image
-
-import core.photo_types as photo_types
 from core import geometry
 from core.photo_types import BoundingBoxData, PhotoAttributes
+from PIL import Image
 
 # Semantic type aliases
 PILImage = PIL.Image.Image  # PIL/Pillow images
@@ -49,12 +50,12 @@ def extract_perspective_image(
         for p1, p2 in zip(pa, pb):
             matrix.append([p1[0], p1[1], 1, 0, 0, 0, -p2[0] * p1[0], -p2[0] * p1[1]])
             matrix.append([0, 0, 0, p1[0], p1[1], 1, -p2[1] * p1[0], -p2[1] * p1[1]])
-        A = np.array(matrix, dtype=np.float32)
-        B = np.array(corners.flatten(), dtype=np.float32)
+        mat_A = np.array(matrix, dtype=np.float32)
+        vec_B = np.array(corners.flatten(), dtype=np.float32)
         try:
-            res = np.dot(np.linalg.inv(A.T @ A) @ A.T, B)
+            res = np.dot(np.linalg.inv(mat_A.T @ mat_A) @ mat_A.T, vec_B)
             return np.array(res).flatten()
-        except:
+        except Exception:
             return None
 
     coeffs = find_coeffs(output_corners, corners)
@@ -85,7 +86,6 @@ def save_cropped_images(
         base_name: Base name for files
     """
     saved_files = []
-    img_width, img_height = image.size
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)

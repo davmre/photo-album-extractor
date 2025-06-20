@@ -66,7 +66,7 @@ class TestInscriptionGeometry:
 
         raised_not_feasible = False
         try:
-            rect = g.rect_from_t2(t2=t1)
+            _ = g.rect_from_t2(t2=t1)
         except inscribed_rectangle.GeometryNotFeasibleError:
             raised_not_feasible = True
         assert raised_not_feasible

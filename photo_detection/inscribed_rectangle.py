@@ -1,9 +1,3 @@
-import numpy as np
-import scipy.optimize
-
-from core import geometry
-from core.photo_types import BoundingBoxAny, QuadArray, bounding_box_as_array
-
 """
 Tools to compute the largest rectangle inscribable in a (convex) quadrilateral.
 
@@ -29,6 +23,14 @@ minimized in this neighborhood using scipy.optimize.minimize_scalar
 (bounded Brent's method).
 """
 
+# Suppress lint errors from uppercase variable names
+# ruff: noqa N806, N803
+
+import numpy as np
+import scipy.optimize
+from core import geometry
+from core.photo_types import BoundingBoxAny, QuadArray, bounding_box_as_array
+
 
 def cross2d(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     x, y = np.asarray(x), np.asarray(y)
@@ -47,7 +49,9 @@ def merge_adjacent_intervals(
     return merged
 
 
-def minimize_scalar_multimodal(fn, bounds, n_eval_points):
+def minimize_scalar_multimodal(
+    fn, bounds, n_eval_points
+) -> scipy.optimize.OptimizeResult:
     xs = np.linspace(bounds[0], bounds[1], n_eval_points)
     fs = [fn(x) for x in xs]
     best_idx = np.argmin(fs)
@@ -55,7 +59,7 @@ def minimize_scalar_multimodal(fn, bounds, n_eval_points):
     x_upper = xs[best_idx + 1] if best_idx < n_eval_points - 1 else bounds[1]
     return scipy.optimize.minimize_scalar(
         fn, bounds=[x_lower, x_upper], method="bounded"
-    )
+    )  # type: ignore
 
 
 class GeometryNotFeasibleError(Exception):
@@ -448,7 +452,7 @@ class InscriptionGeometry:
 
     def plot(self, t2=None, ax=None):
         """Plots the geometry of this setup."""
-        from matplotlib import pylab as plt
+        from matplotlib import pylab as plt  # type: ignore
 
         if ax is None:
             fig = plt.figure()

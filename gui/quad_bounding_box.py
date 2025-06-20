@@ -2,11 +2,8 @@
 Quadrilateral bounding box widget for arbitrary four-sided photo selection.
 """
 
-import uuid
-from typing import Optional
-
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QPen, QPolygonF
+from PyQt6.QtGui import QBrush, QColor, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import (
     QGraphicsItem,
     QGraphicsObject,
@@ -87,7 +84,7 @@ class QuadBoundingBox(QGraphicsObject):
             max_y - min_y + 2 * padding,
         )
 
-    def paint(self, painter, option, widget):
+    def paint(self, painter: QPainter, option, widget):
         """Paint the quadrilateral bounding box."""
         # Use selection-specific styling if selected
         if self._is_selected:
@@ -221,13 +218,13 @@ class CornerHandle(QGraphicsRectItem):
         # Dragging state
         self.is_dragging = False
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent):
         """Start corner drag operation."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.is_dragging = True
             # Don't call super() to prevent default item movement
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
         """Handle corner dragging."""
         if self.is_dragging:
             # Move the corner to the new position
@@ -236,7 +233,7 @@ class CornerHandle(QGraphicsRectItem):
             # Update our position to follow the corner
             self.setPos(new_pos)
 
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent):
         """End corner drag operation."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.is_dragging = False

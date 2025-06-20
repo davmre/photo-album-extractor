@@ -15,9 +15,9 @@ class BoundingBoxStorage:
     def __init__(self, directory: str) -> None:
         self.directory = directory
         self.data_file = os.path.join(directory, ".photo_extractor_data.json")
-        self.data: dict[str, list[dict[str, Any]]] = self.load_data()
+        self.data: dict[str, list[dict[str, Any]]] = self._load_data()
 
-    def load_data(self) -> dict[str, list[dict[str, Any]]]:
+    def _load_data(self) -> dict[str, list[dict[str, Any]]]:
         """Load bounding box data from JSON file."""
         if os.path.exists(self.data_file):
             try:
@@ -27,7 +27,7 @@ class BoundingBoxStorage:
                 return {}
         return {}
 
-    def save_data(self) -> None:
+    def _save_data(self) -> None:
         """Save bounding box data to JSON file."""
         try:
             with open(self.data_file, "w") as f:
@@ -58,7 +58,7 @@ class BoundingBoxStorage:
                 }
                 boxes_dicts.append(box_entry)
             self.data[image_filename] = boxes_dicts
-        self.save_data()
+        self._save_data()
 
     def load_bounding_boxes(self, image_filename: str) -> list[BoundingBoxData]:
         """Load bounding box data with IDs for a specific image."""
@@ -101,6 +101,6 @@ class BoundingBoxStorage:
             if saved_box_data.get("id") == bounding_box_data.box_id:
                 saved_box_data["corners"] = corner_coords
                 saved_box_data["attributes"] = attributes_dict
-                self.save_data()
+                self._save_data()
                 return True
         return False

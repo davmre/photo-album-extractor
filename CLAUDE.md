@@ -40,6 +40,17 @@ Fix auto-fixable linting issues:
 ruff check . --fix
 ```
 
+### Type Checking Setup
+
+```bash
+# Always validate types before committing
+source .venv/bin/activate
+pyright  # Should show 0 errors, 0 warnings
+```
+
+The codebase uses `pyproject.toml` for pyright configuration with gradual typing enabled.
+
+
 ### Testing
 
 To run a quick integration test of much of the main workflow (opening the app,
@@ -97,18 +108,6 @@ you have no other means of persisting memory from session to session.
 - **PyQt Signals**: Extensive use of signals for GUI communication (e.g., `boundsChanged`, `metadataChanged`)
 - **EXIF Metadata**: All extracted photos preserve original EXIF data and add custom metadata
 
-## Type System Guidelines
-
-### Type Checking Setup
-
-```bash
-# Always validate types before committing
-source .venv/bin/activate
-pyright  # Should show 0 errors, 0 warnings
-```
-
-The codebase uses `pyproject.toml` for pyright configuration with gradual typing enabled.
-
 ### File Organization
 
 **Type-First Development**: When adding new modules:
@@ -116,4 +115,4 @@ The codebase uses `pyproject.toml` for pyright configuration with gradual typing
 1. Start with type definitions in appropriate module
 2. Import semantic types from `core/photo_types.py`
 3. Add proper type annotations from the beginning
-4. Validate with `pyright` frequently
+4. Validate with `pyright` and `ruff` frequently

@@ -124,7 +124,7 @@ class DirectoryImageList(QWidget):
         filename = os.path.basename(image_path)
         for i in range(self.image_list.count()):
             item = self.image_list.item(i)
-            if item.text() == filename:
+            if item is not None and item.text() == filename:
                 self.image_list.setCurrentItem(item)
                 break
 
@@ -140,7 +140,8 @@ class DirectoryImageList(QWidget):
         """Get the path of the first image in the current directory."""
         if self.image_list.count() > 0:
             first_item = self.image_list.item(0)
-            return first_item.data(Qt.ItemDataRole.UserRole)
+            if first_item is not None:
+                return first_item.data(Qt.ItemDataRole.UserRole)
         return None
 
     def currentRow(self):

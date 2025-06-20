@@ -165,9 +165,15 @@ class PhotoExtractorApp(QMainWindow):
     def create_menu_bar(self):
         """Create the application menu bar."""
         menubar = self.menuBar()
+        if not menubar:
+            # Silly error case to convince the type checker that `menubar` is not None
+            # below this point. (pattern also used for individual menus below).
+            raise ValueError("Error creating menu bar")
 
         # File menu
         file_menu = menubar.addMenu("File")
+        if not file_menu:
+            raise ValueError("Error creating file menu")
 
         load_action = QAction("Load Image", self)
         load_action.setShortcut("Ctrl+O")
@@ -183,6 +189,8 @@ class PhotoExtractorApp(QMainWindow):
 
         # Edit menu
         edit_menu = menubar.addMenu("Edit")
+        if not edit_menu:
+            raise ValueError("Error creating edit menu")
 
         clear_action = QAction("Clear All Boxes", self)
         clear_action.triggered.connect(self.clear_all_boxes)
@@ -197,6 +205,8 @@ class PhotoExtractorApp(QMainWindow):
 
         # View menu
         view_menu = menubar.addMenu("View")
+        if not view_menu:
+            raise ValueError("Error creating view menu")
 
         zoom_in_action = QAction("Zoom In", self)
         zoom_in_action.setShortcut("Ctrl+=")
