@@ -394,7 +394,7 @@ class PhotoExtractorApp(QMainWindow):
         for box_data in all_boxes:
             # Create new attributes with updated date_time
             updated_attributes = PhotoAttributes(
-                date_time=date_time_value,
+                date_string=date_time_value,
                 comments=box_data.attributes.comments,  # Keep existing comments
             )
 

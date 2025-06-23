@@ -12,7 +12,6 @@ import google.generativeai as genai  # type: ignore
 import numpy as np
 import PIL.Image
 
-from core import utils
 from core.errors import AppError
 from core.photo_types import BoundingBoxData, PhotoAttributes, QuadArray
 from core.settings import AppSettings
@@ -107,10 +106,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
 
         attributes = PhotoAttributes()
         if "date" in entry:
-            # Try to parse as a canonical date. If this fails, pass through whatever
-            # Gemini transcribed.
-            parsed_date = utils.parse_flexible_date(entry["date"])
-            attributes.date_time = entry["date"] if parsed_date is None else parsed_date
+            attributes.date_string = entry["date"]
         if "caption" in entry:
             attributes.comments = entry["caption"]
         return BoundingBoxData.new(corners=corners, attributes=attributes)

@@ -60,6 +60,9 @@ class BoundingBoxStorage:
             self.data[image_filename] = boxes_dicts
         self._save_data()
 
+    def load_image_filenames(self) -> list[str]:
+        return list(self.data.keys())
+
     def load_bounding_boxes(self, image_filename: str) -> list[BoundingBoxData]:
         """Load bounding box data with IDs for a specific image."""
         boxes = self.data.get(image_filename, [])

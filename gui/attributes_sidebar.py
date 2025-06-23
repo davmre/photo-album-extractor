@@ -4,8 +4,6 @@ Attributes sidebar for editing bounding box metadata.
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QGroupBox,
@@ -20,7 +18,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core import utils
 from core.photo_types import BoundingBoxData, PhotoAttributes
 from gui.magnifier_widget import MagnifierWidget
 
@@ -97,7 +94,7 @@ class AttributesSidebar(QWidget):
         content_layout.setSpacing(10)
 
         # Date/Time group
-        datetime_group = QGroupBox("Date & Time")
+        datetime_group = QGroupBox("Date")
         datetime_layout = QVBoxLayout(datetime_group)
 
         self.datetime_edit = SelectAllLineEdit()
@@ -225,7 +222,7 @@ class AttributesSidebar(QWidget):
             scroll_area.show()
 
         # Update datetime
-        datetime_str = box_data.attributes.date_time
+        datetime_str = box_data.attributes.date_string
         self.datetime_edit.setText(datetime_str)
 
         # Update comments
@@ -252,26 +249,7 @@ class AttributesSidebar(QWidget):
                 self.emit_attributes_changed("date_time", "")
                 return
 
-            parsed_date = utils.parse_flexible_date(user_input)
-
-            if parsed_date is None:
-                # Show error message but keep user input
-                QMessageBox.warning(
-                    self,
-                    "Invalid Date",
-                    f"Could not parse '{user_input}' as a date. Please use a format like:\n"
-                    "• May 2021\n"
-                    "• 1999-08-14\n"
-                    "• 2023\n"
-                    "• August 15, 2020 3:30 PM",
-                )
-                return
-
-            # Update the text field with parsed format and save
-            self.updating_ui = True
-            self.datetime_edit.setText(parsed_date)
-            self.updating_ui = False
-            self.emit_attributes_changed("date_time", parsed_date)
+            self.emit_attributes_changed("date_time", user_input)
 
     def on_comments_changed(self):
         """Handle comments changes."""
@@ -296,19 +274,8 @@ class AttributesSidebar(QWidget):
             )
             return
 
-        # Parse the date to ensure it's valid before applying to all
-        parsed_date = utils.parse_flexible_date(current_date)
-        if parsed_date is None:
-            QMessageBox.warning(
-                self,
-                "Invalid Date",
-                f"Cannot apply invalid date '{current_date}' to all boxes.\n"
-                "Please enter a valid date first.",
-            )
-            return
-
         # Emit signal with the parsed date for bulk update
-        self.bulk_datetime_update_requested.emit(parsed_date)
+        self.bulk_datetime_update_requested.emit(current_date)
 
     def emit_attributes_changed(self, key: str, value: str):
         """Emit attribute change with current box ID."""
@@ -335,7 +302,7 @@ class AttributesSidebar(QWidget):
         # Get comments
         comments = self.comments_edit.toPlainText().strip()
 
-        return PhotoAttributes(date_time=dt_string, comments=comments)
+        return PhotoAttributes(date_string=dt_string, comments=comments)
 
     def on_coordinate_changed(self, corner_index, coord_type, value):
         """Handle coordinate changes."""

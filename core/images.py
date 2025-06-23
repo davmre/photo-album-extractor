@@ -5,14 +5,13 @@ Image processing utilities for loading, cropping, and saving photos.
 # ruff: noqa N806, N803
 
 import os
-from datetime import datetime
 from typing import Optional
 
 import core.photo_types as photo_types
 import numpy as np
 import piexif
 import PIL.Image
-from core import geometry
+from core import date_utils, geometry
 from core.photo_types import BoundingBoxData, PhotoAttributes
 from PIL import Image
 
@@ -131,10 +130,13 @@ def save_image_with_exif(
         exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
 
         # Add date/time if available
-        if attributes.date_time:
+        if attributes.date_string:
             try:
                 # Parse ISO date string and convert to EXIF format
-                dt = datetime.fromisoformat(attributes.date_time.replace("Z", "+00:00"))
+                dt = date_utils.parse_flexible_date_as_datetime(attributes.date_string)
+                if dt is None:
+                    raise ValueError()
+
                 exif_datetime = dt.strftime("%Y:%m:%d %H:%M:%S")
 
                 # Set multiple date fields for maximum compatibility
@@ -142,7 +144,7 @@ def save_image_with_exif(
                 exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = exif_datetime
                 exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = exif_datetime
             except (ValueError, AttributeError) as e:
-                print(f"Warning: Could not parse date '{attributes.date_time}': {e}")
+                print(f"Warning: Could not parse date '{attributes.date_string}': {e}")
 
         # Add comments if available
         if attributes.comments:
