@@ -2,8 +2,10 @@
 Quadrilateral bounding box widget for arbitrary four-sided photo selection.
 """
 
+from __future__ import annotations
+
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QPainter, QPen, QPolygonF
+from PyQt6.QtGui import QBrush, QColor, QKeyEvent, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import (
     QGraphicsItem,
     QGraphicsObject,
@@ -124,15 +126,26 @@ class QuadBoundingBox(QGraphicsObject):
             world_corners.append(self.pos() + corner)
         return world_corners
 
-    def move_corner(self, corner_id: int, new_position: QPointF):
-        """Move a specific corner to a new position (in world coordinates)."""
-        if 0 <= corner_id < 4:
-            # Convert world coordinates to local coordinates
-            local_pos = new_position - self.pos()
+    def is_axis_aligned_rect(self):
+        unique_x_values = {c.x() for c in self.corners}
+        unique_y_values = {c.y() for c in self.corners}
+        return len(unique_x_values) == 2 and len(unique_y_values) == 2
+
+    def corner_dragged(self, corner_id: int, new_position: QPointF):
+        old_pos = self.corners[corner_id]
+        old_x, old_y = old_pos.x(), old_pos.y()
+        local_pos = new_position - self.pos()
+        if self.is_axis_aligned_rect():
+            for c_id in range(4):
+                if self.corners[c_id].x() == old_x:
+                    self.corners[c_id].setX(local_pos.x())
+                if self.corners[c_id].y() == old_y:
+                    self.corners[c_id].setY(local_pos.y())
+        else:
             self.corners[corner_id] = local_pos
-            self.update_handles()
-            self.update()
-            self.changed.emit()
+        self.update_handles()
+        self.update()
+        self.changed.emit()
 
     def get_ordered_corners_for_extraction(self) -> photo_types.QuadArray:
         """Get corners in proper order for perspective extraction (prevents flipping)."""
@@ -189,11 +202,15 @@ class QuadBoundingBox(QGraphicsObject):
             self.selected_changed.emit(self.box_id)
         super().mousePressEvent(event)
 
+    def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        print("BBox keypress")
+        return super().keyPressEvent(event)
+
 
 class CornerHandle(QGraphicsRectItem):
     """Draggable handle for corner points of quadrilateral bounding box."""
 
-    def __init__(self, parent_box, corner_id):
+    def __init__(self, parent_box: QuadBoundingBox, corner_id: int):
         super().__init__()
         self.parent_box = parent_box
         self.corner_id = corner_id
@@ -229,7 +246,7 @@ class CornerHandle(QGraphicsRectItem):
         if self.is_dragging:
             # Move the corner to the new position
             new_pos = event.scenePos()
-            self.parent_box.move_corner(self.corner_id, new_pos)
+            self.parent_box.corner_dragged(self.corner_id, new_pos)
             # Update our position to follow the corner
             self.setPos(new_pos)
 
