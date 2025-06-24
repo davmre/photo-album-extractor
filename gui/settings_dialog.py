@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 
 from core.settings import AppSettings
 from photo_detection.detection_strategies import DETECTION_STRATEGIES
-from photo_detection.refine_bounds import REFINEMENT_STRATEGIES
+from photo_detection.refinement_strategies import REFINEMENT_STRATEGIES
 
 
 class SettingsDialog(QDialog):
@@ -29,7 +29,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.detection_strategies = DETECTION_STRATEGIES
-        self.refinement_strategy_names = REFINEMENT_STRATEGIES.keys()
+        self.refinement_strategies = REFINEMENT_STRATEGIES
         self.init_ui()
 
     def init_ui(self):
@@ -53,7 +53,7 @@ class SettingsDialog(QDialog):
         # Detection Strategy selector
         self.detection_strategy_combo = QComboBox()
         current_index = 0
-        for i, strategy in enumerate(self.detection_strategies):
+        for i, strategy in enumerate(self.detection_strategies.values()):
             self.detection_strategy_combo.addItem(strategy.name, strategy)
             if strategy.name == self.settings.detection_strategy:
                 current_index = i
@@ -72,8 +72,8 @@ class SettingsDialog(QDialog):
         # Refinement Strategy combo
         self.refinement_strategy_combo = QComboBox()
         current_index = 0
-        for i, strategy in enumerate(self.refinement_strategy_names):
-            self.refinement_strategy_combo.addItem(strategy, strategy)
+        for i, strategy in enumerate(self.refinement_strategies.values()):
+            self.refinement_strategy_combo.addItem(strategy.name, strategy)
             if strategy == self.settings.refinement_strategy:
                 current_index = i
         self.refinement_strategy_combo.setCurrentIndex(current_index)
@@ -121,7 +121,7 @@ class SettingsDialog(QDialog):
         # Save refinement strategy
         selected_strategy = self.refinement_strategy_combo.currentData()
         if selected_strategy:
-            self.settings.refinement_strategy = selected_strategy
+            self.settings.refinement_strategy = selected_strategy.name
 
         # Save to file
         self.settings.save_to_file()

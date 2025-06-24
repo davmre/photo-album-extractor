@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 
 # Import semantic types from photo_types for consistency
 from core.photo_types import (
     BoundingBoxAny,
+    FloatArray,
     QuadArray,
     TransformMatrix,
     bounding_box_as_array,
@@ -340,3 +343,65 @@ def sort_clockwise(rect: BoundingBoxAny) -> QuadArray:
     rect = bounding_box_as_array(rect)
     idxs = clockwise_corner_permutation(rect)
     return rect[idxs]
+
+
+def get_corner_deviations(rect1: QuadArray, rect2: QuadArray) -> list[float]:
+    """Score box pair by avg distance between corresponding corner points."""
+    rect1 = sort_clockwise(rect1)
+    rect2 = sort_clockwise(rect2)
+    return [
+        float(np.linalg.norm(corner2 - corner1))
+        for corner1, corner2 in zip(rect1, rect2)
+    ]
+
+
+def signed_distance_from_border(
+    x_coords: FloatArray,
+    y_coords: FloatArray,
+    border_pt1: FloatArray,
+    border_pt2: FloatArray,
+) -> FloatArray:
+    x1, y1 = border_pt1
+    x2, y2 = border_pt2
+    return (
+        (y2 - y1) * x_coords - (x2 - x1) * y_coords + x2 * y1 - y2 * x1
+    ) / np.linalg.norm(border_pt2 - border_pt1)
+
+
+def image_boundary_mask(
+    image_shape: tuple[int, ...],
+    patch_shape: tuple[int, ...],
+    image_to_patch_coords: Callable[[FloatArray], FloatArray],
+    offset: int = -1,
+) -> FloatArray:
+    img_height, img_width = image_shape[:2]
+    top_border = image_to_patch_coords(np.array([(0, 0), (img_width - 1, 0)]))
+    bottom_border = image_to_patch_coords(
+        np.array([(0, img_height - 1), (img_width - 1, img_height - 1)])
+    )
+    left_border = image_to_patch_coords(np.array([(0, 0), (0, img_height - 1)]))
+    right_border = image_to_patch_coords(
+        np.array([(img_width - 1, 0), (img_width - 1, img_height - 1)])
+    )
+
+    strip_width, strip_height = patch_shape[:2]
+    x_coords, y_coords = np.meshgrid(np.arange(strip_height), np.arange(strip_width))
+    top_border_dist = signed_distance_from_border(
+        x_coords, y_coords, top_border[0, :], top_border[1, :]
+    )
+    bottom_border_dist = signed_distance_from_border(
+        x_coords, y_coords, bottom_border[0, :], bottom_border[1, :]
+    )
+    left_border_dist = signed_distance_from_border(
+        x_coords, y_coords, left_border[0, :], left_border[1, :]
+    )
+    right_border_dist = signed_distance_from_border(
+        x_coords, y_coords, right_border[0, :], right_border[1, :]
+    )
+
+    mask = np.ones([strip_width, strip_height])
+    mask[top_border_dist >= offset] = 0
+    mask[bottom_border_dist <= -offset] = 0
+    mask[left_border_dist <= -offset] = 0
+    mask[right_border_dist >= offset] = 0
+    return mask

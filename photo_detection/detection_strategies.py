@@ -198,26 +198,54 @@ Return only the JSON response, no additional text."""
             return []
 
 
+class GeminiWithRefinementDetectionStrategy(DetectionStrategy):
+    def __init__(self):
+        self.gemini_strategy = GeminiDetectionStrategy()
+
+    @property
+    def name(self) -> str:
+        return "Auto-refine Gemini"
+
+    @property
+    def description(self) -> str:
+        return "Gemini AI Detection with auto-refined corners."
+
+    def set_api_key(self, api_key: str):
+        self.gemini_strategy.set_api_key(api_key)
+
+    def set_refinement_strategy(self, refine_fn):
+        self.refine_fn = refine_fn
+
+    def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBoxData]:
+        detected_boxes = self.gemini_strategy.detect_photos(image)
+        for box in detected_boxes:
+            refined_corners = self.refine_fn(image, box.corners)
+            box.corners = refined_corners
+        return detected_boxes
+
+
 # Registry of all available strategies
-DETECTION_STRATEGIES = [GeminiDetectionStrategy()]
+_DETECTION_STRATEGIES: list[DetectionStrategy] = [
+    GeminiDetectionStrategy(),
+    GeminiWithRefinementDetectionStrategy(),
+]
+
+DETECTION_STRATEGIES: dict[str, DetectionStrategy] = {
+    s.name: s for s in _DETECTION_STRATEGIES
+}
 
 
 def configure_detection_strategy(settings: AppSettings) -> DetectionStrategy:
     # Get the selected strategy from settings
     strategy_name = settings.detection_strategy
-    selected_strategy = None
-    for strategy in DETECTION_STRATEGIES:
-        if strategy.name == strategy_name:
-            selected_strategy = strategy
-            break
-    if not selected_strategy:
-        # Default to first strategy if none configured
-        selected_strategy = DETECTION_STRATEGIES[0]
+    selected_strategy = DETECTION_STRATEGIES.get(
+        strategy_name, _DETECTION_STRATEGIES[0]
+    )
 
     # Configure API key for strategies that need it
     if hasattr(selected_strategy, "set_api_key"):
         if settings.gemini_api_key:
-            selected_strategy.set_api_key(settings.gemini_api_key)
+            selected_strategy.set_api_key(settings.gemini_api_key)  # type: ignore
         else:
             raise AppError(
                 msg=f"The {selected_strategy.name} strategy requires an API key. "

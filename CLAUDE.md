@@ -16,8 +16,8 @@ before any other Python commands.
 ### Running
 
 ```bash
-# Basic launch
-python3 main.py
+# Launch GUI mode
+python3 main.py gui
 ```
 
 ### Code Formatting
@@ -69,27 +69,25 @@ pytest tests
 
 ## Development principles
 
-Before any sizable change, write a plan and save it under
-`plans/<change_name>.md`. Refer to the plan as you work and update it
-at the end of each phase with the current status, any issues encountered and if
-or how they were resolved.
+Prefer simple designs with pure functions operating on well-defined data types when
+possible. Avoid boilerplate OOP structures.
 
-Remember that you are an AI language model, writing for yourself. You
-do not need to include schedule estimates since you don't work on a human
-schedule (though it is fine to assess difficulty of specific tasks if that is
-helpful for your own planning). You do want to be thoughtful in recording
-context and any changes to your understanding of the task, since
-you have no other means of persisting memory from session to session.
+For new code, always consider the data model first. Factor out fundamental structures
+and logic under `core`, and then add interfaces under `gui` and/or `cli` as appropriate.
+
+All new code should have type annotations. Use `from __future__ import annotations`
+in new files for deferred evaluation of type annotations.
+
 
 ## Architecture
 
 ### Key Components
 
 1. **Core app functionality** (`core/`):
+   - `photo_types.py` and `errors.py`: custom types and exceptions used throughout
    - `bounding_box_storage.py` - Saves bounding boxes as JSON in `.photo_extractor_data.json` files per directory
    - `images.py`: Handles perspective correction, EXIF metadata, and image saving
    - `settings.py`: Defines app configuration.
-   - `photo_types.py` and `errors.py`: custom types and exceptions used throughout
 
 2. **GUI Layer** (`gui/`): PyQt6-based interface
    - `main_window.py`: Main application window orchestrating all components
@@ -102,15 +100,7 @@ you have no other means of persisting memory from session to session.
 
 4. **Photo detection** (`photo_detection/`): Methods to detect and refine photo bounding boxes
    - `detection_strategies.py`: Multiple photo detection strategies including Gemini AI
-   - `refine_bounds.py`: Multiple refinement algorithms (original, multiscale, strips-based)
-
-### Important Patterns
-
-- **Quadrilateral Support**: Bounding boxes are 4-point quadrilaterals. These are
-  typically represented as a Numpy array of floats in image coordinate space
-  (`QuadArray` in `photo_types.py`).
-- **PyQt Signals**: Extensive use of signals for GUI communication (e.g., `boundsChanged`, `metadataChanged`)
-- **EXIF Metadata**: All extracted photos preserve original EXIF data and add custom metadata
+   - `refinement_strategies.py`: Multiple algorithms for refining bounding boxes.
 
 ### File Organization
 

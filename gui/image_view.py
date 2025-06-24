@@ -21,10 +21,10 @@ from PyQt6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, 
 
 import core.geometry as geometry
 import photo_detection.inscribed_rectangle as inscribed_rectangle
-import photo_detection.refine_bounds as refine_bounds
 from core.photo_types import BoundingBoxData
 from core.settings import AppSettings
 from gui.quad_bounding_box import QuadBoundingBox
+from photo_detection import refinement_strategies
 
 
 class ImageView(QGraphicsView):
@@ -251,8 +251,7 @@ class ImageView(QGraphicsView):
         if not self.image_item or not isinstance(box, QuadBoundingBox):
             return
 
-        strategy_name = self.settings.refinement_strategy or "Original (multiscale)"
-        refine_fn = refine_bounds.REFINEMENT_STRATEGIES[strategy_name]
+        strategy = refinement_strategies.configure_refinement_strategy(self.settings)
 
         # Get the current image as numpy array
         image_bgr = self.image_as_numpy(format="bgr")
@@ -265,7 +264,7 @@ class ImageView(QGraphicsView):
             debug_dir = os.path.join(debug_dir, str(box.box_id))
 
         try:
-            refined_corners = refine_fn(  # type: ignore[reportCallIssue]
+            refined_corners = strategy.refine(
                 image_bgr, corner_coords, debug_dir=debug_dir
             )
             box.set_corners(refined_corners)

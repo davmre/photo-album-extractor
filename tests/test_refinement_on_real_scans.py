@@ -1,11 +1,18 @@
+# Evaluate refinement algorithms on test images.
+# To run:
+# python3 -m tests/test_refinement_on_real_scans
+
 import json
 import os
 
 import numpy as np
 import PIL.Image as Image
 
-import photo_detection.refine_bounds as refine_bounds
 from core import geometry
+from photo_detection.refinement_strategies import (
+    REFINEMENT_STRATEGIES,
+    RefinementStrategy,
+)
 
 # Utility to evaluate refinement strategies by comparing results to gold boxes
 # on real scanned album pages.
@@ -29,15 +36,10 @@ GOLD_DATA = load_json(os.path.join(REFINEMENT_TEST_DATA_DIR, "gold_boxes.json"))
 INIT_DATA = load_json(os.path.join(REFINEMENT_TEST_DATA_DIR, "init_boxes.json"))
 
 
-def get_corner_deviations(rect1, rect2):
-    """Score box pair by avg distance between corresponding corner points."""
-    rect1 = geometry.sort_clockwise(rect1)
-    rect2 = geometry.sort_clockwise(rect2)
-    return [np.linalg.norm(corner2 - corner1) for corner1, corner2 in zip(rect1, rect2)]
-
-
 def get_matched_corner_deviations(rect, gold_rects):
-    deviations = np.array([get_corner_deviations(rect, gold) for gold in gold_rects])
+    deviations = np.array(
+        [geometry.get_corner_deviations(rect, gold) for gold in gold_rects]
+    )
     best_avg_match_idx = np.argmin(np.mean(deviations, axis=-1))
     return deviations[best_avg_match_idx]
 
@@ -55,13 +57,12 @@ class ImageWithBoxes:
         self.refined_boxes = {}
         self.corner_deviations = {}
 
-    def refine_all_boxes(self, refine_strategy: str):
-        refine_fn = refine_bounds.REFINEMENT_STRATEGIES[refine_strategy]
+    def refine_all_boxes(self, refine_strategy: RefinementStrategy):
         refined_boxes = []
         for box in self.init_boxes:
-            refined = refine_fn(self.image, box, debug_dir=None)
+            refined = refine_strategy.refine(self.image, box, debug_dir=None)
             refined_boxes.append(refined)
-        self.refined_boxes[refine_strategy] = refined_boxes
+        self.refined_boxes[refine_strategy.name] = refined_boxes
 
     def score_refinements(self):
         for strategy in self.refined_boxes.keys():
@@ -79,9 +80,11 @@ class ImageWithBoxes:
         allowed_average_deviation=2,
         allowed_max_deviation=3,
     ):
-        strategies = [refine_strategy] if refine_strategy else self.refined_boxes.keys()
-        for strategy in strategies:
-            refine_fn = refine_bounds.REFINEMENT_STRATEGIES[strategy]
+        strategy_names = (
+            [refine_strategy] if refine_strategy else self.refined_boxes.keys()
+        )
+        for strategy_name in strategy_names:
+            strategy = REFINEMENT_STRATEGIES[strategy_name]
             for i in range(len(self.corner_deviations[strategy])):
                 box_deviations = self.corner_deviations[strategy][i]
                 if (
@@ -89,17 +92,17 @@ class ImageWithBoxes:
                     or np.mean(box_deviations) > allowed_average_deviation
                 ):
                     # Rerun refinement to dump debugging info
-                    refine_fn(
+                    strategy.refine(
                         self.image,
                         self.init_boxes[i],
                         debug_dir=os.path.join(
-                            debug_dir, self.file_name, f"box_{i}", strategy
+                            debug_dir, self.file_name, f"box_{i}", strategy.name
                         ),
                     )
 
 
 def main():
-    strategies = ["Strips (native res)", "Original (multiscale)"]
+    strategies = REFINEMENT_STRATEGIES.values()
 
     test_image_filenames = [
         name
@@ -107,7 +110,7 @@ def main():
         if os.path.splitext(name)[1] in (".png", ".jpg")
     ]
 
-    corner_deviations = {s: [] for s in strategies}
+    corner_deviations = {s.name: [] for s in strategies}
 
     for filename in test_image_filenames:
         test_object = ImageWithBoxes(filename)
@@ -115,14 +118,18 @@ def main():
             test_object.refine_all_boxes(strategy)
         test_object.score_refinements()
         for strategy in strategies:
-            corner_deviations[strategy].extend(test_object.corner_deviations[strategy])
-            print(f"{filename} {strategy}: {test_object.corner_deviations[strategy]}")
+            corner_deviations[strategy.name].extend(
+                test_object.corner_deviations[strategy.name]
+            )
+            print(
+                f"{filename} {strategy.name}: {test_object.corner_deviations[strategy.name]}"
+            )
 
     print("OVERALL RESULTS")
     for strategy in strategies:
-        avg_case = np.mean(corner_deviations[strategy])
-        worst_case = np.max(corner_deviations[strategy])
-        median = np.median(corner_deviations[strategy])
+        avg_case = np.mean(corner_deviations[strategy.name])
+        worst_case = np.max(corner_deviations[strategy.name])
+        median = np.median(corner_deviations[strategy.name])
         print(
             f"{strategy}: median {median: .2f} avg {avg_case: .2f} worst {worst_case: .2f}"
         )
