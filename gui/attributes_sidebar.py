@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QScrollArea,
     QSpinBox,
     QTextEdit,
@@ -18,6 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core import date_utils
 from core.photo_types import BoundingBoxData, PhotoAttributes
 from gui.magnifier_widget import MagnifierWidget
 
@@ -97,29 +97,25 @@ class AttributesSidebar(QWidget):
         datetime_group = QGroupBox("Date")
         datetime_layout = QVBoxLayout(datetime_group)
 
-        self.datetime_edit = SelectAllLineEdit()
-        self.datetime_edit.setPlaceholderText("e.g., May 2021, 1999-08-14, 2023")
-        self.datetime_edit.editingFinished.connect(self.on_datetime_changed)
-        datetime_layout.addWidget(self.datetime_edit)
+        hint_layout = QHBoxLayout()
+        self.hint_label = QLabel("Hint:")
+        hint_layout.addWidget(self.hint_label)
 
-        # Action buttons layout
-        buttons_layout = QHBoxLayout()
+        self.date_hint_edit = SelectAllLineEdit()
+        self.date_hint_edit.setPlaceholderText("e.g., May 2021, 1999-08-14, 2023")
+        self.date_hint_edit.editingFinished.connect(self.on_datetime_changed)
+        hint_layout.addWidget(self.date_hint_edit)
 
-        # Clear date button
-        self.clear_date_label = QLabel("<a href='#'>Clear date</a>")
-        self.clear_date_label.setOpenExternalLinks(False)
-        self.clear_date_label.linkActivated.connect(self.clear_datetime)
-        self.clear_date_label.setStyleSheet("QLabel { color: #0066cc; }")
-        buttons_layout.addWidget(self.clear_date_label)
+        datetime_layout.addLayout(hint_layout)
 
-        # Apply to all button
-        self.apply_to_all_label = QLabel("<a href='#'>Apply to all</a>")
-        self.apply_to_all_label.setOpenExternalLinks(False)
-        self.apply_to_all_label.linkActivated.connect(self.apply_to_all_datetime)
-        self.apply_to_all_label.setStyleSheet("QLabel { color: #0066cc; }")
-        buttons_layout.addWidget(self.apply_to_all_label)
+        exif_layout = QHBoxLayout()
+        self.inferred_exif_label = QLabel("Inferred:")
+        exif_layout.addWidget(self.inferred_exif_label)
 
-        datetime_layout.addLayout(buttons_layout)
+        self.inferred_exif = QLabel()
+        exif_layout.addWidget(self.inferred_exif)
+
+        datetime_layout.addLayout(exif_layout)
 
         content_layout.addWidget(datetime_group)
 
@@ -223,7 +219,8 @@ class AttributesSidebar(QWidget):
 
         # Update datetime
         datetime_str = box_data.attributes.date_string
-        self.datetime_edit.setText(datetime_str)
+        self.date_hint_edit.setText(datetime_str)
+        self.inferred_exif.setText(box_data.attributes.exif_date)
 
         # Update comments
         current_comments = self.comments_edit.toPlainText()
@@ -242,40 +239,24 @@ class AttributesSidebar(QWidget):
     def on_datetime_changed(self):
         """Handle date/time changes."""
         if not self.updating_ui and self.current_box_id:
-            user_input = self.datetime_edit.text().strip()
+            user_input = self.date_hint_edit.text().strip()
 
             if not user_input:
                 # Empty input - clear the date
-                self.emit_attributes_changed("date_time", "")
+                self.emit_attributes_changed("date_string", "")
                 return
 
-            self.emit_attributes_changed("date_time", user_input)
+            parsed_dt = date_utils.parse_flexible_date(user_input) or ""
+            self.inferred_exif.setText(parsed_dt)
+
+            self.emit_attributes_changed("date_string", user_input)
+            self.emit_attributes_changed("exif_date", parsed_dt)
 
     def on_comments_changed(self):
         """Handle comments changes."""
         if not self.updating_ui and self.current_box_id:
             comments = self.comments_edit.toPlainText()
             self.emit_attributes_changed("comments", comments)
-
-    def clear_datetime(self):
-        """Clear the datetime field."""
-        if self.current_box_id:
-            self.emit_attributes_changed("date_time", "")
-
-    def apply_to_all_datetime(self):
-        """Apply current datetime to all bounding boxes."""
-        current_date = self.datetime_edit.text().strip()
-
-        if not current_date:
-            QMessageBox.information(
-                self,
-                "No Date to Apply",
-                "Please enter a date before applying to all boxes.",
-            )
-            return
-
-        # Emit signal with the parsed date for bulk update
-        self.bulk_datetime_update_requested.emit(current_date)
 
     def emit_attributes_changed(self, key: str, value: str):
         """Emit attribute change with current box ID."""
@@ -297,7 +278,7 @@ class AttributesSidebar(QWidget):
             return PhotoAttributes()
 
         # Get datetime text directly
-        dt_string = self.datetime_edit.text().strip()
+        dt_string = self.date_hint_edit.text().strip()
 
         # Get comments
         comments = self.comments_edit.toPlainText().strip()

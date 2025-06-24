@@ -6,6 +6,17 @@ from datetime import datetime, timedelta
 
 from dateutil import parser as dateutil_parser
 
+SPECIAL_PERIODS = {
+    "christmas eve": ("dec 24", "dec 24"),
+    "christmas day": ("dec 25", "dec 25"),
+    "christmas": ("dec 25", "dec 25"),
+    "halloween": ("oct 31", "oct 31"),
+    "winter": ("january", "march"),
+    "spring": ("march", "june"),
+    "summer": ("june", "september"),
+    "fall": ("september", "december"),
+}
+
 
 def parse_flexible_date_as_datetime(user_input: str) -> datetime | None:
     user_input = user_input.strip()
@@ -21,6 +32,32 @@ def parse_flexible_date(user_input: str) -> str | None:
     if parsed_dt is None:
         return None
     return parsed_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def parse_flexible_date_as_interval(
+    user_input: str,
+) -> tuple[datetime, datetime] | None:
+    user_input = user_input.strip().lower()
+    start_text = user_input
+    end_text = user_input
+    for k, (v1, v2) in SPECIAL_PERIODS.items():
+        start_text = start_text.replace(k, v1)
+        end_text = end_text.replace(k, v2)
+    try:
+        interval_start = dateutil_parser.parse(
+            start_text, default=datetime(1900, 1, 1, 0, 0)
+        )
+        interval_end = dateutil_parser.parse(
+            end_text, default=datetime(1900, 12, 28, 23, 59)
+        )
+    except (ValueError, TypeError, dateutil_parser.ParserError):
+        return None
+    if interval_start.day == 1 and interval_end.day == 28:
+        # Get the actual end of this month
+        interval_end = interval_end.replace(
+            day=calendar.monthrange(interval_end.year, interval_end.month)[1]
+        )
+    return (interval_start, interval_end)
 
 
 def recover_datetime_interval(

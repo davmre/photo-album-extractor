@@ -75,6 +75,7 @@ class PhotoAttributes:
     """Attributes associated with a photo bounding box."""
 
     date_string: str = ""
+    exif_date: str = ""
     comments: str = ""
 
     @classmethod
@@ -85,11 +86,16 @@ class PhotoAttributes:
                 # Try old name for backwards compatibility
                 data.get("date_time", ""),
             ),
+            exif_date=data.get("exif_date", ""),
             comments=data.get("comments", ""),
         )
 
     def to_dict(self) -> dict[str, str]:
-        return {"date_string": self.date_string, "comments": self.comments}
+        return {
+            "date_string": self.date_string,
+            "exif_date": self.exif_date,
+            "comments": self.comments,
+        }
 
     def __bool__(self) -> bool:
         return bool(self.date_string or self.comments)

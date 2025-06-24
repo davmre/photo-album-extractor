@@ -40,6 +40,8 @@ def cmd_info(paths: list[str]) -> int:
                 print(f"      Corners: {bbox.corners.tolist()}")
                 if bbox.attributes.date_string:
                     print(f"      Date: {bbox.attributes.date_string}")
+                if bbox.attributes.exif_date:
+                    print(f"      Date: {bbox.attributes.exif_date}")
                 if bbox.attributes.comments:
                     print(f"      Comments: {bbox.attributes.comments}")
 
