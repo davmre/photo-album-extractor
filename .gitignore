@@ -26,6 +26,9 @@ test_output/
 extracted_photos/
 test_data/
 
+# Local scripts for debugging, profiling, etc
+scripts
+
 # Temporary files
 *.tmp
 *.log
