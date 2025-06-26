@@ -41,20 +41,30 @@ def cmd_interpolate_dates(directory: str, trial_run=False):
             photo_boxes.append(box)
             date_intervals.append(date_interval)
 
-    interpolated_dates = date_utils.interpolate_dates_segmented(date_intervals)
+    interpolated_date_segments = date_utils.interpolate_dates_segmented(date_intervals)
+    interpolated_dates = [d for segment in interpolated_date_segments for d in segment]
+    segment_boundaries = set(
+        np.cumsum([len(segment) for segment in interpolated_date_segments])
+    )
+    segment_boundary_indicators = [
+        i in segment_boundaries for i in range(len(interpolated_dates))
+    ]
 
     # Save the interpolated dates in the Exif field (the original hints stay in the
     # `date_hint` field).
-    for filename, box, date in zip(photo_filenames, photo_boxes, interpolated_dates):
+    for filename, box, date, is_segment_boundary in zip(
+        photo_filenames, photo_boxes, interpolated_dates, segment_boundary_indicators
+    ):
         updated_date_str = date.strftime("%Y-%m-%d %H:%M:%S")
         if trial_run:
             print(
-                f"{filename}:{box.box_id[:6]}: interpolated date {updated_date_str} (hint: {box.attributes.date_hint})"
+                f"{filename}:{box.box_id[:6]}: interpolated date {updated_date_str} (hint: {box.attributes.date_hint}) {'NEW SEGMENT' if is_segment_boundary else ''}"
             )
         else:
             print(
-                f"{filename}:{box.box_id[:6]}: saving new date {updated_date_str} (hint: {box.attributes.date_hint})"
+                f"{filename}:{box.box_id[:6]}: saving new date {updated_date_str} (hint: {box.attributes.date_hint}) {'NEW SEGMENT' if is_segment_boundary else ''}"
             )
             box.attributes.exif_date = updated_date_str
+            box.attributes.date_inconsistent = is_segment_boundary
             storage.update_box_data(filename, box, save_data=False)
     storage._save_data()

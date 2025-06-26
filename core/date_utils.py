@@ -289,7 +289,7 @@ def interpolate_dates(
 
 
 def find_segments_with_consistent_dates(
-    date_intervals: list[DateInterval | None],
+    date_intervals: Sequence[DateInterval | None],
 ) -> list[list[DateInterval | None]]:
     """
     Greedily construct segments of photos that support consistent date ordering.
@@ -342,8 +342,8 @@ def find_segments_with_consistent_dates(
 
 
 def interpolate_dates_segmented(
-    date_intervals: list[DateInterval | None],
-) -> list[datetime]:
+    date_intervals: Sequence[DateInterval | None],
+) -> list[list[datetime]]:
     """
     Interpolate dates using segmentation to handle impossible global constraints.
 
@@ -351,17 +351,16 @@ def interpolate_dates_segmented(
         date_intervals: List of date interval constraints
 
     Returns:
-        List of datetime objects, one per photo
+        List of segments, with each segment a list of datetime objects (one per photo).
     """
     if not date_intervals:
         return []
 
     segments = find_segments_with_consistent_dates(date_intervals)
-    all_results = []
+    segment_results = []
 
     for segment_intervals in segments:
         # Apply regular constraint propagation within this segment
-        segment_results = interpolate_dates(segment_intervals)
-        all_results.extend(segment_results)
+        segment_results.append(interpolate_dates(segment_intervals))
 
-    return all_results
+    return segment_results

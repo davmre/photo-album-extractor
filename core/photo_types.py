@@ -76,6 +76,7 @@ class PhotoAttributes:
 
     date_hint: str = ""
     exif_date: str = ""
+    date_inconsistent: bool = False
     comments: str = ""
 
     @classmethod
@@ -88,6 +89,7 @@ class PhotoAttributes:
             ),
             exif_date=data.get("exif_date", ""),
             comments=data.get("comments", ""),
+            date_inconsistent=data.get("date_inconsistent", "false").lower() == "true",
         )
 
     def to_dict(self) -> dict[str, str]:
@@ -95,6 +97,7 @@ class PhotoAttributes:
             "date_hint": self.date_hint,
             "exif_date": self.exif_date,
             "comments": self.comments,
+            "date_inconsistent": str(self.date_inconsistent),
         }
 
     def __bool__(self) -> bool:

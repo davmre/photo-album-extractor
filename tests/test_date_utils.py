@@ -262,13 +262,15 @@ def test_interpolate_dates_segmented_basic():
         date_utils.interpolate_dates(intervals)
 
     # Segmented interpolation should work
-    result = date_utils.interpolate_dates_segmented(intervals)
+    segments = date_utils.interpolate_dates_segmented(intervals)
+    result = [d for segment in segments for d in segment]
+    assert len(segments) == 2
     assert len(result) == 4
 
     # Check that constraints are satisfied
     assert result[0] == late_date  # First segment: photo 1
-    assert result[1] == early_date  # Second segment: photo 2
-    assert result[2] >= result[1]  # Third segment: photos 3-4
+    assert result[1] == early_date  # Second segment: photos 2-4
+    assert result[2] >= result[1]
     assert result[3] == late_date
 
 
@@ -290,7 +292,8 @@ def test_interpolate_dates_segmented_clusters():
         (aug_1992, aug_1992),  # Cluster 2: Aug 1992
     ]
 
-    result = date_utils.interpolate_dates_segmented(intervals)
+    segments = date_utils.interpolate_dates_segmented(intervals)
+    result = [d for segment in segments for d in segment]
     assert len(result) == 6
 
     # Check segment 1 (photos 0-2): Jan-Jul 1992
@@ -324,7 +327,7 @@ def test_interpolate_dates_segmented_fallback():
 
     # Both should work and give same result
     regular_result = date_utils.interpolate_dates(intervals)
-    segmented_result = date_utils.interpolate_dates_segmented(intervals)
+    segmented_result = date_utils.interpolate_dates_segmented(intervals)[0]
 
     assert len(regular_result) == len(segmented_result) == 4
     assert regular_result == segmented_result
