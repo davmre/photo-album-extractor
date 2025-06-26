@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import numpy as np
+import numpy.typing as npt
 
 # Import semantic types from photo_types for consistency
 from core.photo_types import (
@@ -413,9 +414,15 @@ def signed_distance_from_border(
 ) -> FloatArray:
     x1, y1 = border_pt1
     x2, y2 = border_pt2
-    return (
-        (y2 - y1) * x_coords - (x2 - x1) * y_coords + x2 * y1 - y2 * x1
-    ) / np.linalg.norm(border_pt2 - border_pt1)
+
+    a1 = (y2 - y1) * x_coords
+    a2 = (x2 - x1) * y_coords
+    a3 = x2 * y1
+    a4 = y2 * x1
+    n = np.linalg.norm(border_pt2 - border_pt1)
+    # Combining a1 (x_coords.shape) and a2 (y_coords.shape) will materialize a big
+    # array at their broadcast shape, so group terms to delay that as long as possible.
+    return a1 / n + (-a2 + a3 - a4) / n
 
 
 def image_boundary_mask(
@@ -423,7 +430,7 @@ def image_boundary_mask(
     patch_shape: tuple[int, ...],
     image_to_patch_coords: Callable[[FloatArray], FloatArray],
     offset: int = -1,
-) -> FloatArray:
+) -> npt.NDArray[np.bool]:
     img_height, img_width = image_shape[:2]
     top_border = image_to_patch_coords(np.array([(0, 0), (img_width - 1, 0)]))
     bottom_border = image_to_patch_coords(
@@ -434,8 +441,10 @@ def image_boundary_mask(
         np.array([(img_width - 1, 0), (img_width - 1, img_height - 1)])
     )
 
-    strip_width, strip_height = patch_shape[:2]
-    x_coords, y_coords = np.meshgrid(np.arange(strip_height), np.arange(strip_width))
+    strip_height, strip_width = patch_shape[:2]
+    x_coords = np.arange(strip_width, dtype=np.float32)[None, :]
+    y_coords = np.arange(strip_height, dtype=np.float32)[:, None]
+
     top_border_dist = signed_distance_from_border(
         x_coords, y_coords, top_border[0, :], top_border[1, :]
     )
@@ -449,9 +458,11 @@ def image_boundary_mask(
         x_coords, y_coords, right_border[0, :], right_border[1, :]
     )
 
-    mask = np.ones([strip_width, strip_height])
-    mask[top_border_dist >= offset] = 0
-    mask[bottom_border_dist <= -offset] = 0
-    mask[left_border_dist <= -offset] = 0
-    mask[right_border_dist >= offset] = 0
+    mask = (
+        (top_border_dist < offset)
+        & (bottom_border_dist > -offset)
+        & (left_border_dist > -offset)
+        & (right_border_dist < offset)
+    )
+
     return mask

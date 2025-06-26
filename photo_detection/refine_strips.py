@@ -222,7 +222,9 @@ def extract_border_strips(
         )
 
         edge_response = detect_edges_color(
-            pixels_array, horizontal=(name in ["top", "bottom"]), mask=strip_mask
+            pixels_array,
+            horizontal=(name in ["top", "bottom"]),
+            mask=strip_mask.astype(pixels_array.dtype),
         )
 
         # Store strip data
