@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import QApplication
 from cli.detect import cmd_detect
 from cli.extract import cmd_extract
 from cli.info import cmd_info
+from cli.interpolate_dates import cmd_interpolate_dates
 from gui.main_window import PhotoExtractorApp
 
 
@@ -64,6 +65,18 @@ def main():
         "--base-name", help="Base name for extracted files (default: source image name)"
     )
 
+    # Extract command
+    interpolate_dates_parser = subparsers.add_parser(
+        "interpolate_dates",
+        help="Fill in dates where unspecified based on dates of surrounding photos.",
+    )
+    interpolate_dates_parser.add_argument("directory", help="Directory to process")
+    interpolate_dates_parser.add_argument(
+        "--trial-run",
+        action="store_true",
+        help="Print interpolated dates but do not save them.",
+    )
+
     # Placeholder for future commands
     subparsers.add_parser(
         "refine", help="Refine existing bounding boxes (not yet implemented)"
@@ -96,6 +109,8 @@ def main():
     # Handle commands
     if args.command == "info":
         return cmd_info(paths=args.paths)
+    if args.command == "interpolate_dates":
+        return cmd_interpolate_dates(directory=args.directory, trial_run=args.trial_run)
     elif args.command == "detect":
         return cmd_detect(paths=args.paths, force=args.force)
     elif args.command == "extract":

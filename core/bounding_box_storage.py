@@ -63,6 +63,13 @@ class BoundingBoxStorage:
     def load_image_filenames(self) -> list[str]:
         return list(self.data.keys())
 
+    def clear_nonexistent_images(self):
+        filenames = self.load_image_filenames()
+        for filename in filenames:
+            if not os.path.exists(os.path.join(self.directory, filename)):
+                del self.data[filename]
+        self._save_data()
+
     def load_bounding_boxes(self, image_filename: str) -> list[BoundingBoxData]:
         """Load bounding box data with IDs for a specific image."""
         boxes = self.data.get(image_filename, [])
@@ -91,7 +98,7 @@ class BoundingBoxStorage:
         return result
 
     def update_box_data(
-        self, image_filename: str, bounding_box_data: BoundingBoxData
+        self, image_filename: str, bounding_box_data: BoundingBoxData, save_data=True
     ) -> bool:
         """Update complete bounding box data for a specific box."""
         if image_filename not in self.data:
@@ -104,6 +111,7 @@ class BoundingBoxStorage:
             if saved_box_data.get("id") == bounding_box_data.box_id:
                 saved_box_data["corners"] = corner_coords
                 saved_box_data["attributes"] = attributes_dict
-                self._save_data()
+                if save_data:
+                    self._save_data()
                 return True
         return False
