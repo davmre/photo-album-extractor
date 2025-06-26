@@ -17,6 +17,8 @@ SPECIAL_PERIODS = {
     "fall": ("september", "december"),
 }
 
+DateInterval = tuple[datetime, datetime]
+
 
 def parse_flexible_date_as_datetime(user_input: str) -> datetime | None:
     user_input = user_input.strip()
@@ -36,7 +38,7 @@ def parse_flexible_date(user_input: str) -> str | None:
 
 def parse_flexible_date_as_interval(
     user_input: str,
-) -> tuple[datetime, datetime] | None:
+) -> DateInterval | None:
     user_input = user_input.strip().lower()
     start_text = user_input
     end_text = user_input
@@ -62,7 +64,7 @@ def parse_flexible_date_as_interval(
 
 def recover_datetime_interval(
     parsed_dt: datetime, default_dt=datetime(1900, 1, 1, 0, 0, 0)
-) -> tuple[datetime, datetime]:
+) -> DateInterval:
     """
     Heuristically recover the interval of datetimes that could have produced
     the given parsed datetime, based on which components match the default values.
@@ -132,27 +134,16 @@ def recover_datetime_interval(
     return start_dt, end_dt
 
 
-def interpolate_dates(
-    date_intervals: Sequence[tuple[datetime, datetime] | None],
-) -> list[datetime]:
+def propagate_feasible_intervals(
+    date_intervals: Sequence[DateInterval | None],
+) -> Sequence[DateInterval]:
+    """Reconcile date intervals under an ordering constraint.
+
+    Given a sequence of photos, some of which have date intervals, return a date
+    interval for *every* photo, respecting the constraint that photos are ordered by
+    date (no photo is earlier than any of its predecessors, or later than any of its
+    successors).
     """
-    Interpolate plausible dates for photos given interval constraints.
-
-    Args:
-        date_intervals: List where each element is either:
-            - None: no date constraint for this photo
-            - (start, end): datetime interval constraint for this photo
-
-    Returns:
-        List of datetime objects, one per photo, maintaining album order
-        and satisfying all interval constraints.
-
-    Raises:
-        ValueError: If constraints are impossible to satisfy
-    """
-    if not date_intervals:
-        return []
-
     n = len(date_intervals)
 
     # Step 1: Forward pass - compute earliest feasible date for each photo
@@ -201,6 +192,31 @@ def interpolate_dates(
             raise ValueError(
                 f"impossible constraint at photo {i}: no valid date satisfies ordering requirements."
             )
+    return list(zip(earliest, latest))
+
+
+def interpolate_dates(
+    date_intervals: Sequence[DateInterval | None],
+) -> list[datetime]:
+    """
+    Interpolate plausible dates for photos given interval constraints.
+
+    Args:
+        date_intervals: List where each element is either:
+            - None: no date constraint for this photo
+            - (start, end): datetime interval constraint for this photo
+
+    Returns:
+        List of datetime objects, one per photo, maintaining album order
+        and satisfying all interval constraints.
+
+    Raises:
+        ValueError: If constraints are impossible to satisfy
+    """
+    if not date_intervals:
+        return []
+    n = len(date_intervals)
+    earliest, _ = zip(*propagate_feasible_intervals(date_intervals))
 
     # Step 4: Assign actual dates
     result: list[datetime] = [datetime(1900, 1, 1)] * n
@@ -208,7 +224,13 @@ def interpolate_dates(
     for i in range(n):
         if date_intervals[i] is not None:
             # Constrained photo: prefer interval start (earliest feasible date)
-            result[i] = earliest[i]
+            candidate_date = earliest[i]
+
+            # Ensure uniqueness: if this matches any previous result, add small increments
+            while candidate_date in result[:i]:
+                candidate_date = candidate_date + timedelta(seconds=60)  # Add 1 minute
+
+            result[i] = candidate_date
         else:
             # Unconstrained photo: interpolate within feasible range
             # Find the surrounding constrained photos to interpolate between
@@ -239,22 +261,107 @@ def interpolate_dates(
                 # Linear interpolation
                 time_diff = right_anchor - left_anchor
                 interpolated_offset = time_diff * current_gap / total_gaps
-                result[i] = left_anchor + interpolated_offset
+                candidate_date = left_anchor + interpolated_offset
 
             elif left_anchor is not None:
                 # Only left anchor - increment by small amount
                 increment_seconds = (i - left_idx) * 60  # 1 minute per photo
-                result[i] = left_anchor + timedelta(seconds=increment_seconds)
+                candidate_date = left_anchor + timedelta(seconds=increment_seconds)
 
             elif right_anchor is not None:
                 # Only right anchor - decrement by small amount
                 decrement_seconds = (right_idx - i) * 60  # 1 minute per photo
-                result[i] = right_anchor - timedelta(seconds=decrement_seconds)
+                candidate_date = right_anchor - timedelta(seconds=decrement_seconds)
 
             else:
                 # No anchors - space photos evenly in a reasonable range
                 base_date = datetime(2000, 1, 1)  # Arbitrary reasonable default
                 increment_seconds = i * 3600  # 1 hour per photo
-                result[i] = base_date + timedelta(seconds=increment_seconds)
+                candidate_date = base_date + timedelta(seconds=increment_seconds)
+
+            # Ensure uniqueness for unconstrained photos too
+            while candidate_date in result[:i]:
+                candidate_date = candidate_date + timedelta(seconds=60)  # Add 1 minute
+
+            result[i] = candidate_date
 
     return result
+
+
+def find_segments_with_consistent_dates(
+    date_intervals: list[DateInterval | None],
+) -> list[list[DateInterval | None]]:
+    """
+    Greedily construct segments of photos that support consistent date ordering.
+
+    Args:
+        date_intervals: List of date interval constraints
+
+    Returns:
+        List of segments, where each segment is a list of intervals
+    """
+    if not date_intervals:
+        return []
+
+    segments = []
+    start = 0
+
+    while start < len(date_intervals):
+        # Find the longest prefix starting at 'start' that works with constraint propagation
+        end = start + 1  # Start with just one photo
+
+        while end <= len(date_intervals):
+            try:
+                # Try constraint propagation on current segment
+                propagate_feasible_intervals(date_intervals[start:end])
+
+                # If we get here, this segment works
+                if end == len(date_intervals):
+                    # We've reached the end - this is our final segment
+                    segments.append(date_intervals[start:end])
+                    start = len(date_intervals)
+                    break
+                else:
+                    # Try extending the segment by one more photo
+                    end += 1
+
+            except ValueError:
+                # Current segment failed, so previous one was the longest working segment
+                if end == start + 1:
+                    # Even a single photo fails - this shouldn't happen with our current implementation
+                    # But handle it gracefully by making it a single-photo segment
+                    segments.append(date_intervals[start : start + 1])
+                    start = start + 1
+                else:
+                    # Previous segment (start:end-1) was the longest that worked
+                    segments.append(date_intervals[start : end - 1])
+                    start = end - 1
+                break
+
+    return segments
+
+
+def interpolate_dates_segmented(
+    date_intervals: list[DateInterval | None],
+) -> list[datetime]:
+    """
+    Interpolate dates using segmentation to handle impossible global constraints.
+
+    Args:
+        date_intervals: List of date interval constraints
+
+    Returns:
+        List of datetime objects, one per photo
+    """
+    if not date_intervals:
+        return []
+
+    segments = find_segments_with_consistent_dates(date_intervals)
+    all_results = []
+
+    for segment_intervals in segments:
+        # Apply regular constraint propagation within this segment
+        segment_results = interpolate_dates(segment_intervals)
+        all_results.extend(segment_results)
+
+    return all_results
