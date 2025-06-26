@@ -74,17 +74,17 @@ class BoundingBoxData:
 class PhotoAttributes:
     """Attributes associated with a photo bounding box."""
 
-    date_string: str = ""
+    date_hint: str = ""
     exif_date: str = ""
     comments: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, str]) -> PhotoAttributes:
         return cls(
-            date_string=data.get(
-                "date_string",
-                # Try old name for backwards compatibility
-                data.get("date_time", ""),
+            date_hint=data.get(
+                "date_hint",
+                # Try old names for backwards compatibility
+                data.get("date_string", data.get("date_time", "")),
             ),
             exif_date=data.get("exif_date", ""),
             comments=data.get("comments", ""),
@@ -92,13 +92,13 @@ class PhotoAttributes:
 
     def to_dict(self) -> dict[str, str]:
         return {
-            "date_string": self.date_string,
+            "date_hint": self.date_hint,
             "exif_date": self.exif_date,
             "comments": self.comments,
         }
 
     def __bool__(self) -> bool:
-        return bool(self.date_string or self.comments)
+        return bool(self.date_hint or self.comments)
 
 
 def bounding_box_as_array(corner_points: BoundingBoxAny) -> QuadArray:

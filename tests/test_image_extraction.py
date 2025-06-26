@@ -165,7 +165,7 @@ class TestImageProcessor:
             BoundingBoxData.new(
                 corners=[(100, 150), (400, 150), (400, 450), (100, 450)],
                 attributes=PhotoAttributes(
-                    date_string="1985-06-20", comments="Test extraction with EXIF data"
+                    date_hint="1985-06-20", comments="Test extraction with EXIF data"
                 ),
             )
         ]
@@ -259,7 +259,7 @@ class TestEXIFHandling:
         test_filepath = os.path.join(temp_output_dir, "test_exif.jpg")
 
         attributes = PhotoAttributes(
-            date_string="1985-12-25",  # ISO format
+            date_hint="1985-12-25",  # ISO format
             comments="Christmas photo",
         )
 
@@ -285,7 +285,7 @@ class TestEXIFHandling:
         test_filepath = os.path.join(temp_output_dir, "test_comment.jpg")
 
         attributes = PhotoAttributes(
-            date_string="2024-01-01",
+            date_hint="2024-01-01",
             comments="Test comment with special chars: äöü & symbols!",
         )
 
@@ -308,7 +308,7 @@ class TestEXIFHandling:
         """Test software tag in EXIF data."""
         test_filepath = os.path.join(temp_output_dir, "test_software.jpg")
 
-        attributes = PhotoAttributes(date_string="2024-01-01", comments="Test")
+        attributes = PhotoAttributes(date_hint="2024-01-01", comments="Test")
 
         images.save_image_with_exif(test_image, test_filepath, attributes)
 

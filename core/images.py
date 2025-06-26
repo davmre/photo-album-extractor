@@ -130,10 +130,10 @@ def save_image_with_exif(
         exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
 
         # Add date/time if available
-        if attributes.date_string:
+        if attributes.date_hint:
             try:
                 # Parse ISO date string and convert to EXIF format
-                dt = date_utils.parse_flexible_date_as_datetime(attributes.date_string)
+                dt = date_utils.parse_flexible_date_as_datetime(attributes.date_hint)
                 if dt is None:
                     raise ValueError()
 
@@ -144,7 +144,7 @@ def save_image_with_exif(
                 exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = exif_datetime
                 exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = exif_datetime
             except (ValueError, AttributeError) as e:
-                print(f"Warning: Could not parse date '{attributes.date_string}': {e}")
+                print(f"Warning: Could not parse date '{attributes.date_hint}': {e}")
 
         # Add comments if available
         if attributes.comments:

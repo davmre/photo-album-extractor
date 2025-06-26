@@ -106,7 +106,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
 
         attributes = PhotoAttributes()
         if "date" in entry:
-            attributes.date_string = entry["date"]
+            attributes.date_hint = entry["date"]
         if "caption" in entry:
             attributes.comments = entry["caption"]
         return BoundingBoxData.new(corners=corners, attributes=attributes)

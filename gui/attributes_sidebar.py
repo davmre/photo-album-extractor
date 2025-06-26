@@ -218,7 +218,7 @@ class AttributesSidebar(QWidget):
             scroll_area.show()
 
         # Update datetime
-        datetime_str = box_data.attributes.date_string
+        datetime_str = box_data.attributes.date_hint
         self.date_hint_edit.setText(datetime_str)
         self.inferred_exif.setText(box_data.attributes.exif_date)
 
@@ -283,7 +283,7 @@ class AttributesSidebar(QWidget):
         # Get comments
         comments = self.comments_edit.toPlainText().strip()
 
-        return PhotoAttributes(date_string=dt_string, comments=comments)
+        return PhotoAttributes(date_hint=dt_string, comments=comments)
 
     def on_coordinate_changed(self, corner_index, coord_type, value):
         """Handle coordinate changes."""
