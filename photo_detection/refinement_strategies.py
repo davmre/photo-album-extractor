@@ -61,7 +61,11 @@ class RefinementStrategyStrips(RefinementStrategy):
         debug_dir: str | None,
     ):
         return refine_strips.refine_bounding_box_strips(
-            image, corner_points, enforce_parallel_sides=True, debug_dir=debug_dir
+            image,
+            corner_points,
+            enforce_parallel_sides=True,
+            debug_dir=debug_dir,
+            reltol=0.05,
         )
 
 

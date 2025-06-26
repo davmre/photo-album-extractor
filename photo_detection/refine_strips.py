@@ -196,7 +196,7 @@ def extract_border_strips(
             strip_corners_image,
             output_width=strip_width,
             output_height=strip_height,
-            mode=Image.Resampling.BICUBIC,
+            mode=Image.Resampling.BILINEAR,
         )
         pixels_array = np.array(strip_pixels)
 
@@ -242,27 +242,62 @@ def evaluate_edges_at_angle(strip, angle, strip_type, debug_dir=None):
         debug_dir = os.path.join(debug_dir, "candidates")
         pathlib.Path(debug_dir).mkdir(parents=True, exist_ok=True)
 
-    h, w = strip.edge_response.shape
-
-    if strip_type in ["top", "bottom"]:
-        # Horizontal strips - edges go left to right with slight angle
-        ys = np.arange(h)
-        edge_pts1 = np.column_stack((np.zeros_like(ys), ys - w / 2 * np.tan(angle)))
-        edge_pts2 = np.column_stack(
-            (np.full_like(ys, w - 1), ys + w / 2 * np.tan(angle))
-        )
-    else:  # left or right
-        # Vertical strips - edges go top to bottom with slight angle
-        xs = np.arange(w)
-        edge_pts1 = np.column_stack((xs + h / 2 * np.tan(angle), np.zeros_like(xs)))
-        edge_pts2 = np.column_stack(
-            (xs - h / 2 * np.tan(angle), np.full_like(xs, h - 1))
-        )
+    image = strip.edge_response
+    step = 1.0
+    if strip_type in ["left", "right"]:
+        image = image.T
+        step = -1.0
+    h, w = image.shape
+    ys = np.arange(h)
+    edge_pts1 = np.column_stack((np.zeros_like(ys), ys - step * w / 2 * np.tan(angle)))
+    edge_pts2 = np.column_stack(
+        (np.full_like(ys, w - 1), ys + step * w / 2 * np.tan(angle))
+    )
 
     scores = geometry.line_integral_vectorized(
-        strip.edge_response, edge_pts1, edge_pts2
+        image, edge_pts1, edge_pts2, x_spans_full_width=True, num_samples=100
     )
     return scores
+
+
+def evaluate_edges_by_angle(strip, angles, strip_type, debug_dir=None):
+    """Evaluate all possible edge positions at given angle in a strip."""
+    if debug_dir is not None:
+        debug_dir = os.path.join(debug_dir, "candidates")
+        pathlib.Path(debug_dir).mkdir(parents=True, exist_ok=True)
+
+    image = strip.edge_response
+    step = 1.0
+    # Standardize on horizontal orientation by transposing vertical strips.
+    if strip_type in ["left", "right"]:
+        image = image.T
+        step = -1.0
+
+    h, w = image.shape
+    num_angles = len(angles)
+
+    edge_xs1 = np.zeros((num_angles, h), dtype=int)
+    edge_xs2 = np.full((num_angles, h), w - 1, dtype=int)
+
+    ys = np.arange(h)
+    edge_ys1 = ys - step * w / 2 * np.tan(angles[:, np.newaxis])
+    edge_ys2 = ys + step * w / 2 * np.tan(angles[:, np.newaxis])
+
+    edge_pts1 = np.column_stack((edge_xs1.flatten(), edge_ys1.flatten()))
+    edge_pts2 = np.column_stack((edge_xs2.flatten(), edge_ys2.flatten()))
+
+    # Integrate the edge response along the line between each candidate pair of
+    # edge points. This call is a performance bottleneck (accounts for ~50% of the
+    # runtime of the whole refinement call) so is worth some effort to optimize.
+    scores = geometry.line_integral_chunked(
+        image,
+        edge_pts1,
+        edge_pts2,
+        num_samples=100,
+        x_spans_full_width=True,
+        chunk_size=512,
+    )
+    return scores.reshape([num_angles, -1])
 
 
 def search_rectangle_factored(strips, initial_rect, debug_dir=None):
@@ -283,46 +318,38 @@ def search_rectangle_factored(strips, initial_rect, debug_dir=None):
 
     strip_angles = np.linspace(-max_angle_deviation, max_angle_deviation, num_angles)
 
-    best_score = -np.inf
-    best_edges = None
-    best_angle = None
+    # Edge scores have shape `[num_angles, edges_per_angle]` where
+    # `edges_per_angle == h` for horizontal (top/bottom) strips and `w` for
+    # vertical (left/right) strips.
+    edge_scores_top = evaluate_edges_by_angle(
+        strips["top"], strip_angles, "top", debug_dir=debug_dir
+    )
+    edge_scores_bottom = evaluate_edges_by_angle(
+        strips["bottom"], strip_angles, "bottom", debug_dir=debug_dir
+    )
+    edge_scores_left = evaluate_edges_by_angle(
+        strips["left"], strip_angles, "left", debug_dir=debug_dir
+    )
+    edge_scores_right = evaluate_edges_by_angle(
+        strips["right"], strip_angles, "right", debug_dir=debug_dir
+    )
 
-    for angle in strip_angles:
-        # Evaluate all edges at this angle
-        edge_scores = {}
-
-        # Top and bottom edges are at angle θ
-        edge_scores["top"] = evaluate_edges_at_angle(
-            strips["top"], angle, "top", debug_dir=debug_dir
-        )
-        edge_scores["bottom"] = evaluate_edges_at_angle(
-            strips["bottom"], angle, "bottom"
-        )
-
-        # Left and right edges are perpendicular (angle θ + π/2)
-        edge_scores["left"] = evaluate_edges_at_angle(strips["left"], angle, "left")
-        edge_scores["right"] = evaluate_edges_at_angle(strips["right"], angle, "right")
-
-        score = (
-            np.max(edge_scores["top"])
-            + np.max(edge_scores["bottom"])
-            + np.max(edge_scores["left"])
-            + np.max(edge_scores["right"])
-        )
-
-        edges = {
-            "top": np.argmax(edge_scores["top"]),
-            "bottom": np.argmax(edge_scores["bottom"]),
-            "left": np.argmax(edge_scores["left"]),
-            "right": np.argmax(edge_scores["right"]),
-        }
-
-        if score > best_score:
-            best_score = score
-            best_edges = edges
-            best_angle = base_angle + angle
-
-        LOGGER.debug(f"angle {angle:.3f}: best score {score:.1f}")
+    # The best angle maximizes edge response across all four edges of the image.
+    angle_scores = (
+        np.max(edge_scores_top, axis=-1)
+        + np.max(edge_scores_bottom, axis=-1)
+        + np.max(edge_scores_left, axis=-1)
+        + np.max(edge_scores_right, axis=-1)
+    )
+    best_angle_idx = np.argmax(angle_scores)
+    best_score = angle_scores[best_angle_idx]
+    best_edges = {
+        "top": np.argmax(edge_scores_top[best_angle_idx, :]),
+        "bottom": np.argmax(edge_scores_bottom[best_angle_idx, :]),
+        "left": np.argmax(edge_scores_left[best_angle_idx, :]),
+        "right": np.argmax(edge_scores_right[best_angle_idx, :]),
+    }
+    best_angle = strip_angles[best_angle_idx] + base_angle
 
     return best_edges, best_angle, best_score
 
@@ -464,50 +491,7 @@ def refine_bounding_box_strips(
     rect = geometry.sort_clockwise(rect)
     LOGGER.debug(f"bounding rect {rect}")
 
-    # Extract border strips
-
-    """
-    
-    how to extract border strips?
-    
-    first general question about resolution
-    I think we want a mode where there's no downscaling and we work with
-    image pixels themselves, as much as we can
-    this means we get different sizes for different strips. but that's
-    okay because they all have their own coords.
-    
-    but we also want coarse modes. when coarsening, probably we don't want
-    even downscaling. for a 1000 x 10 rectangle, downscaling by 100 still lets
-    you resolve the long edge, but it turns the short edge into a single pixel!
-    we want more resolution on the shorter edge. both in order to resolve it,
-    and probably it's good to give it voting power? so I think it's fine to
-    have a single resolution for both edges. otoh, maybe this doesn't matter
-    at all bc we'll do coarse-to-fine so we can just do a fixed downscaling
-    and we'll resolve the short edge better at the finer resolutions
-    
-    this argues for a fixed downscaling factor? 
-    
-    okay the other question is generally about reltol
-    do we want a fixed reltol? 
-    
-    positionally maybe we want tolerance relative to the image as a whole
-    if we're fitting a `1000 x 1` rectangle, our initial bounding box might even
-    be a few pixels off and not touch the original rectangle at all.
-    
-    suppose we have an axis-aligned bounding box of width [w] and height [w]
-    and we *think* the photo is at some angle between (`[-tol, tol]`)
-    how much do we need to expand the width and height to be sure to capture
-    the edges?
-    relative to center of rectangle
-    
-    
-    
-    extreme cases:
-    1. we are given an axis-aligned initial square with `resolution`
-    
-    
-    """
-
+    # Extract strips along the four borders, containing the potential edges.
     strips = extract_border_strips(
         image,
         rect,
@@ -515,9 +499,6 @@ def refine_bounding_box_strips(
         resolution_scale_factor=resolution_scale_factor,
         debug_dir=debug_dir,
     )
-
-    # Apply boundary masking to each strip
-    # TODO: Implement boundary masking for strips
 
     # Save debug images if requested
     if debug_dir:

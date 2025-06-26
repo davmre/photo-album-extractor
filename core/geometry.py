@@ -189,17 +189,66 @@ def line_intersection(
     return intersection
 
 
-def line_integral_vectorized(
-    image: ndarray, start_points: ndarray, end_points: ndarray, num_samples: int = 100
+def line_integral_chunked(
+    image: ndarray,
+    start_points: ndarray,
+    end_points: ndarray,
+    num_samples: int = 100,
+    x_spans_full_width=False,
+    chunk_size=512,
 ) -> ndarray:
     """
-    Fully vectorized version - maximum performance for large N.
+    Split up vectorized line integral into chunks for cache efficiency.
 
     Args:
         image: 2D numpy array
         start_points: (N, 2) array of start coordinates
         end_points: (N, 2) array of end coordinates
         num_samples: number of sample points along each line
+        x_spans_full_width: if True, all lines start at `x = 0` and end at
+          `x = width - 1`.
+
+    Returns:
+        (N,) array of line integral values
+    """
+    n_lines = start_points.shape[0]
+
+    # We could preallocate memory buffers for each intermediate quantity and
+    # write a version of the algorithm that updates them in-place, but this makes
+    # the code much uglier and doesn't actually improve performance noticeably
+    # (malloc is not the bottleneck), so it's simpler to just call the naive function in
+    # a loop.
+    chunk_results = []
+    for i in range(0, n_lines, chunk_size):
+        chunk_results.append(
+            line_integral_vectorized(
+                image,
+                start_points[i : i + chunk_size],
+                end_points[i : i + chunk_size],
+                num_samples=num_samples,
+                x_spans_full_width=x_spans_full_width,
+            )
+        )
+    return np.concatenate(chunk_results, axis=0)
+
+
+def line_integral_vectorized(
+    image: ndarray,
+    start_points: ndarray,
+    end_points: ndarray,
+    num_samples: int = 100,
+    x_spans_full_width=False,
+) -> ndarray:
+    """
+    Vectorized evaluation of multiple line integrals on an image.
+
+    Args:
+        image: 2D numpy array
+        start_points: (N, 2) array of start coordinates
+        end_points: (N, 2) array of end coordinates
+        num_samples: number of sample points along each line
+        x_spans_full_width: if True, all lines start at `x = 0` and end at
+          `x = width - 1`.
 
     Returns:
         (N,) array of line integral values
@@ -207,6 +256,10 @@ def line_integral_vectorized(
     # Extract coordinates - shape (N,)
     x0, y0 = start_points[:, 0], start_points[:, 1]
     x1, y1 = end_points[:, 0], end_points[:, 1]
+
+    if x_spans_full_width:
+        # Represent x as scalar for faster performance.
+        x0, x1 = x0[:1], x1[:1]  # assumed `x0 = 0`, `x1 = width - 1`
 
     # Generate sample points - broadcast to shape (N, num_samples)
     t = np.linspace(0, 1, num_samples)  # shape (num_samples,)
@@ -218,16 +271,13 @@ def line_integral_vectorized(
     y_indices = np.round(y_coords).astype(int)
 
     # Create mask for valid coordinates - shape (N, num_samples)
-    mask = (
-        (y_indices >= 0)
-        & (y_indices < image.shape[0])
-        & (x_indices >= 0)
-        & (x_indices < image.shape[1])
-    )
+    mask = (y_indices >= 0) & (y_indices < image.shape[0])
+    if not x_spans_full_width:
+        mask &= (x_indices >= 0) & (x_indices < image.shape[1])
 
     # Use safe indexing - replace invalid indices with 0 (any valid index)
     safe_y = np.where(mask, y_indices, 0)
-    safe_x = np.where(mask, x_indices, 0)
+    safe_x = x_indices if x_spans_full_width else np.where(mask, x_indices, 0)
 
     # Sample from image - advanced indexing gives shape (N, num_samples)
     sampled = image[safe_y, safe_x]
