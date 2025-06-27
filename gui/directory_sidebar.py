@@ -21,6 +21,7 @@ from core.validation_utils import (
     FileValidationSummary,
     get_validation_icon_text,
     validate_directory_files,
+    validate_file_bounding_boxes,
 )
 
 
@@ -241,8 +242,6 @@ class DirectoryImageList(QWidget):
         """Update validation cache for a specific file and refresh its display."""
         if not self.current_directory:
             return
-
-        from core.validation_utils import validate_file_bounding_boxes
 
         # Use the improved validate_file_bounding_boxes with optional storage parameter
         self.validation_cache[filename] = validate_file_bounding_boxes(
