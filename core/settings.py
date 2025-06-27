@@ -1,6 +1,6 @@
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
 
@@ -12,6 +12,15 @@ class AppSettings:
     detection_strategy: str = ""
     auto_refine_detection: bool = False
     refinement_strategy: str = ""
+
+    # Validation settings
+    warn_date_inconsistent: bool = True
+    warn_non_rectangular: bool = True
+    warn_nonstandard_aspect: bool = True
+    standard_aspect_ratios: list[float] = field(
+        default_factory=lambda: [4 / 6, 6 / 4, 5 / 7, 7 / 5]
+    )
+    aspect_ratio_tolerance: float = 0.02
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Override setattr to prevent setting non-existent attributes."""
@@ -27,6 +36,13 @@ class AppSettings:
             detection_strategy=data.get("detection_strategy", ""),
             auto_refine_detection=bool(data.get("auto_refine_detection", False)),
             refinement_strategy=data.get("refinement_strategy", ""),
+            warn_date_inconsistent=bool(data.get("warn_date_inconsistent", True)),
+            warn_non_rectangular=bool(data.get("warn_non_rectangular", True)),
+            warn_nonstandard_aspect=bool(data.get("warn_nonstandard_aspect", True)),
+            standard_aspect_ratios=data.get(
+                "standard_aspect_ratios", [4 / 6, 6 / 4, 5 / 7, 7 / 5]
+            ),
+            aspect_ratio_tolerance=float(data.get("aspect_ratio_tolerance", 0.02)),
         )
 
     def to_dict(self) -> dict[str, Any]:

@@ -7,7 +7,9 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFormLayout,
+    QGroupBox,
     QLineEdit,
     QMessageBox,
     QVBoxLayout,
@@ -33,7 +35,7 @@ class SettingsDialog(QDialog):
     def init_ui(self):
         """Initialize the settings dialog UI."""
         self.setWindowTitle("Settings")
-        self.setFixedSize(450, 300)
+        self.setFixedSize(500, 450)
 
         layout = QVBoxLayout(self)
 
@@ -80,6 +82,56 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(form_layout)
 
+        # Validation Settings Group
+        validation_group = QGroupBox("Validation Warnings")
+        validation_layout = QFormLayout(validation_group)
+
+        # Date inconsistency warning checkbox
+        self.warn_date_inconsistent_checkbox = QCheckBox(
+            "Warn about inconsistent dates"
+        )
+        self.warn_date_inconsistent_checkbox.setChecked(
+            app_settings.warn_date_inconsistent
+        )
+        validation_layout.addRow("", self.warn_date_inconsistent_checkbox)
+
+        # Non-rectangular warning checkbox
+        self.warn_non_rectangular_checkbox = QCheckBox(
+            "Warn about non-rectangular bounding boxes"
+        )
+        self.warn_non_rectangular_checkbox.setChecked(app_settings.warn_non_rectangular)
+        validation_layout.addRow("", self.warn_non_rectangular_checkbox)
+
+        # Nonstandard aspect ratio warning checkbox
+        self.warn_nonstandard_aspect_checkbox = QCheckBox(
+            "Warn about nonstandard aspect ratios"
+        )
+        self.warn_nonstandard_aspect_checkbox.setChecked(
+            app_settings.warn_nonstandard_aspect
+        )
+        validation_layout.addRow("", self.warn_nonstandard_aspect_checkbox)
+
+        # Aspect ratio tolerance
+        self.aspect_ratio_tolerance_spin = QDoubleSpinBox()
+        self.aspect_ratio_tolerance_spin.setRange(0.001, 0.5)
+        self.aspect_ratio_tolerance_spin.setDecimals(3)
+        self.aspect_ratio_tolerance_spin.setSingleStep(0.01)
+        self.aspect_ratio_tolerance_spin.setValue(app_settings.aspect_ratio_tolerance)
+        validation_layout.addRow(
+            "Aspect Ratio Tolerance:", self.aspect_ratio_tolerance_spin
+        )
+
+        # Standard aspect ratios (as formatted text for now - could be more sophisticated)
+        self.aspect_ratios_edit = QLineEdit()
+        aspect_ratios_text = ", ".join(
+            f"{ratio:.3f}" for ratio in app_settings.standard_aspect_ratios
+        )
+        self.aspect_ratios_edit.setText(aspect_ratios_text)
+        self.aspect_ratios_edit.setPlaceholderText("e.g., 0.667, 1.500, 0.714, 1.400")
+        validation_layout.addRow("Standard Aspect Ratios:", self.aspect_ratios_edit)
+
+        layout.addWidget(validation_group)
+
         # Add some spacing
         layout.addStretch()
 
@@ -120,6 +172,37 @@ class SettingsDialog(QDialog):
         selected_strategy = self.refinement_strategy_combo.currentData()
         if selected_strategy:
             app_settings.refinement_strategy = selected_strategy.name
+
+        # Save validation settings
+        app_settings.warn_date_inconsistent = (
+            self.warn_date_inconsistent_checkbox.isChecked()
+        )
+        app_settings.warn_non_rectangular = (
+            self.warn_non_rectangular_checkbox.isChecked()
+        )
+        app_settings.warn_nonstandard_aspect = (
+            self.warn_nonstandard_aspect_checkbox.isChecked()
+        )
+        app_settings.aspect_ratio_tolerance = self.aspect_ratio_tolerance_spin.value()
+
+        # Parse and save standard aspect ratios
+        try:
+            aspect_ratios_text = self.aspect_ratios_edit.text().strip()
+            if aspect_ratios_text:
+                aspect_ratios = [
+                    float(x.strip()) for x in aspect_ratios_text.split(",")
+                ]
+                app_settings.standard_aspect_ratios = aspect_ratios
+            else:
+                # Empty field - use defaults
+                app_settings.standard_aspect_ratios = [4 / 6, 6 / 4, 5 / 7, 7 / 5]
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Aspect Ratios",
+                "Please enter valid aspect ratios separated by commas (e.g., 0.667, 1.500)",
+            )
+            return
 
         # Save to file
         app_settings.save_to_file()

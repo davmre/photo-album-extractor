@@ -206,7 +206,9 @@ class ImageView(QGraphicsView):
             # Add mark as good toggle
             mark_as_good_action: QAction = menu.addAction("Mark as Good")  # type: ignore
             mark_as_good_action.setCheckable(True)
-            mark_as_good_action.setChecked(clicked_box.get_bounding_box_data().marked_as_good)
+            mark_as_good_action.setChecked(
+                clicked_box.get_bounding_box_data().marked_as_good
+            )
 
             remove_action = menu.addAction("Remove")
             action = menu.exec(self.mapToGlobal(position))

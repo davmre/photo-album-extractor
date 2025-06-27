@@ -12,6 +12,7 @@ import numpy as np
 
 from core import date_utils, geometry
 from core.bounding_box_storage import BoundingBoxStorage
+from core.settings import app_settings
 
 
 class Severity(Enum):
@@ -19,10 +20,6 @@ class Severity(Enum):
 
     ERROR = "error"
     WARNING = "warning"
-
-
-COMMON_ASPECT_RATIOS = np.array([4 / 6, 6 / 4, 5 / 7, 7 / 5])
-print(COMMON_ASPECT_RATIOS)
 
 
 @dataclass
@@ -75,7 +72,7 @@ def validate_bounding_box(box) -> list[ValidationIssue]:
         return issues
 
     # Check for date inconsistency (WARNING)
-    if box.attributes.date_inconsistent:
+    if app_settings.warn_date_inconsistent and box.attributes.date_inconsistent:
         issues.append(
             ValidationIssue(
                 type="date_inconsistent",
@@ -85,7 +82,7 @@ def validate_bounding_box(box) -> list[ValidationIssue]:
         )
 
     # Check if bounding box is not rectangular (WARNING)
-    if not box.is_rectangle():
+    if app_settings.warn_non_rectangular and not box.is_rectangle():
         issues.append(
             ValidationIssue(
                 type="non_rectangular",
@@ -94,17 +91,22 @@ def validate_bounding_box(box) -> list[ValidationIssue]:
             )
         )
 
-    # Check if aspect ratio is non-standard.
-    width, height = geometry.dimension_bounds(box.corners)
-    aspect_ratio_reciprocal = height / width
-    if np.min(np.abs(aspect_ratio_reciprocal * COMMON_ASPECT_RATIOS - 1)) > 0.02:
-        issues.append(
-            ValidationIssue(
-                type="nonstandard_aspect",
-                severity=Severity.WARNING,
-                message=f"Aspect ratio {width / height: .2f} is not a standard photo size; is the bounding box correct?",
+    # Check if aspect ratio is non-standard (WARNING)
+    if app_settings.warn_nonstandard_aspect:
+        width, height = geometry.dimension_bounds(box.corners)
+        aspect_ratio_reciprocal = height / width
+        standard_ratios = np.array(app_settings.standard_aspect_ratios)
+        if (
+            np.min(np.abs(aspect_ratio_reciprocal * standard_ratios - 1))
+            > app_settings.aspect_ratio_tolerance
+        ):
+            issues.append(
+                ValidationIssue(
+                    type="nonstandard_aspect",
+                    severity=Severity.WARNING,
+                    message=f"Aspect ratio {width / height: .2f} is not a standard photo size; is the bounding box correct?",
+                )
             )
-        )
 
     return issues
 
