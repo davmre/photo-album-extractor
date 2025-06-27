@@ -38,6 +38,7 @@ def cmd_info(paths: list[str]) -> int:
             for i, bbox in enumerate(bounding_boxes, 1):
                 print(f"    Box {i} (ID: {bbox.box_id}):")
                 print(f"      Corners: {bbox.corners.tolist()}")
+                print(f"      Is rectangle: {bbox.is_rectangle()}")
                 if bbox.attributes.date_hint:
                     print(f"      Date: {bbox.attributes.date_hint}")
                 if bbox.attributes.exif_date:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from core.geometry import is_rectangle
 from core.photo_types import BoundingBoxAny, QuadArray, bounding_box_as_array
 
 # =============================================================================
@@ -59,3 +60,7 @@ class BoundingBoxData:
             box_id=str(uuid.uuid4()),
             attributes=attributes if attributes else PhotoAttributes(),
         )
+
+    def is_rectangle(self, tolerance: float = 1e-6) -> bool:
+        """Check if this bounding box is a rectangle."""
+        return is_rectangle(self.corners, tolerance)
