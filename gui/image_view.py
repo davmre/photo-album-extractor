@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image, ImageQt
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import (
+    QAction,
     QEnterEvent,
     QKeyEvent,
     QMouseEvent,
@@ -193,15 +194,27 @@ class ImageView(QGraphicsView):
             refine_action = menu.addAction("Refine")
             rectangle_inner_action = menu.addAction("Rectangle-ify (inner)")
             rectangle_outer_action = menu.addAction("Rectangle-ify (outer)")
+
+            # Add keep rectangular toggle
+            keep_rectangular_action: QAction = menu.addAction("Keep Rectangular")  # type: ignore
+            keep_rectangular_action.setCheckable(True)
+            keep_rectangular_action.setChecked(clicked_box.keep_rectangular)
+            # Only enable for rectangles, gray out for non-rectangles
+            keep_rectangular_action.setEnabled(
+                clicked_box.get_bounding_box_data().is_rectangle()
+            )
+
             remove_action = menu.addAction("Remove")
             action = menu.exec(self.mapToGlobal(position))
 
             if action == refine_action:
                 self.refine_bounding_box(clicked_box, multiscale=True)
-            if action == rectangle_inner_action:
+            elif action == rectangle_inner_action:
                 self.rectangleify_bounding_box(clicked_box, inner=True)
-            if action == rectangle_outer_action:
+            elif action == rectangle_outer_action:
                 self.rectangleify_bounding_box(clicked_box, inner=False)
+            elif action == keep_rectangular_action:
+                clicked_box.keep_rectangular = keep_rectangular_action.isChecked()
             elif action == remove_action:
                 self.remove_bounding_box(clicked_box)
 

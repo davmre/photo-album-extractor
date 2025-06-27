@@ -35,34 +35,36 @@ def dimension_bounds(rect: BoundingBoxAny) -> tuple[float, float]:
 def is_rectangle(corners: BoundingBoxAny, tolerance: float = 1e-6) -> bool:
     """
     Check if a quadrilateral is a rectangle.
-    
+
     A quadrilateral is a rectangle if all its angles are right angles (90 degrees).
     This is equivalent to checking that all dot products of adjacent edges are zero.
-    
+
     Args:
         corners: Quadrilateral corners as array-like of shape (4, 2)
         tolerance: Numerical tolerance for floating point comparison
-        
+
     Returns:
         True if the quadrilateral is a rectangle, False otherwise
     """
     corners = bounding_box_as_array(corners)
-    
+
     # Calculate edge vectors (going around the quadrilateral)
-    edges = np.array([
-        corners[1] - corners[0],  # edge 0->1
-        corners[2] - corners[1],  # edge 1->2
-        corners[3] - corners[2],  # edge 2->3
-        corners[0] - corners[3],  # edge 3->0
-    ])
-    
+    edges = np.array(
+        [
+            corners[1] - corners[0],  # edge 0->1
+            corners[2] - corners[1],  # edge 1->2
+            corners[3] - corners[2],  # edge 2->3
+            corners[0] - corners[3],  # edge 3->0
+        ]
+    )
+
     # Check if all angles are right angles by checking dot products of adjacent edges
     for i in range(4):
         next_i = (i + 1) % 4
         dot_product = np.dot(edges[i], edges[next_i])
         if abs(dot_product) > tolerance:
             return False
-    
+
     return True
 
 

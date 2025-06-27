@@ -32,6 +32,9 @@ class QuadBoundingBox(QGraphicsObject):
         self.box_id = box_data.box_id
         self.attributes = box_data.attributes
 
+        # Initialize keep_rectangular based on whether the box is currently a rectangle
+        self.keep_rectangular = box_data.is_rectangle()
+
         self._is_selected = False
 
         # Visual styling
@@ -131,18 +134,71 @@ class QuadBoundingBox(QGraphicsObject):
         unique_y_values = {c.y() for c in self.corners}
         return len(unique_x_values) == 2 and len(unique_y_values) == 2
 
-    def corner_dragged(self, corner_id: int, new_position: QPointF):
+    def corner_dragged(
+        self, corner_id: int, new_position: QPointF, override_rectangular: bool = False
+    ):
         old_pos = self.corners[corner_id]
         old_x, old_y = old_pos.x(), old_pos.y()
         local_pos = new_position - self.pos()
-        if self.is_axis_aligned_rect():
-            for c_id in range(4):
-                if self.corners[c_id].x() == old_x:
-                    self.corners[c_id].setX(local_pos.x())
-                if self.corners[c_id].y() == old_y:
-                    self.corners[c_id].setY(local_pos.y())
+
+        # Check if we should override rectangular mode
+        if override_rectangular and self.keep_rectangular:
+            self.keep_rectangular = False
+
+        if self.keep_rectangular and self.get_bounding_box_data().is_rectangle():
+            # Rectangle-preserving drag: work like axis-aligned dragging but in rotated frame
+            opposite_id = (corner_id + 2) % 4
+            adj1_id = (corner_id + 1) % 4
+            adj2_id = (corner_id + 3) % 4
+
+            opposite_corner = self.corners[opposite_id]
+
+            # Get the two edge vectors from the dragged corner to its adjacent corners
+            edge1 = (
+                self.corners[adj1_id] - self.corners[corner_id]
+            )  # edge to next corner
+            edge2 = (
+                self.corners[adj2_id] - self.corners[corner_id]
+            )  # edge to prev corner
+
+            # Normalize edge vectors to get local coordinate system
+            edge1_len = (edge1.x() ** 2 + edge1.y() ** 2) ** 0.5
+            edge2_len = (edge2.x() ** 2 + edge2.y() ** 2) ** 0.5
+
+            if edge1_len > 1e-10 and edge2_len > 1e-10:  # Avoid division by zero
+                edge1_unit = QPointF(edge1.x() / edge1_len, edge1.y() / edge1_len)
+                edge2_unit = QPointF(edge2.x() / edge2_len, edge2.y() / edge2_len)
+
+                # Vector from opposite corner to new drag position
+                drag_vector = local_pos - opposite_corner
+
+                # Project drag vector onto the two edge directions
+                proj1 = (
+                    drag_vector.x() * edge1_unit.x() + drag_vector.y() * edge1_unit.y()
+                )
+                proj2 = (
+                    drag_vector.x() * edge2_unit.x() + drag_vector.y() * edge2_unit.y()
+                )
+
+                # Reconstruct rectangle using projected lengths
+                self.corners[corner_id] = opposite_corner + QPointF(
+                    proj1 * edge1_unit.x() + proj2 * edge2_unit.x(),
+                    proj1 * edge1_unit.y() + proj2 * edge2_unit.y(),
+                )
+                self.corners[adj1_id] = opposite_corner + QPointF(
+                    proj1 * edge1_unit.x(), proj1 * edge1_unit.y()
+                )
+                self.corners[adj2_id] = opposite_corner + QPointF(
+                    proj2 * edge2_unit.x(), proj2 * edge2_unit.y()
+                )
+                # opposite_corner stays unchanged
+            else:
+                # Fallback to free-form if edges are degenerate
+                self.corners[corner_id] = local_pos
         else:
+            # Free-form quadrilateral: only update the dragged corner
             self.corners[corner_id] = local_pos
+
         self.update_handles()
         self.update()
         self.changed.emit()
@@ -244,9 +300,21 @@ class CornerHandle(QGraphicsRectItem):
     def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
         """Handle corner dragging."""
         if self.is_dragging:
+            # Check if Command key is held (Meta on macOS, Ctrl on Windows/Linux)
+            modifiers = event.modifiers()
+            override_rectangular = bool(
+                modifiers
+                & (
+                    Qt.KeyboardModifier.MetaModifier
+                    | Qt.KeyboardModifier.ControlModifier
+                )
+            )
+
             # Move the corner to the new position
             new_pos = event.scenePos()
-            self.parent_box.corner_dragged(self.corner_id, new_pos)
+            self.parent_box.corner_dragged(
+                self.corner_id, new_pos, override_rectangular
+            )
             # Update our position to follow the corner
             self.setPos(new_pos)
 
