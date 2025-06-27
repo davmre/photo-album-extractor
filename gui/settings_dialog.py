@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from core.settings import AppSettings
+from core.settings import app_settings
 from photo_detection.detection_strategies import DETECTION_STRATEGIES
 from photo_detection.refinement_strategies import REFINEMENT_STRATEGIES
 
@@ -23,11 +23,9 @@ class SettingsDialog(QDialog):
 
     def __init__(
         self,
-        settings: AppSettings,
         parent=None,
     ):
         super().__init__(parent)
-        self.settings = settings
         self.detection_strategies = DETECTION_STRATEGIES
         self.refinement_strategies = REFINEMENT_STRATEGIES
         self.init_ui()
@@ -46,7 +44,7 @@ class SettingsDialog(QDialog):
         self.api_key_edit = QLineEdit()
         self.api_key_edit.setPlaceholderText("Enter your Gemini API key")
         self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key_edit.setText(self.settings.gemini_api_key)
+        self.api_key_edit.setText(app_settings.gemini_api_key)
 
         form_layout.addRow("Gemini API Key:", self.api_key_edit)
 
@@ -55,7 +53,7 @@ class SettingsDialog(QDialog):
         current_index = 0
         for i, strategy in enumerate(self.detection_strategies.values()):
             self.detection_strategy_combo.addItem(strategy.name, strategy)
-            if strategy.name == self.settings.detection_strategy:
+            if strategy.name == app_settings.detection_strategy:
                 current_index = i
         self.detection_strategy_combo.setCurrentIndex(current_index)
 
@@ -65,7 +63,7 @@ class SettingsDialog(QDialog):
         self.auto_refine_checkbox = QCheckBox(
             "Automatically refine detected bounding boxes"
         )
-        self.auto_refine_checkbox.setChecked(self.settings.auto_refine_detection)
+        self.auto_refine_checkbox.setChecked(app_settings.auto_refine_detection)
 
         form_layout.addRow("", self.auto_refine_checkbox)
 
@@ -74,7 +72,7 @@ class SettingsDialog(QDialog):
         current_index = 0
         for i, strategy in enumerate(self.refinement_strategies.values()):
             self.refinement_strategy_combo.addItem(strategy.name, strategy)
-            if strategy == self.settings.refinement_strategy:
+            if strategy == app_settings.refinement_strategy:
                 current_index = i
         self.refinement_strategy_combo.setCurrentIndex(current_index)
 
@@ -108,22 +106,22 @@ class SettingsDialog(QDialog):
             return
 
         # Save all settings
-        self.settings.gemini_api_key = api_key
+        app_settings.gemini_api_key = api_key
 
         # Save detection strategy
         selected_strategy = self.detection_strategy_combo.currentData()
         if selected_strategy:
-            self.settings.detection_strategy = selected_strategy.name
+            app_settings.detection_strategy = selected_strategy.name
 
         # Save auto-refine setting
-        self.settings.auto_refine_detection = self.auto_refine_checkbox.isChecked()
+        app_settings.auto_refine_detection = self.auto_refine_checkbox.isChecked()
 
         # Save refinement strategy
         selected_strategy = self.refinement_strategy_combo.currentData()
         if selected_strategy:
-            self.settings.refinement_strategy = selected_strategy.name
+            app_settings.refinement_strategy = selected_strategy.name
 
         # Save to file
-        self.settings.save_to_file()
+        app_settings.save_to_file()
 
         super().accept()

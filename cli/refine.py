@@ -10,7 +10,7 @@ import PIL.Image
 
 from cli.utils import get_image_files
 from core.bounding_box_storage import BoundingBoxStorage
-from core.settings import AppSettings
+from core.settings import app_settings
 from photo_detection.refinement_strategies import (
     REFINEMENT_STRATEGIES,
     configure_refinement_strategy,
@@ -48,8 +48,7 @@ def cmd_refine(
                     f"Unrecognized strategy {k}. Options (can specify by any substring): {list(REFINEMENT_STRATEGIES.keys())}"
                 )
         else:
-            settings = AppSettings.load_from_file()
-            refinement_strategy = configure_refinement_strategy(settings)
+            refinement_strategy = configure_refinement_strategy(app_settings)
         logger.info(f"Configured refinement strategy: {refinement_strategy.name}")
     except Exception as e:
         print(f"Error configuring refinement strategy: {e}")

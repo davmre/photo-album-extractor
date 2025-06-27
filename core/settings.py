@@ -58,3 +58,7 @@ class AppSettings:
                 json.dump(self.to_dict(), f, indent=2)
         except OSError:
             print(f"Warning: Could not save settings to {file_path}")
+
+
+# Global settings instance - loaded once on import
+app_settings = AppSettings.load_from_file()

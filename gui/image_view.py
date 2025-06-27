@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, 
 import core.geometry as geometry
 import photo_detection.inscribed_rectangle as inscribed_rectangle
 from core.bounding_box_data import BoundingBoxData
-from core.settings import AppSettings
+from core.settings import app_settings
 from gui.quad_bounding_box import QuadBoundingBox
 from photo_detection import refinement_strategies
 
@@ -44,9 +44,8 @@ class ImageView(QGraphicsView):
     # Signal emitted when mouse enters viewport
     mouse_entered_viewport = pyqtSignal()
 
-    def __init__(self, settings: AppSettings) -> None:
+    def __init__(self, settings=None) -> None:
         super().__init__()
-        self.settings = settings
         self.selected_box: QuadBoundingBox | None = None
 
         self.refine_debug_dir: str | None = None
@@ -272,7 +271,7 @@ class ImageView(QGraphicsView):
         if not self.image_item or not isinstance(box, QuadBoundingBox):
             return
 
-        strategy = refinement_strategies.configure_refinement_strategy(self.settings)
+        strategy = refinement_strategies.configure_refinement_strategy(app_settings)
 
         # Get the current image as numpy array
         image_bgr = self.image_as_numpy(format="bgr")

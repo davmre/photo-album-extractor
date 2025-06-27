@@ -10,7 +10,7 @@ import PIL.Image
 
 from cli.utils import get_image_files
 from core.bounding_box_storage import BoundingBoxStorage
-from core.settings import AppSettings
+from core.settings import app_settings
 from photo_detection.detection_strategies import configure_detection_strategy
 
 
@@ -27,10 +27,9 @@ def cmd_detect(paths: list[str], force: bool = False) -> int:
         print("No image files found")
         return 0
 
-    # Load settings and configure detection strategy
+    # Configure detection strategy using global settings
     try:
-        settings = AppSettings.load_from_file()
-        detection_strategy = configure_detection_strategy(settings)
+        detection_strategy = configure_detection_strategy(app_settings)
         logger.info(f"Configured detection strategy: {detection_strategy.name}")
     except Exception as e:
         print(f"Error configuring detection strategy: {e}")

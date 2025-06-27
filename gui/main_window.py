@@ -26,7 +26,7 @@ from core.bounding_box_data import BoundingBoxData, PhotoAttributes
 from core.bounding_box_storage import BoundingBoxStorage
 from core.date_inference import infer_dates_for_current_directory
 from core.errors import AppError
-from core.settings import AppSettings
+from core.settings import app_settings
 from gui.attributes_sidebar import AttributesSidebar
 from gui.directory_sidebar import DirectoryImageList
 from gui.image_view import ImageView
@@ -51,7 +51,6 @@ class PhotoExtractorApp(QMainWindow):
         self.current_image: PIL.Image.Image | None = None
         self.current_directory: str | None = None
         self.bounding_box_storage: BoundingBoxStorage | None = None
-        self.settings = AppSettings.load_from_file()
 
         # GUI components (will be initialized in init_ui)
         self.image_view: ImageView
@@ -132,7 +131,7 @@ class PhotoExtractorApp(QMainWindow):
         main_splitter.addWidget(self.directory_list)
 
         # Create image view (center panel)
-        self.image_view = ImageView(self.settings)
+        self.image_view = ImageView()
         self.image_view.boxes_changed.connect(self.update_extract_button_state)
         self.image_view.box_selected.connect(self.on_box_selected)
         self.image_view.box_deselected.connect(self.on_box_deselected)
@@ -420,7 +419,7 @@ class PhotoExtractorApp(QMainWindow):
             return
 
         try:
-            selected_strategy = configure_detection_strategy(self.settings)
+            selected_strategy = configure_detection_strategy(app_settings)
         except AppError as err:
             err.show_warning(parent=self)
             return
@@ -441,7 +440,7 @@ class PhotoExtractorApp(QMainWindow):
             )
 
             # Auto-refine if enabled in settings
-            if self.settings.auto_refine_detection and detected_boxes:
+            if app_settings.auto_refine_detection and detected_boxes:
                 self.refine_all_boxes()
                 self.status_bar.showMessage(
                     f"Detected and refined {len(detected_boxes)} photos using {selected_strategy.name}"
@@ -615,5 +614,5 @@ class PhotoExtractorApp(QMainWindow):
 
     def open_settings(self):
         """Open the settings dialog."""
-        dialog = SettingsDialog(self.settings, self)
+        dialog = SettingsDialog(self)
         dialog.exec()
