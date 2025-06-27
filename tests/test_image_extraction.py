@@ -12,7 +12,7 @@ import piexif
 import pytest
 from PIL import Image
 
-from core.bounding_box import BoundingBoxData, PhotoAttributes
+from core.bounding_box_data import BoundingBoxData, PhotoAttributes
 
 # Add parent directory to path to import app modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
