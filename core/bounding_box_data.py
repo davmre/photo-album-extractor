@@ -46,6 +46,11 @@ class PhotoAttributes:
     def __bool__(self) -> bool:
         return bool(self.date_hint or self.comments)
 
+    def __hash__(self):
+        return hash(
+            (self.date_hint, self.exif_date, self.comments, self.date_inconsistent)
+        )
+
     def copy(self) -> PhotoAttributes:
         return PhotoAttributes(
             date_hint=self.date_hint,
@@ -71,6 +76,22 @@ class BoundingBoxData:
             box_id=str(uuid.uuid4()),
             attributes=attributes if attributes else PhotoAttributes(),
         )
+
+    def __hash__(self):
+        corners = ((c[0], c[1]) for c in self.corners)  # convert from ndarray
+        return hash((corners, self.box_id, self.attributes, self.marked_as_good))
+
+    def __eq__(self, other):
+        if (self.box_id, self.attributes, self.marked_as_good) != (
+            other.box_id,
+            other.attributes,
+            other.marked_as_good,
+        ):
+            return False
+        try:
+            return np.all(self.corners == other.corners)
+        except Exception:
+            return False
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
