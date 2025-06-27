@@ -10,8 +10,8 @@ from pathlib import Path
 import numpy as np
 
 from core import date_utils
+from core.bounding_box_data import BoundingBoxData
 from core.bounding_box_storage import BoundingBoxStorage
-from core.photo_types import BoundingBoxData
 
 
 def cmd_interpolate_dates(directory: str, trial_run=False):

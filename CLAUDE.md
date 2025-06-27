@@ -84,6 +84,7 @@ in new files for deferred evaluation of type annotations.
 ### Key Components
 
 1. **Core app functionality** (`core/`):
+   - `bounding_box_data.py`: core data model for a bounding box / photo to be extracted.
    - `photo_types.py` and `errors.py`: custom types and exceptions used throughout
    - `bounding_box_storage.py` - Saves bounding boxes as JSON in `.photo_extractor_data.json` files per directory
    - `images.py`: Handles perspective correction, EXIF metadata, and image saving

@@ -6,7 +6,7 @@ import json
 import os
 from typing import Any
 
-from core.photo_types import BoundingBoxData, PhotoAttributes
+from core.bounding_box_data import BoundingBoxData, PhotoAttributes
 
 
 class BoundingBoxStorage:

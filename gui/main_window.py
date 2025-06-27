@@ -22,9 +22,9 @@ from PyQt6.QtWidgets import (
 )
 
 from core import images
+from core.bounding_box_data import BoundingBoxData, PhotoAttributes
 from core.bounding_box_storage import BoundingBoxStorage
 from core.errors import AppError
-from core.photo_types import BoundingBoxData, PhotoAttributes
 from core.settings import AppSettings
 from gui.attributes_sidebar import AttributesSidebar
 from gui.directory_sidebar import DirectoryImageList

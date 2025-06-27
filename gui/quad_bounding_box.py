@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 
 import core.photo_types as photo_types
 from core import geometry
-from core.photo_types import BoundingBoxData, PhotoAttributes
+from core.bounding_box_data import BoundingBoxData, PhotoAttributes
 
 
 class QuadBoundingBox(QGraphicsObject):

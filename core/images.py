@@ -12,7 +12,7 @@ import numpy as np
 import piexif
 import PIL.Image
 from core import date_utils, geometry
-from core.photo_types import BoundingBoxData, PhotoAttributes
+from core.bounding_box_data import BoundingBoxData, PhotoAttributes
 from PIL import Image
 
 # Semantic type aliases

@@ -12,8 +12,9 @@ import google.generativeai as genai  # type: ignore
 import numpy as np
 import PIL.Image
 
+from core.bounding_box_data import BoundingBoxData, PhotoAttributes
 from core.errors import AppError
-from core.photo_types import BoundingBoxData, PhotoAttributes, QuadArray
+from core.photo_types import QuadArray
 from core.settings import AppSettings
 
 

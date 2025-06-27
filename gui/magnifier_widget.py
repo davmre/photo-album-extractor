@@ -6,7 +6,8 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from core.photo_types import BoundingBoxData, bounding_box_as_list_of_qpointfs
+from core.bounding_box_data import BoundingBoxData
+from core.photo_types import bounding_box_as_list_of_qpointfs
 
 
 class MagnifierWidget(QWidget):

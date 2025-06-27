@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core import date_utils
-from core.photo_types import BoundingBoxData, PhotoAttributes
+from core.bounding_box_data import BoundingBoxData, PhotoAttributes
 from gui.magnifier_widget import MagnifierWidget
 
 

@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, 
 
 import core.geometry as geometry
 import photo_detection.inscribed_rectangle as inscribed_rectangle
-from core.photo_types import BoundingBoxData
+from core.bounding_box_data import BoundingBoxData
 from core.settings import AppSettings
 from gui.quad_bounding_box import QuadBoundingBox
 from photo_detection import refinement_strategies
