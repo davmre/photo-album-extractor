@@ -237,7 +237,7 @@ class DirectoryImageList(QWidget):
 
         return f"Validation issues: {', '.join(parts)}"
 
-    def update_file_validation(self, filename: str, storage=None):
+    def update_file_validation(self, filename: str, storage):
         """Update validation cache for a specific file and refresh its display."""
         if not self.current_directory:
             return

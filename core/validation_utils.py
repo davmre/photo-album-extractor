@@ -31,7 +31,7 @@ class FileValidationSummary:
 
 
 def validate_file_bounding_boxes(
-    directory: str, filename: str, storage: BoundingBoxStorage | None = None
+    directory: str, filename: str, storage: BoundingBoxStorage
 ) -> FileValidationSummary:
     """
     Validate all bounding boxes in a single image file.
@@ -44,8 +44,6 @@ def validate_file_bounding_boxes(
     Returns:
         FileValidationSummary with counts and worst severity
     """
-    if storage is None:
-        storage = BoundingBoxStorage(directory)
     bounding_boxes = storage.load_bounding_boxes(filename)
 
     error_count = 0

@@ -395,7 +395,9 @@ class PhotoExtractorApp(QMainWindow):
             self.bounding_box_storage.update_box_data(filename, bounding_box_data)
 
             # Update directory sidebar validation for this file
-            self.directory_list.update_file_validation(filename)
+            self.directory_list.update_file_validation(
+                filename, storage=self.bounding_box_storage
+            )
 
     def _trigger_date_inference(self):
         """
@@ -555,7 +557,9 @@ class PhotoExtractorApp(QMainWindow):
             )
 
             # Update directory sidebar validation for this file
-            self.directory_list.update_file_validation(filename)
+            self.directory_list.update_file_validation(
+                filename, storage=self.bounding_box_storage
+            )
 
             # Run date inference in case ordering or date hints changed
             self._trigger_date_inference()
@@ -566,9 +570,11 @@ class PhotoExtractorApp(QMainWindow):
             filename = os.path.basename(self.current_image_path)
             saved_data = self.bounding_box_storage.load_bounding_boxes(filename)
 
-            # Clear existing boxes
+            # Remember the currently selected box id
             selected_box = self.image_view.selected_box
             selected_box_id = selected_box.box_id if selected_box else None
+
+            # Clear existing boxes
             self.image_view.clear_boxes()
 
             # Load saved boxes using BoundingBoxData
@@ -576,7 +582,7 @@ class PhotoExtractorApp(QMainWindow):
                 # Create box with BoundingBoxData
                 self.image_view.add_bounding_box(bbox_data)
 
-            # Restore selection
+            # Restore the selected box (if any).
             if selected_box_id:
                 self.image_view.on_box_selection_changed(selected_box_id)
 
