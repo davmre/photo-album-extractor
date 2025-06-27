@@ -66,5 +66,7 @@ def cmd_interpolate_dates(directory: str, trial_run=False):
             )
             box.attributes.exif_date = updated_date_str
             box.attributes.date_inconsistent = is_segment_boundary
+            # Defer saving so we only write the JSON file at the end once everything's
+            # updated.
             storage.update_box_data(filename, box, save_data=False)
     storage._save_data()

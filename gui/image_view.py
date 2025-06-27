@@ -256,6 +256,7 @@ class ImageView(QGraphicsView):
         else:
             rect_array, _ = geometry.minimum_bounding_rectangle(corner_coords)
         box.set_corners(rect_array)
+        box.keep_rectangular = True
 
     def refine_bounding_box(
         self, box: QuadBoundingBox, multiscale=False, enforce_parallel_sides=None
@@ -281,6 +282,7 @@ class ImageView(QGraphicsView):
                 image_bgr, corner_coords, debug_dir=debug_dir
             )
             box.set_corners(refined_corners)
+            box.keep_rectangular = geometry.is_rectangle(refined_corners)
 
         except Exception as e:
             print(f"Error refining bounding box: {e}")

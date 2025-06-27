@@ -11,14 +11,12 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QScrollArea,
-    QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from core import date_utils
-from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.bounding_box_data import BoundingBoxData, PhotoAttributes, Severity
 from gui.magnifier_widget import MagnifierWidget
 
 
@@ -56,13 +54,15 @@ class SelectAllLineEdit(QLineEdit):
 class AttributesSidebar(QWidget):
     """Sidebar widget for editing bounding box attributes."""
 
-    attributes_changed = pyqtSignal(str, PhotoAttributes)  # Emits (box_id, attributes)
+    attributes_changed = pyqtSignal(
+        str, str, PhotoAttributes
+    )  # Emits (box_id, key_changed, attributes)
     coordinates_changed = pyqtSignal(str, list)  # Emits (box_id, coordinates)
     bulk_datetime_update_requested = pyqtSignal(str)  # Emits (date_time_value)
 
     def __init__(self):
         super().__init__()
-        self.current_box_id = None
+        self.current_box = None
         self.updating_ui = False  # Flag to prevent recursion
 
         # Set up the widget
@@ -131,50 +131,16 @@ class AttributesSidebar(QWidget):
 
         content_layout.addWidget(comments_group)
 
-        # Coordinates group
-        coordinates_group = QGroupBox("Corner Coordinates")
-        coordinates_layout = QVBoxLayout(coordinates_group)
+        # Validation group
+        self.validation_group = QGroupBox("Validation")
+        validation_layout = QVBoxLayout(self.validation_group)
 
-        # Create coordinate input fields for each corner
-        self.coordinate_spinboxes = []
-        corner_labels = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"]
+        self.validation_label = QLabel("No issues")
+        self.validation_label.setWordWrap(True)
+        self.validation_label.setStyleSheet("color: #666; padding: 5px;")
+        validation_layout.addWidget(self.validation_label)
 
-        for i, label in enumerate(corner_labels):
-            corner_layout = QVBoxLayout()
-            corner_label = QLabel(f"{label}:")
-            corner_label.setStyleSheet("font-weight: bold; margin-top: 5px;")
-            corner_layout.addWidget(corner_label)
-
-            # X coordinate
-            x_layout = QHBoxLayout()
-            x_layout.addWidget(QLabel("X:"))
-            x_spinbox = QSpinBox()
-            x_spinbox.setRange(-9999, 9999)
-            x_spinbox.valueChanged.connect(
-                lambda value, corner=i, coord="x": self.on_coordinate_changed(
-                    corner, coord, value
-                )
-            )
-            x_layout.addWidget(x_spinbox)
-            corner_layout.addLayout(x_layout)
-
-            # Y coordinate
-            y_layout = QHBoxLayout()
-            y_layout.addWidget(QLabel("Y:"))
-            y_spinbox = QSpinBox()
-            y_spinbox.setRange(-9999, 9999)
-            y_spinbox.valueChanged.connect(
-                lambda value, corner=i, coord="y": self.on_coordinate_changed(
-                    corner, coord, value
-                )
-            )
-            y_layout.addWidget(y_spinbox)
-            corner_layout.addLayout(y_layout)
-
-            self.coordinate_spinboxes.append((x_spinbox, y_spinbox))
-            coordinates_layout.addLayout(corner_layout)
-
-        content_layout.addWidget(coordinates_group)
+        content_layout.addWidget(self.validation_group)
 
         # Add stretch to push content to top
         content_layout.addStretch()
@@ -199,7 +165,7 @@ class AttributesSidebar(QWidget):
 
     def show_no_selection(self):
         """Show the no selection state."""
-        self.current_box_id = None
+        self.current_box = None
         scroll_area = self.findChild(QScrollArea)
         if scroll_area:
             scroll_area.hide()
@@ -208,7 +174,7 @@ class AttributesSidebar(QWidget):
     def set_box_data(self, box_data: BoundingBoxData):
         """Show attributes for the selected box."""
         self.updating_ui = True
-        self.current_box_id = box_data.box_id
+        self.current_box = box_data
         self._current_attributes = box_data.attributes
 
         # Hide no selection label and show attributes
@@ -228,39 +194,46 @@ class AttributesSidebar(QWidget):
         if current_comments != new_comments:
             self.comments_edit.setPlainText(box_data.attributes.comments)
 
-        try:
-            for i, (x_spinbox, y_spinbox) in enumerate(self.coordinate_spinboxes):
-                if i < len(box_data.corners):
-                    x_spinbox.setValue(box_data.corners[i][0])
-                    y_spinbox.setValue(box_data.corners[i][1])
-        finally:
-            self.updating_ui = False
+        self.updating_ui = False
+
+        # Update validation display
+        self.update_validation_display(box_data)
 
     def on_datetime_changed(self):
         """Handle date/time changes."""
-        if not self.updating_ui and self.current_box_id:
+        if not self.updating_ui and self.current_box:
             user_input = self.date_hint_edit.text().strip()
-
+            print("datetime changed", self._current_attributes.date_hint, user_input)
             if not user_input:
                 # Empty input - clear the date
-                self.emit_attributes_changed("date_string", "")
+                self.emit_attributes_changed("date_hint", "")
                 return
 
-            parsed_dt = date_utils.parse_flexible_date(user_input) or ""
-            self.inferred_exif.setText(parsed_dt)
+            # parsed_dt = date_utils.parse_flexible_date(user_input) or ""
+            # self.inferred_exif.setText(parsed_dt)
 
-            self.emit_attributes_changed("date_string", user_input)
-            self.emit_attributes_changed("exif_date", parsed_dt)
+            self.emit_attributes_changed("date_hint", user_input.strip())
+            # self.emit_attributes_changed("exif_date", parsed_dt)
+
+            # Update validation display
+            current_box = self.get_current_box_data()
+            if current_box:
+                self.update_validation_display(current_box)
 
     def on_comments_changed(self):
         """Handle comments changes."""
-        if not self.updating_ui and self.current_box_id:
+        if not self.updating_ui and self.current_box:
             comments = self.comments_edit.toPlainText()
             self.emit_attributes_changed("comments", comments)
 
+            # Update validation display
+            current_box = self.get_current_box_data()
+            if current_box:
+                self.update_validation_display(current_box)
+
     def emit_attributes_changed(self, key: str, value: str):
         """Emit attribute change with current box ID."""
-        if self.current_box_id:
+        if self.current_box:
             # Update current attributes
             if hasattr(self, "_current_attributes"):
                 attrs = self._current_attributes
@@ -270,35 +243,59 @@ class AttributesSidebar(QWidget):
             # Set the specific attribute
             setattr(attrs, key, value)
             self._current_attributes = attrs
-            self.attributes_changed.emit(self.current_box_id, attrs)
+            self.attributes_changed.emit(self.current_box.box_id, key, attrs)
 
     def get_current_attributes(self) -> PhotoAttributes:
         """Get the current attributes from the UI."""
-        if not self.current_box_id:
+        if not self.current_box:
             return PhotoAttributes()
+        # return self._current_attributes.copy()
+        return PhotoAttributes(
+            date_hint=self.date_hint_edit.text().strip(),
+            exif_date=self.inferred_exif.text(),
+            comments=self.comments_edit.toPlainText(),
+            date_inconsistent=getattr(
+                self._current_attributes, "date_inconsistent", False
+            ),
+        )
 
-        # Get datetime text directly
-        dt_string = self.date_hint_edit.text().strip()
+    def get_current_box_data(self) -> BoundingBoxData | None:
+        """Get current bounding box data from UI state."""
+        if not self.current_box:
+            return None
 
-        # Get comments
-        comments = self.comments_edit.toPlainText().strip()
+        return BoundingBoxData(
+            corners=self.current_box.corners,
+            box_id=self.current_box.box_id,
+            attributes=self.get_current_attributes(),
+        )
 
-        return PhotoAttributes(date_hint=dt_string, comments=comments)
+    def update_validation_display(self, box_data: BoundingBoxData):
+        """Update the validation display for the current bounding box."""
+        issues = box_data.validate()
 
-    def on_coordinate_changed(self, corner_index, coord_type, value):
-        """Handle coordinate changes."""
-        if not self.updating_ui and self.current_box_id:
-            # Get current coordinates from all spinboxes
-            coordinates = []
-            for x_spinbox, y_spinbox in self.coordinate_spinboxes:
-                x_val = x_spinbox.value()
-                y_val = y_spinbox.value()
-                coordinates.append([float(x_val), float(y_val)])
+        if not issues:
+            self.validation_label.setText("No issues")
+            self.validation_label.setStyleSheet("color: #666; padding: 5px;")
+            return
 
-            # Focus magnifier on the corner being edited
-            if corner_index < len(coordinates):
-                corner_pos = coordinates[corner_index]
-                self.magnifier.focus_on_corner(corner_pos)
+        # Sort issues by severity (errors first)
+        issues.sort(key=lambda x: x.severity == Severity.ERROR, reverse=True)
 
-            # Emit coordinate change signal
-            self.coordinates_changed.emit(self.current_box_id, coordinates)
+        # Build display text with icons
+        display_lines = []
+        for issue in issues:
+            if issue.severity == Severity.ERROR:
+                icon = "🚨"
+            else:
+                icon = "⚠️"
+
+            display_lines.append(f"{icon} {issue.message}")
+
+        display_text = "\n".join(display_lines)
+        self.validation_label.setText(display_text)
+
+        # Set color based on highest severity
+        has_errors = any(issue.severity == Severity.ERROR for issue in issues)
+        color = "#cc0000" if has_errors else "#ff8800"
+        self.validation_label.setStyleSheet(f"color: {color}; padding: 5px;")

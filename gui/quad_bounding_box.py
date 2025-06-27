@@ -5,7 +5,7 @@ Quadrilateral bounding box widget for arbitrary four-sided photo selection.
 from __future__ import annotations
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QKeyEvent, QPainter, QPen, QPolygonF
+from PyQt6.QtGui import QBrush, QColor, QFont, QKeyEvent, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import (
     QGraphicsItem,
     QGraphicsObject,
@@ -15,7 +15,12 @@ from PyQt6.QtWidgets import (
 
 import core.photo_types as photo_types
 from core import geometry
-from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.bounding_box_data import (
+    BoundingBoxData,
+    PhotoAttributes,
+    Severity,
+    ValidationIssue,
+)
 
 
 class QuadBoundingBox(QGraphicsObject):
@@ -36,6 +41,10 @@ class QuadBoundingBox(QGraphicsObject):
         self.keep_rectangular = box_data.is_rectangle()
 
         self._is_selected = False
+
+        # Validation state
+        self.validation_issues: list[ValidationIssue] = []
+        self._update_validation()
 
         # Visual styling
         self.pen = QPen(QColor(255, 0, 0), 2)
@@ -103,6 +112,64 @@ class QuadBoundingBox(QGraphicsObject):
         polygon = QPolygonF(self.corners)
         painter.drawPolygon(polygon)
 
+        # Draw validation icons if there are issues
+        if self.validation_issues:
+            self._draw_validation_icons(painter)
+
+    def _draw_validation_icons(self, painter: QPainter):
+        """Draw validation issue icons on the bounding box."""
+        if not self.validation_issues:
+            return
+
+        # Find the center of the bounding box for overlay positioning
+        center_x = sum(corner.x() for corner in self.corners) / 4
+        center_y = sum(corner.y() for corner in self.corners) / 4
+
+        # Sort issues by severity (errors first)
+        sorted_issues = sorted(
+            self.validation_issues,
+            key=lambda x: x.severity == Severity.ERROR,
+            reverse=True,
+        )
+
+        # Icon settings - much larger for better visibility
+        width, height = geometry.dimension_bounds(self.corners)
+        icon_scale = min(width, height)
+        icon_size = int(icon_scale / 5.0)
+        icon_spacing = icon_scale / 20.0
+
+        # Set up font for emoji icons
+        font = QFont()
+        font.setPixelSize(icon_size)
+        painter.setFont(font)
+
+        # Calculate total width needed for all icons
+        total_width = (
+            len(sorted_issues) * icon_size + (len(sorted_issues) - 1) * icon_spacing
+        )
+        start_x = center_x - total_width // 2
+
+        # Draw icons centered horizontally on the bounding box
+        x_offset = 0
+        for issue in sorted_issues:
+            # Choose icon and background color based on severity
+            if issue.severity == Severity.ERROR:
+                icon = "🚨"
+            else:
+                icon = "⚠️"
+
+            # Calculate icon position centered on the bounding box
+            icon_x = int(start_x + x_offset)
+            icon_y = int(center_y - icon_size // 2)
+
+            # Draw the icon
+            painter.setPen(QPen(QColor(255, 255, 255), 2))
+            text_x = icon_x + icon_size // 4  # Adjust for emoji positioning
+            text_y = icon_y + icon_size * 3 // 4  # Adjust for baseline
+            painter.drawText(QPointF(text_x, text_y), icon)
+
+            x_offset += icon_size + icon_spacing
+
     def itemChange(self, change, value):
         """Handle item changes (movement, etc.)."""
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
@@ -137,15 +204,13 @@ class QuadBoundingBox(QGraphicsObject):
     def corner_dragged(
         self, corner_id: int, new_position: QPointF, override_rectangular: bool = False
     ):
-        old_pos = self.corners[corner_id]
-        old_x, old_y = old_pos.x(), old_pos.y()
         local_pos = new_position - self.pos()
 
         # Check if we should override rectangular mode
         if override_rectangular and self.keep_rectangular:
             self.keep_rectangular = False
 
-        if self.keep_rectangular and self.get_bounding_box_data().is_rectangle():
+        if self.keep_rectangular:
             # Rectangle-preserving drag: work like axis-aligned dragging but in rotated frame
             opposite_id = (corner_id + 2) % 4
             adj1_id = (corner_id + 1) % 4
@@ -198,6 +263,7 @@ class QuadBoundingBox(QGraphicsObject):
         else:
             # Free-form quadrilateral: only update the dragged corner
             self.corners[corner_id] = local_pos
+            self._update_validation()
 
         self.update_handles()
         self.update()
@@ -214,6 +280,7 @@ class QuadBoundingBox(QGraphicsObject):
         self.setPos(0, 0)
         self.corners = photo_types.bounding_box_as_list_of_qpointfs(new_corners)
         self.update_handles()
+        self._update_validation()
         self.update()
         self.changed.emit()
 
@@ -250,6 +317,21 @@ class QuadBoundingBox(QGraphicsObject):
             raise ValueError("box id doesn't match!")
         self.set_corners(data.corners)
         self.attributes = data.attributes
+        self._update_validation()
+
+    def _update_validation(self):
+        """Update validation state and trigger repaint if needed."""
+        old_issues = self.validation_issues
+        box_data = self.get_bounding_box_data()
+        self.validation_issues = box_data.validate()
+
+        # Trigger repaint if validation state changed
+        if old_issues != self.validation_issues:
+            self.update()
+
+    def update_validation(self):
+        """Public method to update validation state."""
+        self._update_validation()
 
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent):
         """Handle mouse press for selection."""

@@ -32,7 +32,9 @@ def dimension_bounds(rect: BoundingBoxAny) -> tuple[float, float]:
     return float(max(width1, width2)), float(max(height1, height2))
 
 
-def is_rectangle(corners: BoundingBoxAny, tolerance: float = 1e-6) -> bool:
+def is_rectangle(
+    corners: BoundingBoxAny, tolerance_degrees: float = 1e-1, atol=1e-6
+) -> bool:
     """
     Check if a quadrilateral is a rectangle.
 
@@ -61,8 +63,18 @@ def is_rectangle(corners: BoundingBoxAny, tolerance: float = 1e-6) -> bool:
     # Check if all angles are right angles by checking dot products of adjacent edges
     for i in range(4):
         next_i = (i + 1) % 4
-        dot_product = np.dot(edges[i], edges[next_i])
-        if abs(dot_product) > tolerance:
+        abs_dot_product = abs(np.dot(edges[i], edges[next_i]))
+        if abs_dot_product <= atol:
+            # Short circuit for near-perfect cases.
+            continue
+
+        # Compute tolerance in degrees (more expensive)
+        cos_theta = abs_dot_product / np.sqrt(
+            np.dot(edges[i], edges[i]) * np.dot(edges[next_i], edges[next_i])
+        )
+        # Approximate `cos(theta) ~= theta - pi/2` near pi/2
+        approx_deviation_in_degrees = cos_theta * (180.0 / np.pi)
+        if approx_deviation_in_degrees > tolerance_degrees:
             return False
 
     return True

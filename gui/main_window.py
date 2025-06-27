@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 from core import images
 from core.bounding_box_data import BoundingBoxData, PhotoAttributes
 from core.bounding_box_storage import BoundingBoxStorage
+from core.date_inference import infer_dates_for_current_directory
 from core.errors import AppError
 from core.settings import AppSettings
 from gui.attributes_sidebar import AttributesSidebar
@@ -305,7 +306,9 @@ class PhotoExtractorApp(QMainWindow):
         if directory != self.current_directory:
             self.current_directory = directory
             self.bounding_box_storage = BoundingBoxStorage(directory)
-            self.directory_list.set_directory(directory)
+            self.directory_list.set_directory(
+                directory, storage=self.bounding_box_storage
+            )
 
     def load_directory(self, directory):
         """Load a directory and its first image."""
@@ -347,7 +350,9 @@ class PhotoExtractorApp(QMainWindow):
         """Handle box deselection from ImageView."""
         self.attributes_sidebar.show_no_selection()
 
-    def on_attributes_changed(self, box_id: str, attributes: PhotoAttributes):
+    def on_attributes_changed(
+        self, box_id: str, key_changed: str, attributes: PhotoAttributes
+    ):
         """Handle attribute changes from AttributesSidebar."""
         # Get current box to extract its corners
         selected_box = self.image_view.get_selected_box()
@@ -361,6 +366,10 @@ class PhotoExtractorApp(QMainWindow):
             # Update the box and save
             self.image_view.update_box_data(updated_data)
             self._save_box_data_to_storage(updated_data)
+
+            # If date hint changed, trigger date inference for the whole directory
+            if key_changed == "date_hint":
+                self._trigger_date_inference()
 
     def on_coordinates_changed(self, box_id: str, coordinates):
         """Handle coordinate changes from AttributesSidebar."""
@@ -419,6 +428,48 @@ class PhotoExtractorApp(QMainWindow):
         if self.current_image_path and self.bounding_box_storage:
             filename = os.path.basename(self.current_image_path)
             self.bounding_box_storage.update_box_data(filename, bounding_box_data)
+
+            # Update directory sidebar validation for this file
+            self.directory_list.update_file_validation(filename)
+
+    def _trigger_date_inference(self):
+        """
+        Run date inference for the entire directory and update UI accordingly.
+
+        This fills in exif_date fields and sets date_inconsistent flags based on
+        the date hints across all photos in the directory.
+        """
+        if not self.bounding_box_storage:
+            return
+
+        try:
+            # Run date inference on the entire directory
+            result = infer_dates_for_current_directory(self.bounding_box_storage)
+            if result.updated_files:
+                # Update validation cache for all affected files using the current storage object
+                for filename in result.updated_files:
+                    self.directory_list.update_file_validation(
+                        filename, self.bounding_box_storage
+                    )
+
+                # If the current image was updated, reload and refresh the UI
+                if self.current_image_path:
+                    current_filename = os.path.basename(self.current_image_path)
+                    if current_filename in result.updated_files:
+                        # Reload bounding boxes from storage (they've been updated).
+                        self.load_saved_bounding_boxes()
+
+                # Show status message about what was updated
+                if result.total_boxes_updated > 0:
+                    msg = f"Updated {result.total_boxes_updated} photos"
+                    if result.inconsistent_boxes_updated > 0:
+                        msg += f" ({result.inconsistent_boxes_updated} marked as inconsistent)"
+                    self.status_bar.showMessage(msg, 3000)  # Show for 3 seconds
+
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Date Inference Error", f"Failed to infer dates: {e}"
+            )
 
     def detect_photos(self):
         """Run the configured detection strategy to automatically detect photos."""
@@ -538,6 +589,12 @@ class PhotoExtractorApp(QMainWindow):
                 filename, self.image_view.get_bounding_box_data_list()
             )
 
+            # Update directory sidebar validation for this file
+            self.directory_list.update_file_validation(filename)
+
+            # Run date inference in case ordering or date hints changed
+            self._trigger_date_inference()
+
     def load_saved_bounding_boxes(self):
         """Load saved bounding boxes for the current image."""
         if self.current_image_path and self.bounding_box_storage:
@@ -545,12 +602,18 @@ class PhotoExtractorApp(QMainWindow):
             saved_data = self.bounding_box_storage.load_bounding_boxes(filename)
 
             # Clear existing boxes
+            selected_box = self.image_view.selected_box
+            selected_box_id = selected_box.box_id if selected_box else None
             self.image_view.clear_boxes()
 
             # Load saved boxes using BoundingBoxData
             for bbox_data in saved_data:
                 # Create box with BoundingBoxData
                 self.image_view.add_bounding_box(bbox_data)
+
+            # Restore selection
+            if selected_box_id:
+                self.image_view.on_box_selection_changed(selected_box_id)
 
     def closeEvent(self, event):
         """Save bounding boxes before closing the application."""
@@ -595,7 +658,7 @@ class PhotoExtractorApp(QMainWindow):
 
             # Update coordinate fields if a box is selected
             selected_box = self.image_view.get_selected_box()
-            if selected_box and self.attributes_sidebar.current_box_id:
+            if selected_box and self.attributes_sidebar.current_box:
                 self.attributes_sidebar.set_box_data(
                     selected_box.get_bounding_box_data()
                 )

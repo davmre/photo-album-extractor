@@ -21,7 +21,9 @@ DateInterval = tuple[datetime, datetime]
 
 
 def parse_flexible_date_as_datetime(user_input: str) -> datetime | None:
-    user_input = user_input.strip()
+    user_input = user_input.strip().lower()
+    for k, (v1, _) in SPECIAL_PERIODS.items():
+        user_input = user_input.replace(k, v1)
     try:
         return dateutil_parser.parse(user_input, default=datetime(1900, 1, 1, 0, 0, 0))
     except (ValueError, TypeError, dateutil_parser.ParserError):

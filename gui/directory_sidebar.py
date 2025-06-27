@@ -16,6 +16,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.bounding_box_storage import BoundingBoxStorage
+from core.validation_utils import (
+    FileValidationSummary,
+    get_validation_icon_text,
+    validate_directory_files,
+)
+
 
 class DirectoryImageList(QWidget):
     """Sidebar widget showing images in the current directory."""
@@ -26,6 +33,7 @@ class DirectoryImageList(QWidget):
     def __init__(self):
         super().__init__()
         self.current_directory = None
+        self.validation_cache: dict[str, FileValidationSummary] = {}
         self.supported_formats = {
             ".png",
             ".jpg",
@@ -63,12 +71,14 @@ class DirectoryImageList(QWidget):
         self.image_list.itemClicked.connect(self.on_item_clicked)
         layout.addWidget(self.image_list)
 
-    def set_directory(self, directory):
+    def set_directory(self, directory, storage: BoundingBoxStorage):
         """Set the directory to display images from."""
         if directory != self.current_directory:
             self.current_directory = directory
+            self.validation_cache.clear()  # Clear cache for new directory
             self.update_directory_label()
             self.refresh_images()
+            self._load_validation_cache(storage=storage)
 
     def update_directory_label(self):
         """Update the directory label with current path."""
@@ -109,9 +119,7 @@ class DirectoryImageList(QWidget):
         # Add items to the list
         for image_path in image_files:
             filename = os.path.basename(image_path)
-            item = QListWidgetItem(filename)
-            item.setData(Qt.ItemDataRole.UserRole, image_path)  # Store full path
-            self.image_list.addItem(item)
+            self._add_image_item(filename, image_path)
 
     def on_item_clicked(self, item):
         """Handle image selection."""
@@ -155,3 +163,90 @@ class DirectoryImageList(QWidget):
     def item(self, row):
         """Get item at specified row."""
         return self.image_list.item(row)
+
+    def _load_validation_cache(self, storage):
+        """Load validation data for all files in the current directory."""
+        if not self.current_directory:
+            return
+
+        self.validation_cache = validate_directory_files(
+            self.current_directory, storage
+        )
+        self._update_all_item_display()
+
+    def _add_image_item(self, filename: str, image_path: str):
+        """Add an image item to the list with validation icon if needed."""
+        # Get validation icon for this file
+        validation_icon = ""
+        if filename in self.validation_cache:
+            validation_icon = get_validation_icon_text(self.validation_cache[filename])
+
+        # Create display text with icon (if any)
+        display_text = f"{validation_icon} {filename}".strip()
+
+        item = QListWidgetItem(display_text)
+        item.setData(Qt.ItemDataRole.UserRole, image_path)  # Store full path
+        item.setToolTip(self._get_validation_tooltip(filename))
+        self.image_list.addItem(item)
+
+    def _update_all_item_display(self):
+        """Update display text for all items with current validation state."""
+        items_updated = 0
+        for i in range(self.image_list.count()):
+            item = self.image_list.item(i)
+            if item is not None:
+                image_path = item.data(Qt.ItemDataRole.UserRole)
+                if image_path:
+                    filename = os.path.basename(image_path)
+                    old_text = item.text()
+
+                    # Get validation icon for this file
+                    validation_icon = ""
+                    if filename in self.validation_cache:
+                        validation_icon = get_validation_icon_text(
+                            self.validation_cache[filename]
+                        )
+
+                    # Update display text with icon (if any)
+                    display_text = f"{validation_icon} {filename}".strip()
+                    if old_text != display_text:
+                        items_updated += 1
+                    item.setText(display_text)
+                    item.setToolTip(self._get_validation_tooltip(filename))
+
+        # Debug info - this will help see if the method is being called
+        if items_updated > 0:
+            print(
+                f"DEBUG: Updated {items_updated} directory items with new validation icons"
+            )
+
+    def _get_validation_tooltip(self, filename: str) -> str:
+        """Get tooltip text showing validation summary for a file."""
+        if filename not in self.validation_cache:
+            return ""
+
+        summary = self.validation_cache[filename]
+        if summary.error_count == 0 and summary.warning_count == 0:
+            return "No validation issues"
+
+        parts = []
+        if summary.error_count > 0:
+            parts.append(f"{summary.error_count} error(s)")
+        if summary.warning_count > 0:
+            parts.append(f"{summary.warning_count} warning(s)")
+
+        return f"Validation issues: {', '.join(parts)}"
+
+    def update_file_validation(self, filename: str, storage=None):
+        """Update validation cache for a specific file and refresh its display."""
+        if not self.current_directory:
+            return
+
+        from core.validation_utils import validate_file_bounding_boxes
+
+        # Use the improved validate_file_bounding_boxes with optional storage parameter
+        self.validation_cache[filename] = validate_file_bounding_boxes(
+            self.current_directory, filename, storage
+        )
+
+        self._update_all_item_display()
