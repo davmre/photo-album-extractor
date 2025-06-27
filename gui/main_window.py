@@ -142,9 +142,6 @@ class PhotoExtractorApp(QMainWindow):
         self.attributes_sidebar = AttributesSidebar()
         self.attributes_sidebar.attributes_changed.connect(self.on_attributes_changed)
         self.attributes_sidebar.coordinates_changed.connect(self.on_coordinates_changed)
-        self.attributes_sidebar.bulk_datetime_update_requested.connect(
-            self.on_bulk_datetime_update
-        )
         main_splitter.addWidget(self.attributes_sidebar)
 
         # Connect magnifier signals
@@ -390,38 +387,6 @@ class PhotoExtractorApp(QMainWindow):
             # Update the box and save
             self.image_view.update_box_data(updated_box)
             self._save_box_data_to_storage(updated_box)
-
-    def on_bulk_datetime_update(self, date_time_value: str):
-        """Handle bulk datetime update request from AttributesSidebar."""
-        # Get all bounding boxes in the current image
-        all_boxes = self.image_view.get_bounding_box_data_list()
-
-        if not all_boxes:
-            return
-
-        # Update each box's date_time attribute
-        for box_data in all_boxes:
-            # Create new attributes with updated date_time
-            updated_attributes = PhotoAttributes(
-                date_hint=date_time_value,
-                comments=box_data.attributes.comments,  # Keep existing comments
-            )
-
-            # Create updated BoundingBoxData
-            updated_box = BoundingBoxData(
-                corners=box_data.corners,
-                box_id=box_data.box_id,
-                attributes=updated_attributes,
-            )
-
-            # Update in image view and save to storage
-            self.image_view.update_box_data(updated_box)
-            self._save_box_data_to_storage(updated_box)
-
-        # Refresh the sidebar to show updated data for selected box
-        selected_box = self.image_view.get_selected_box()
-        if selected_box:
-            self.attributes_sidebar.set_box_data(selected_box.get_bounding_box_data())
 
     def _save_box_data_to_storage(self, bounding_box_data: BoundingBoxData):
         """Helper to save bounding box data to storage."""

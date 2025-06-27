@@ -58,7 +58,6 @@ class AttributesSidebar(QWidget):
         str, str, PhotoAttributes
     )  # Emits (box_id, key_changed, attributes)
     coordinates_changed = pyqtSignal(str, list)  # Emits (box_id, coordinates)
-    bulk_datetime_update_requested = pyqtSignal(str)  # Emits (date_time_value)
 
     def __init__(self):
         super().__init__()
