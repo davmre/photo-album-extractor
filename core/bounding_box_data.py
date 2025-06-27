@@ -4,7 +4,9 @@ import uuid
 from dataclasses import dataclass
 from enum import Enum
 
-from core import date_utils
+import numpy as np
+
+from core import date_utils, geometry
 from core.geometry import is_rectangle
 from core.photo_types import BoundingBoxAny, QuadArray, bounding_box_as_array
 
@@ -18,6 +20,10 @@ class Severity(Enum):
 
     ERROR = "error"
     WARNING = "warning"
+
+
+COMMON_ASPECT_RATIOS = np.array([4 / 6, 6 / 4, 5 / 7, 7 / 5])
+print(COMMON_ASPECT_RATIOS)
 
 
 @dataclass
@@ -131,6 +137,17 @@ class BoundingBoxData:
                     type="non_rectangular",
                     severity=Severity.WARNING,
                     message="Bounding box is not rectangular",
+                )
+            )
+
+        width, height = geometry.dimension_bounds(self.corners)
+        aspect_ratio_reciprocal = height / width
+        if np.min(np.abs(aspect_ratio_reciprocal * COMMON_ASPECT_RATIOS - 1)) > 0.02:
+            issues.append(
+                ValidationIssue(
+                    type="nonstandard_aspect",
+                    severity=Severity.WARNING,
+                    message=f"Aspect ratio {width / height: .2f} is not a standard photo size; is the bounding box correct?",
                 )
             )
 
