@@ -24,7 +24,7 @@ class RefinementStrategy(ABC):
     def refine(
         self,
         image: Image.Image | UInt8Array,
-        corners: QuadArray,
+        corner_points: QuadArray,
         debug_dir: str | None = None,
     ) -> QuadArray:
         """

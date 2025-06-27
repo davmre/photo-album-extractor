@@ -17,6 +17,7 @@ from cli.detect import cmd_detect
 from cli.extract import cmd_extract
 from cli.info import cmd_info
 from cli.interpolate_dates import cmd_interpolate_dates
+from cli.refine import cmd_refine
 from gui.main_window import PhotoExtractorApp
 
 
@@ -55,6 +56,18 @@ def main():
         "--force", action="store_true", help="Overwrite existing bounding box data"
     )
 
+    # Detect command
+    refine_parser = subparsers.add_parser(
+        "refine", help="Refine detected bounding boxes"
+    )
+    refine_parser.add_argument("paths", nargs="+", help="Image files or directories")
+    refine_parser.add_argument(
+        "--strategy", help="Optional refinement strategy to use (default: app settings)"
+    )
+    refine_parser.add_argument(
+        "--debug_dir", help="Optional directory to dump debugging images."
+    )
+
     # Extract command
     extract_parser = subparsers.add_parser("extract", help="Extract photos from images")
     extract_parser.add_argument("paths", nargs="+", help="Image files or directories")
@@ -78,9 +91,6 @@ def main():
     )
 
     # Placeholder for future commands
-    subparsers.add_parser(
-        "refine", help="Refine existing bounding boxes (not yet implemented)"
-    )
     subparsers.add_parser("clear", help="Clear bounding box data (not yet implemented)")
 
     # Legacy support: if no subcommand, assume GUI mode
@@ -119,7 +129,13 @@ def main():
             output_dir=args.output_dir,
             base_name=args.base_name,
         )
-    elif args.command in ["refine", "clear"]:
+    elif args.command == "refine":
+        return cmd_refine(
+            paths=args.paths,
+            debug_dir=args.debug_dir,
+            strategy=args.strategy,
+        )
+    elif args.command in ["clear"]:
         print(f"Command '{args.command}' is not yet implemented")
         return 1
     else:  # GUI mode
