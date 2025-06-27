@@ -204,6 +204,11 @@ class ImageView(QGraphicsView):
                 clicked_box.get_bounding_box_data().is_rectangle()
             )
 
+            # Add mark as good toggle
+            mark_as_good_action: QAction = menu.addAction("Mark as Good")  # type: ignore
+            mark_as_good_action.setCheckable(True)
+            mark_as_good_action.setChecked(clicked_box.get_bounding_box_data().marked_as_good)
+
             remove_action = menu.addAction("Remove")
             action = menu.exec(self.mapToGlobal(position))
 
@@ -215,6 +220,8 @@ class ImageView(QGraphicsView):
                 self.rectangleify_bounding_box(clicked_box, inner=False)
             elif action == keep_rectangular_action:
                 clicked_box.keep_rectangular = keep_rectangular_action.isChecked()
+            elif action == mark_as_good_action:
+                clicked_box.set_marked_as_good(mark_as_good_action.isChecked())
             elif action == remove_action:
                 self.remove_bounding_box(clicked_box)
 

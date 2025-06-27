@@ -36,6 +36,7 @@ class QuadBoundingBox(QGraphicsObject):
         self.corners = photo_types.bounding_box_as_list_of_qpointfs(box_data.corners)
         self.box_id = box_data.box_id
         self.attributes = box_data.attributes
+        self.marked_as_good = box_data.marked_as_good
 
         # Initialize keep_rectangular based on whether the box is currently a rectangle
         self.keep_rectangular = box_data.is_rectangle()
@@ -112,25 +113,40 @@ class QuadBoundingBox(QGraphicsObject):
         polygon = QPolygonF(self.corners)
         painter.drawPolygon(polygon)
 
-        # Draw validation icons if there are issues
-        if self.validation_issues:
+        # Draw validation icons if there are issues or if marked as good
+        if self.validation_issues or self.marked_as_good:
             self._draw_validation_icons(painter)
 
     def _draw_validation_icons(self, painter: QPainter):
-        """Draw validation issue icons on the bounding box."""
-        if not self.validation_issues:
-            return
-
+        """Draw validation issue icons and/or marked as good checkmark on the bounding box."""
         # Find the center of the bounding box for overlay positioning
         center_x = sum(corner.x() for corner in self.corners) / 4
         center_y = sum(corner.y() for corner in self.corners) / 4
 
-        # Sort issues by severity (errors first)
-        sorted_issues = sorted(
-            self.validation_issues,
-            key=lambda x: x.severity == Severity.ERROR,
-            reverse=True,
-        )
+        # Collect all icons to draw
+        icons_to_draw = []
+
+        # Add validation issue icons
+        if self.validation_issues:
+            # Sort issues by severity (errors first)
+            sorted_issues = sorted(
+                self.validation_issues,
+                key=lambda x: x.severity == Severity.ERROR,
+                reverse=True,
+            )
+
+            for issue in sorted_issues:
+                if issue.severity == Severity.ERROR:
+                    icons_to_draw.append("🚨")
+                else:
+                    icons_to_draw.append("⚠️")
+
+        # Add green checkmark if marked as good
+        if self.marked_as_good:
+            icons_to_draw.append("✅")
+
+        if not icons_to_draw:
+            return
 
         # Icon settings - much larger for better visibility
         width, height = geometry.dimension_bounds(self.corners)
@@ -145,19 +161,13 @@ class QuadBoundingBox(QGraphicsObject):
 
         # Calculate total width needed for all icons
         total_width = (
-            len(sorted_issues) * icon_size + (len(sorted_issues) - 1) * icon_spacing
+            len(icons_to_draw) * icon_size + (len(icons_to_draw) - 1) * icon_spacing
         )
         start_x = center_x - total_width // 2
 
         # Draw icons centered horizontally on the bounding box
         x_offset = 0
-        for issue in sorted_issues:
-            # Choose icon and background color based on severity
-            if issue.severity == Severity.ERROR:
-                icon = "🚨"
-            else:
-                icon = "⚠️"
-
+        for icon in icons_to_draw:
             # Calculate icon position centered on the bounding box
             icon_x = int(start_x + x_offset)
             icon_y = int(center_y - icon_size // 2)
@@ -267,6 +277,7 @@ class QuadBoundingBox(QGraphicsObject):
 
         self.update_handles()
         self.update()
+        self._update_validation()
         self.changed.emit()
 
     def get_ordered_corners_for_extraction(self) -> photo_types.QuadArray:
@@ -308,7 +319,10 @@ class QuadBoundingBox(QGraphicsObject):
         """Get the complete bounding box data (corners + attributes)."""
         corners_array = self.get_ordered_corners_for_extraction()
         return BoundingBoxData(
-            box_id=self.box_id, corners=corners_array, attributes=self.attributes
+            box_id=self.box_id,
+            corners=corners_array,
+            attributes=self.attributes,
+            marked_as_good=self.marked_as_good,
         )
 
     def set_bounding_box_data(self, data: BoundingBoxData):
@@ -317,7 +331,15 @@ class QuadBoundingBox(QGraphicsObject):
             raise ValueError("box id doesn't match!")
         self.set_corners(data.corners)
         self.attributes = data.attributes
+        self.marked_as_good = data.marked_as_good
         self._update_validation()
+
+    def set_marked_as_good(self, marked_as_good: bool):
+        """Set the marked as good status."""
+        self.marked_as_good = marked_as_good
+        self._update_validation()
+        self.update()  # Trigger repaint to update validation icons
+        self.changed.emit()
 
     def _update_validation(self):
         """Update validation state and trigger repaint if needed."""

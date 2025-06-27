@@ -89,6 +89,7 @@ class BoundingBoxData:
     corners: QuadArray
     box_id: str
     attributes: PhotoAttributes
+    marked_as_good: bool = False
 
     @classmethod
     def new(cls, corners: BoundingBoxAny, attributes: PhotoAttributes | None = None):
@@ -96,6 +97,36 @@ class BoundingBoxData:
             corners=bounding_box_as_array(corners),
             box_id=str(uuid.uuid4()),
             attributes=attributes if attributes else PhotoAttributes(),
+        )
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "type": "quad",
+            "corners": [[corner[0], corner[1]] for corner in self.corners],
+            "attributes": self.attributes.to_dict(),
+            "id": self.box_id,
+            "marked_as_good": self.marked_as_good,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> BoundingBoxData:
+        """Create from dictionary loaded from JSON."""
+
+        # Extract and convert corners
+        corners = data.get("corners", [])
+        corners_array = np.array(corners, dtype=np.float64)
+
+        # Extract attributes
+        attributes_dict = data.get("attributes", {})
+        attributes = PhotoAttributes.from_dict(attributes_dict)
+
+        # Create BoundingBoxData
+        return cls(
+            corners=corners_array,
+            box_id=data["id"],
+            attributes=attributes,
+            marked_as_good=data.get("marked_as_good", False),
         )
 
     def is_rectangle(self, tolerance_degrees: float = 1e-1) -> bool:
@@ -120,13 +151,17 @@ class BoundingBoxData:
                     )
                 )
 
+        # If marked as good, skip checks for warnings (everything below this point).
+        if self.marked_as_good:
+            return issues
+
         # Check for date inconsistency (WARNING)
         if self.attributes.date_inconsistent:
             issues.append(
                 ValidationIssue(
                     type="date_inconsistent",
                     severity=Severity.WARNING,
-                    message="Dates out of order: hinted date is earlier than preceding photos.",
+                    message="Dates out of order: preceding photos have later dates than this one.",
                 )
             )
 
@@ -140,6 +175,7 @@ class BoundingBoxData:
                 )
             )
 
+        # Check if aspect ratio is non-standard.
         width, height = geometry.dimension_bounds(self.corners)
         aspect_ratio_reciprocal = height / width
         if np.min(np.abs(aspect_ratio_reciprocal * COMMON_ASPECT_RATIOS - 1)) > 0.02:

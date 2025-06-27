@@ -141,14 +141,13 @@ class PhotoExtractorApp(QMainWindow):
         # Create attributes sidebar (right panel)
         self.attributes_sidebar = AttributesSidebar()
         self.attributes_sidebar.attributes_changed.connect(self.on_attributes_changed)
-        self.attributes_sidebar.coordinates_changed.connect(self.on_coordinates_changed)
         main_splitter.addWidget(self.attributes_sidebar)
 
         # Connect magnifier signals
         self.image_view.mouse_moved.connect(
             self.attributes_sidebar.magnifier.set_cursor_position
         )
-        self.image_view.image_updated.connect(self.update_magnifier)
+        self.image_view.image_updated.connect(self.propagate_image_updates)
         self.image_view.mouse_entered_viewport.connect(
             self.attributes_sidebar.magnifier.resume_cursor_tracking
         )
@@ -367,26 +366,6 @@ class PhotoExtractorApp(QMainWindow):
             # If date hint changed, trigger date inference for the whole directory
             if key_changed == "date_hint":
                 self._trigger_date_inference()
-
-    def on_coordinates_changed(self, box_id: str, coordinates):
-        """Handle coordinate changes from AttributesSidebar."""
-        # Get current box to extract its attributes
-        selected_box = self.image_view.get_selected_box()
-        if selected_box and selected_box.box_id == box_id:
-            # Convert coordinates to numpy array
-            import numpy as np
-
-            corners_array = np.array(coordinates, dtype=np.float64)
-
-            # Create updated BoundingBoxData with new corners but existing attributes
-            current_data = selected_box.get_bounding_box_data()
-            updated_box = BoundingBoxData(
-                corners=corners_array, box_id=box_id, attributes=current_data.attributes
-            )
-
-            # Update the box and save
-            self.image_view.update_box_data(updated_box)
-            self._save_box_data_to_storage(updated_box)
 
     def _save_box_data_to_storage(self, bounding_box_data: BoundingBoxData):
         """Helper to save bounding box data to storage."""
@@ -616,23 +595,35 @@ class PhotoExtractorApp(QMainWindow):
                 image_path = next_item.data(Qt.ItemDataRole.UserRole)
                 self.load_image_from_path(image_path)
 
-    def update_magnifier(self):
+    def propagate_image_updates(self):
         """Update the magnifier with current image and bounding boxes."""
-        if self.image_view.image_item:
-            # Set source image
-            pixmap = self.image_view.image_item.pixmap()
-            self.attributes_sidebar.magnifier.set_source_image(pixmap)
 
-            # Set bounding boxes
-            bounding_box_data_list = self.image_view.get_bounding_box_data_list()
-            self.attributes_sidebar.magnifier.set_bounding_boxes(bounding_box_data_list)
+        if (
+            not self.image_view.image_item
+            or not self.bounding_box_storage
+            or not self.current_image_path
+        ):
+            return
 
-            # Update coordinate fields if a box is selected
-            selected_box = self.image_view.get_selected_box()
-            if selected_box and self.attributes_sidebar.current_box:
-                self.attributes_sidebar.set_box_data(
-                    selected_box.get_bounding_box_data()
-                )
+        filename = os.path.basename(self.current_image_path)
+        bounding_box_data_list = self.image_view.get_bounding_box_data_list()
+        for box in bounding_box_data_list:
+            self.bounding_box_storage.update_box_data(filename, box, save_data=False)
+        self.directory_list.update_file_validation(
+            filename, storage=self.bounding_box_storage
+        )
+
+        # Set magnifier source image
+        pixmap = self.image_view.image_item.pixmap()
+        self.attributes_sidebar.magnifier.set_source_image(pixmap)
+
+        # Set magnifier bounding boxes
+        self.attributes_sidebar.magnifier.set_bounding_boxes(bounding_box_data_list)
+
+        # Update coordinate fields if a box is selected
+        selected_box = self.image_view.get_selected_box()
+        if selected_box and self.attributes_sidebar.current_box:
+            self.attributes_sidebar.set_box_data(selected_box.get_bounding_box_data())
 
     def open_settings(self):
         """Open the settings dialog."""

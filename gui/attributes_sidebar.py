@@ -57,7 +57,6 @@ class AttributesSidebar(QWidget):
     attributes_changed = pyqtSignal(
         str, str, PhotoAttributes
     )  # Emits (box_id, key_changed, attributes)
-    coordinates_changed = pyqtSignal(str, list)  # Emits (box_id, coordinates)
 
     def __init__(self):
         super().__init__()
