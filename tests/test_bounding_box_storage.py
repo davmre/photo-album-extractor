@@ -38,7 +38,7 @@ class TestBoundingBoxStorage:
     def test_load_bounding_boxes_for_existing_image(self, storage: BoundingBoxStorage):
         """Test loading bounding boxes for images that have saved data."""
         # Test loading for album_page1.jpg which has test data
-        boxes = storage.load_bounding_boxes("album_page1.jpg")
+        boxes = storage.get_bounding_boxes("album_page1.jpg")
 
         assert isinstance(boxes, list)
         assert len(boxes) == 3  # Based on our test data
@@ -52,14 +52,14 @@ class TestBoundingBoxStorage:
         self, storage: BoundingBoxStorage
     ):
         """Test loading bounding boxes for images with no saved data."""
-        boxes = storage.load_bounding_boxes("nonexistent_image.jpg")
+        boxes = storage.get_bounding_boxes("nonexistent_image.jpg")
 
         assert isinstance(boxes, list)
         assert len(boxes) == 0
 
     def test_load_bounding_boxes_structure(self, storage: BoundingBoxStorage):
         """Test the structure of loaded bounding box data."""
-        boxes = storage.load_bounding_boxes("album_page1.jpg")
+        boxes = storage.get_bounding_boxes("album_page1.jpg")
 
         for box in boxes:
             # Check required fields

@@ -29,7 +29,7 @@ def cmd_interpolate_dates(directory: str, trial_run=False):
     date_intervals: list[tuple[datetime, datetime] | None] = []
 
     for image_filename in image_filenames:
-        boxes = storage.load_bounding_boxes(image_filename)
+        boxes = storage.get_bounding_boxes(image_filename)
         # Order boxes on each page by their minimum y-coord, top-to-bottom.
         boxes = sorted(boxes, key=lambda b: np.min(b.corners, axis=0)[1])
         # Parse a date interval (or None) for each image.
@@ -69,4 +69,4 @@ def cmd_interpolate_dates(directory: str, trial_run=False):
             # Defer saving so we only write the JSON file at the end once everything's
             # updated.
             storage.update_box_data(filename, box, save_data=False)
-    storage._save_data()
+    storage.save_data()

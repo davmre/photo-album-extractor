@@ -50,7 +50,7 @@ def infer_dates_for_directory(
     date_intervals: list[tuple[datetime, datetime] | None] = []
 
     for image_filename in image_filenames:
-        boxes = storage.load_bounding_boxes(image_filename)
+        boxes = storage.get_bounding_boxes(image_filename)
         # Order boxes on each page by their minimum y-coord, top-to-bottom
         boxes = sorted(boxes, key=lambda b: np.min(b.corners, axis=0)[1])
 
@@ -110,7 +110,7 @@ def infer_dates_for_directory(
 
     # Save all changes to disk if not a trial run
     if not trial_run and updated_files:
-        storage._save_data()
+        storage.save_data()
 
     return DateInferenceResult(
         updated_files=updated_files,

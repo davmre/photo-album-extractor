@@ -70,7 +70,7 @@ def cmd_refine(
             image = PIL.Image.open(image_path)
 
             storage = BoundingBoxStorage(str(directory))
-            boxes = storage.load_bounding_boxes(filename)
+            boxes = storage.get_bounding_boxes(filename)
             refined_boxes = []
             for box in boxes:
                 # Run detection
@@ -81,7 +81,7 @@ def cmd_refine(
                 refined_boxes.append(box)
                 print(f"  Refined box id {box.box_id}")
 
-            storage.save_bounding_boxes(filename, refined_boxes)
+            storage.set_bounding_boxes(filename, refined_boxes)
             print(f"  Refined {len(refined_boxes)} bounding box(es)")
             processed_count += 1
         except Exception as e:

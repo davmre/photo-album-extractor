@@ -47,7 +47,7 @@ def cmd_extract(paths: list[str], output_dir: str, base_name: str | None) -> int
 
         # Load bounding box data
         storage = BoundingBoxStorage(str(directory))
-        bounding_boxes = storage.load_bounding_boxes(filename)
+        bounding_boxes = storage.get_bounding_boxes(filename)
 
         if not bounding_boxes:
             print(f"Skipping {image_path} (no bounding boxes found)")

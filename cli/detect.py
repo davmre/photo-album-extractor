@@ -46,7 +46,7 @@ def cmd_detect(paths: list[str], force: bool = False) -> int:
 
         # Check if bounding boxes already exist
         storage = BoundingBoxStorage(str(directory))
-        existing_boxes = storage.load_bounding_boxes(filename)
+        existing_boxes = storage.get_bounding_boxes(filename)
 
         if existing_boxes and not force:
             print(
@@ -65,13 +65,13 @@ def cmd_detect(paths: list[str], force: bool = False) -> int:
 
                 if detected_boxes:
                     # Save results
-                    storage.save_bounding_boxes(filename, detected_boxes)
+                    storage.set_bounding_boxes(filename, detected_boxes)
                     print(f"  Found and saved {len(detected_boxes)} bounding box(es)")
                     processed_count += 1
                 else:
                     print("  No photos detected")
                     # Save empty list to mark as processed
-                    storage.save_bounding_boxes(filename, [])
+                    storage.set_bounding_boxes(filename, [])
                     processed_count += 1
 
         except Exception as e:

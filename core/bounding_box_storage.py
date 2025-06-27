@@ -27,7 +27,7 @@ class BoundingBoxStorage:
                 return {}
         return {}
 
-    def _save_data(self) -> None:
+    def save_data(self) -> None:
         """Save bounding box data to JSON file."""
         try:
             with open(self.data_file, "w") as f:
@@ -35,8 +35,11 @@ class BoundingBoxStorage:
         except OSError:
             print(f"Warning: Could not save bounding box data to {self.data_file}")
 
-    def save_bounding_boxes(
-        self, image_filename: str, bounding_boxes: list[BoundingBoxData]
+    def set_bounding_boxes(
+        self,
+        image_filename: str,
+        bounding_boxes: list[BoundingBoxData],
+        save_data: bool = True,
     ) -> None:
         """Save bounding boxes for a specific image."""
         if not bounding_boxes:
@@ -46,7 +49,8 @@ class BoundingBoxStorage:
             # Convert bounding boxes to serializable format
             boxes_dicts = [bbox_data.to_dict() for bbox_data in bounding_boxes]
             self.data[image_filename] = boxes_dicts
-        self._save_data()
+        if save_data:
+            self.save_data()
 
     def load_image_filenames(self) -> list[str]:
         return list(self.data.keys())
@@ -56,9 +60,9 @@ class BoundingBoxStorage:
         for filename in filenames:
             if not os.path.exists(os.path.join(self.directory, filename)):
                 del self.data[filename]
-        self._save_data()
+        self.save_data()
 
-    def load_bounding_boxes(self, image_filename: str) -> list[BoundingBoxData]:
+    def get_bounding_boxes(self, image_filename: str) -> list[BoundingBoxData]:
         """Load bounding box data with IDs for a specific image."""
         boxes = self.data.get(image_filename, [])
         return [BoundingBoxData.from_dict(box_dict) for box_dict in boxes]
@@ -76,6 +80,6 @@ class BoundingBoxStorage:
             if saved_box_data.get("id") == bounding_box_data.box_id:
                 self.data[image_filename][i] = updated_dict
                 if save_data:
-                    self._save_data()
+                    self.save_data()
                 return True
         return False

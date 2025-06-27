@@ -123,7 +123,7 @@ def validate_file_bounding_boxes(
     Returns:
         FileValidationSummary with counts and worst severity
     """
-    bounding_boxes = storage.load_bounding_boxes(filename)
+    bounding_boxes = storage.get_bounding_boxes(filename)
 
     error_count = 0
     warning_count = 0

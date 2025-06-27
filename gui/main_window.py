@@ -147,7 +147,7 @@ class PhotoExtractorApp(QMainWindow):
         self.image_view.mouse_moved.connect(
             self.attributes_sidebar.magnifier.set_cursor_position
         )
-        self.image_view.image_updated.connect(self.propagate_image_updates)
+        self.image_view.image_updated.connect(self.on_box_changed)
         self.image_view.mouse_entered_viewport.connect(
             self.attributes_sidebar.magnifier.resume_cursor_tracking
         )
@@ -361,22 +361,19 @@ class PhotoExtractorApp(QMainWindow):
 
             # Update the box and save
             self.image_view.update_box_data(updated_data)
-            self._save_box_data_to_storage(updated_data)
+
+            if self.current_image_path and self.bounding_box_storage:
+                filename = os.path.basename(self.current_image_path)
+                self.bounding_box_storage.update_box_data(filename, updated_data)
+
+                # Update directory sidebar validation for this file
+                self.directory_list.update_file_validation(
+                    filename, storage=self.bounding_box_storage
+                )
 
             # If date hint changed, trigger date inference for the whole directory
             if key_changed == "date_hint":
                 self._trigger_date_inference()
-
-    def _save_box_data_to_storage(self, bounding_box_data: BoundingBoxData):
-        """Helper to save bounding box data to storage."""
-        if self.current_image_path and self.bounding_box_storage:
-            filename = os.path.basename(self.current_image_path)
-            self.bounding_box_storage.update_box_data(filename, bounding_box_data)
-
-            # Update directory sidebar validation for this file
-            self.directory_list.update_file_validation(
-                filename, storage=self.bounding_box_storage
-            )
 
     def _trigger_date_inference(self):
         """
@@ -529,25 +526,16 @@ class PhotoExtractorApp(QMainWindow):
 
     def save_current_bounding_boxes(self):
         """Save the current bounding boxes to storage."""
-        if self.current_image_path and self.bounding_box_storage:
-            filename = os.path.basename(self.current_image_path)
-            self.bounding_box_storage.save_bounding_boxes(
-                filename, self.image_view.get_bounding_box_data_list()
-            )
-
-            # Update directory sidebar validation for this file
-            self.directory_list.update_file_validation(
-                filename, storage=self.bounding_box_storage
-            )
-
-            # Run date inference in case ordering or date hints changed
-            self._trigger_date_inference()
+        # Bounding box storage should already have been updated on
+        # any changes, so just ensure it's synced to disk.
+        if self.bounding_box_storage:
+            self.bounding_box_storage.save_data()
 
     def load_saved_bounding_boxes(self):
         """Load saved bounding boxes for the current image."""
         if self.current_image_path and self.bounding_box_storage:
             filename = os.path.basename(self.current_image_path)
-            saved_data = self.bounding_box_storage.load_bounding_boxes(filename)
+            saved_data = self.bounding_box_storage.get_bounding_boxes(filename)
 
             # Remember the currently selected box id
             selected_box = self.image_view.selected_box
@@ -595,8 +583,8 @@ class PhotoExtractorApp(QMainWindow):
                 image_path = next_item.data(Qt.ItemDataRole.UserRole)
                 self.load_image_from_path(image_path)
 
-    def propagate_image_updates(self):
-        """Update the magnifier with current image and bounding boxes."""
+    def on_box_changed(self):
+        """Handle changes to box properties (eg corners) from the image view."""
 
         if (
             not self.image_view.image_item
@@ -620,7 +608,7 @@ class PhotoExtractorApp(QMainWindow):
         # Set magnifier bounding boxes
         self.attributes_sidebar.magnifier.set_bounding_boxes(bounding_box_data_list)
 
-        # Update coordinate fields if a box is selected
+        # Update the attributes sidebar so it can display any validation warnings.
         selected_box = self.image_view.get_selected_box()
         if selected_box and self.attributes_sidebar.current_box:
             self.attributes_sidebar.set_box_data(selected_box.get_bounding_box_data())

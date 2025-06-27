@@ -28,7 +28,7 @@ def cmd_info(paths: list[str]) -> int:
         filename = image_path.name
 
         storage = BoundingBoxStorage(str(directory))
-        bounding_boxes = storage.load_bounding_boxes(filename)
+        bounding_boxes = storage.get_bounding_boxes(filename)
 
         print(f"\n{image_path}:")
         if not bounding_boxes:
