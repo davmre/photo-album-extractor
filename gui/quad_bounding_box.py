@@ -15,12 +15,8 @@ from PyQt6.QtWidgets import (
 
 import core.photo_types as photo_types
 from core import geometry
-from core.bounding_box_data import (
-    BoundingBoxData,
-    PhotoAttributes,
-    Severity,
-    ValidationIssue,
-)
+from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.validation_utils import Severity, ValidationIssue, validate_bounding_box
 
 
 class QuadBoundingBox(QGraphicsObject):
@@ -345,7 +341,7 @@ class QuadBoundingBox(QGraphicsObject):
         """Update validation state and trigger repaint if needed."""
         old_issues = self.validation_issues
         box_data = self.get_bounding_box_data()
-        self.validation_issues = box_data.validate()
+        self.validation_issues = validate_bounding_box(box_data)
 
         # Trigger repaint if validation state changed
         if old_issues != self.validation_issues:

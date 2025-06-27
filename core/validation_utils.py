@@ -8,8 +8,30 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 
-from core.bounding_box_data import Severity
+import numpy as np
+
+from core import date_utils, geometry
 from core.bounding_box_storage import BoundingBoxStorage
+
+
+class Severity(Enum):
+    """Validation issue severity levels."""
+
+    ERROR = "error"
+    WARNING = "warning"
+
+
+COMMON_ASPECT_RATIOS = np.array([4 / 6, 6 / 4, 5 / 7, 7 / 5])
+print(COMMON_ASPECT_RATIOS)
+
+
+@dataclass
+class ValidationIssue:
+    """Represents a validation issue with a bounding box."""
+
+    type: str
+    severity: Severity
+    message: str
 
 
 class FileValidationSeverity(Enum):
@@ -28,6 +50,63 @@ class FileValidationSummary:
     severity: FileValidationSeverity
     error_count: int
     warning_count: int
+
+
+def validate_bounding_box(box) -> list[ValidationIssue]:
+    """Validate the bounding box and return any issues found."""
+    issues = []
+
+    # Check for unparseable date hint (ERROR)
+    if box.attributes.date_hint.strip():
+        parsed_date = date_utils.parse_flexible_date_as_datetime(
+            box.attributes.date_hint
+        )
+        if parsed_date is None:
+            issues.append(
+                ValidationIssue(
+                    type="unparseable_date",
+                    severity=Severity.ERROR,
+                    message="Date hint cannot be parsed",
+                )
+            )
+
+    # If marked as good, skip checks for warnings (everything below this point).
+    if box.marked_as_good:
+        return issues
+
+    # Check for date inconsistency (WARNING)
+    if box.attributes.date_inconsistent:
+        issues.append(
+            ValidationIssue(
+                type="date_inconsistent",
+                severity=Severity.WARNING,
+                message="Dates out of order: preceding photos have later dates than this one.",
+            )
+        )
+
+    # Check if bounding box is not rectangular (WARNING)
+    if not box.is_rectangle():
+        issues.append(
+            ValidationIssue(
+                type="non_rectangular",
+                severity=Severity.WARNING,
+                message="Bounding box is not rectangular",
+            )
+        )
+
+    # Check if aspect ratio is non-standard.
+    width, height = geometry.dimension_bounds(box.corners)
+    aspect_ratio_reciprocal = height / width
+    if np.min(np.abs(aspect_ratio_reciprocal * COMMON_ASPECT_RATIOS - 1)) > 0.02:
+        issues.append(
+            ValidationIssue(
+                type="nonstandard_aspect",
+                severity=Severity.WARNING,
+                message=f"Aspect ratio {width / height: .2f} is not a standard photo size; is the bounding box correct?",
+            )
+        )
+
+    return issues
 
 
 def validate_file_bounding_boxes(
@@ -50,7 +129,7 @@ def validate_file_bounding_boxes(
     warning_count = 0
 
     for box in bounding_boxes:
-        issues = box.validate()
+        issues = validate_bounding_box(box)
         for issue in issues:
             if issue.severity == Severity.ERROR:
                 error_count += 1

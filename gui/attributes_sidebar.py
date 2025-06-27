@@ -16,7 +16,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core.bounding_box_data import BoundingBoxData, PhotoAttributes, Severity
+from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.validation_utils import Severity, validate_bounding_box
 from gui.magnifier_widget import MagnifierWidget
 
 
@@ -270,7 +271,7 @@ class AttributesSidebar(QWidget):
 
     def update_validation_display(self, box_data: BoundingBoxData):
         """Update the validation display for the current bounding box."""
-        issues = box_data.validate()
+        issues = validate_bounding_box(box_data)
 
         if not issues:
             self.validation_label.setText("No issues")
