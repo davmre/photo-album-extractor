@@ -298,3 +298,10 @@ class AttributesSidebar(QWidget):
         has_errors = any(issue.severity == Severity.ERROR for issue in issues)
         color = "#cc0000" if has_errors else "#ff8800"
         self.validation_label.setStyleSheet(f"color: {color}; padding: 5px;")
+
+    def refresh_validation_display(self):
+        """Refresh validation display for currently selected box."""
+        if self.current_box:
+            current_box_data = self.get_current_box_data()
+            if current_box_data:
+                self.update_validation_display(current_box_data)

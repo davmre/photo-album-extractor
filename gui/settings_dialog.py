@@ -2,6 +2,7 @@
 Settings dialog and configuration management.
 """
 
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -22,6 +23,8 @@ from photo_detection.refinement_strategies import REFINEMENT_STRATEGIES
 
 class SettingsDialog(QDialog):
     """Settings dialog for configuring application preferences."""
+
+    validation_settings_changed = pyqtSignal()
 
     def __init__(
         self,
@@ -157,6 +160,15 @@ class SettingsDialog(QDialog):
             )
             return
 
+        # Capture original validation settings before changes
+        original_validation = {
+            "warn_date_inconsistent": app_settings.warn_date_inconsistent,
+            "warn_non_rectangular": app_settings.warn_non_rectangular,
+            "warn_nonstandard_aspect": app_settings.warn_nonstandard_aspect,
+            "aspect_ratio_tolerance": app_settings.aspect_ratio_tolerance,
+            "standard_aspect_ratios": app_settings.standard_aspect_ratios.copy(),
+        }
+
         # Save all settings
         app_settings.gemini_api_key = api_key
 
@@ -206,5 +218,22 @@ class SettingsDialog(QDialog):
 
         # Save to file
         app_settings.save_to_file()
+
+        # Check if validation settings actually changed
+        validation_changed = (
+            original_validation["warn_date_inconsistent"]
+            != app_settings.warn_date_inconsistent
+            or original_validation["warn_non_rectangular"]
+            != app_settings.warn_non_rectangular
+            or original_validation["warn_nonstandard_aspect"]
+            != app_settings.warn_nonstandard_aspect
+            or original_validation["aspect_ratio_tolerance"]
+            != app_settings.aspect_ratio_tolerance
+            or original_validation["standard_aspect_ratios"]
+            != app_settings.standard_aspect_ratios
+        )
+
+        if validation_changed:
+            self.validation_settings_changed.emit()
 
         super().accept()

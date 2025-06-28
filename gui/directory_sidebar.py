@@ -81,6 +81,9 @@ class DirectoryImageList(QWidget):
             self.refresh_images()
             self._load_validation_cache(storage=storage)
 
+        # Store storage reference for later use (e.g., in invalidate_validation_cache)
+        self.storage = storage
+
     def update_directory_label(self):
         """Update the directory label with current path."""
         if self.current_directory:
@@ -249,3 +252,19 @@ class DirectoryImageList(QWidget):
         )
 
         self._update_all_item_display()
+
+    def invalidate_validation_cache(self):
+        """Invalidate and reload validation cache for current directory."""
+        if not self.current_directory or not hasattr(self, "storage") or not self.storage:
+            return
+
+        # Preserve current selection
+        current_selection = self.image_list.currentRow()
+
+        # Clear cache and reload validation
+        self.validation_cache.clear()
+        self._load_validation_cache(self.storage)
+
+        # Restore selection
+        if current_selection >= 0:
+            self.image_list.setCurrentRow(current_selection)

@@ -57,6 +57,7 @@ class PhotoExtractorApp(QMainWindow):
         self.directory_list: DirectoryImageList
         self.attributes_sidebar: AttributesSidebar
         self.status_bar: QStatusBar
+        self.settings_dialog: SettingsDialog
 
         self.init_ui()
 
@@ -160,6 +161,18 @@ class PhotoExtractorApp(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Ready - Load an image to begin")
+
+        # Create settings dialog and connect validation settings change signal
+        self.settings_dialog = SettingsDialog(self)
+        self.settings_dialog.validation_settings_changed.connect(
+            self.directory_list.invalidate_validation_cache
+        )
+        self.settings_dialog.validation_settings_changed.connect(
+            self.attributes_sidebar.refresh_validation_display
+        )
+        self.settings_dialog.validation_settings_changed.connect(
+            self.image_view.refresh_all_validation
+        )
 
     def create_menu_bar(self):
         """Create the application menu bar."""
@@ -614,5 +627,4 @@ class PhotoExtractorApp(QMainWindow):
 
     def open_settings(self):
         """Open the settings dialog."""
-        dialog = SettingsDialog(self)
-        dialog.exec()
+        self.settings_dialog.exec()

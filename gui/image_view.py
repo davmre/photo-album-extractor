@@ -301,6 +301,12 @@ class ImageView(QGraphicsView):
             if isinstance(box, QuadBoundingBox):
                 self.refine_bounding_box(box)
 
+    def refresh_all_validation(self):
+        """Refresh validation for all bounding boxes using current settings."""
+        for box in self.bounding_boxes:
+            if isinstance(box, QuadBoundingBox):
+                box.update_validation()  # This triggers _update_validation() and repaint
+
     def on_box_selection_changed(self, box_id: str):
         """Handle box selection changes."""
         # Find the box with this ID
