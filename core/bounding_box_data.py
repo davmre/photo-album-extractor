@@ -6,7 +6,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from core.geometry import is_rectangle
-from core.photo_types import BoundingBoxAny, QuadArray, bounding_box_as_array
+from core.photo_types import (
+    BoundingBoxAny,
+    PhotoOrientation,
+    QuadArray,
+    bounding_box_as_array,
+)
 
 # =============================================================================
 # Photo Attributes
@@ -21,9 +26,17 @@ class PhotoAttributes:
     exif_date: str = ""
     date_inconsistent: bool = False
     comments: str = ""
+    orientation: PhotoOrientation = PhotoOrientation.NORMAL
 
     @classmethod
     def from_dict(cls, data: dict[str, str]) -> PhotoAttributes:
+        # Handle orientation with backwards compatibility
+        orientation_str = data.get("orientation", PhotoOrientation.NORMAL.value)
+        try:
+            orientation = PhotoOrientation(orientation_str)
+        except ValueError:
+            orientation = PhotoOrientation.NORMAL
+
         return cls(
             date_hint=data.get(
                 "date_hint",
@@ -33,6 +46,7 @@ class PhotoAttributes:
             exif_date=data.get("exif_date", ""),
             comments=data.get("comments", ""),
             date_inconsistent=data.get("date_inconsistent", "false").lower() == "true",
+            orientation=orientation,
         )
 
     def to_dict(self) -> dict[str, str]:
@@ -41,6 +55,7 @@ class PhotoAttributes:
             "exif_date": self.exif_date,
             "comments": self.comments,
             "date_inconsistent": str(self.date_inconsistent),
+            "orientation": self.orientation.value,
         }
 
     def __bool__(self) -> bool:
@@ -48,7 +63,7 @@ class PhotoAttributes:
 
     def __hash__(self):
         return hash(
-            (self.date_hint, self.exif_date, self.comments, self.date_inconsistent)
+            (self.date_hint, self.exif_date, self.comments, self.date_inconsistent, self.orientation)
         )
 
     def copy(self) -> PhotoAttributes:
@@ -57,6 +72,7 @@ class PhotoAttributes:
             exif_date=self.exif_date,
             date_inconsistent=self.date_inconsistent,
             comments=self.comments,
+            orientation=self.orientation,
         )
 
 

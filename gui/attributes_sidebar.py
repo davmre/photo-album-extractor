@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QComboBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -17,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.photo_types import PhotoOrientation
 from core.validation_utils import Severity, validate_bounding_box
 from gui.magnifier_widget import MagnifierWidget
 
@@ -118,6 +120,24 @@ class AttributesSidebar(QWidget):
 
         content_layout.addWidget(datetime_group)
 
+        # Orientation group
+        orientation_group = QGroupBox("Orientation")
+        orientation_layout = QVBoxLayout(orientation_group)
+
+        orientation_label_layout = QHBoxLayout()
+        orientation_label = QLabel("Photo orientation:")
+        orientation_label_layout.addWidget(orientation_label)
+
+        self.orientation_combo = QComboBox()
+        # Populate combo box with orientation options
+        for orientation in PhotoOrientation:
+            self.orientation_combo.addItem(orientation.display_name, orientation)
+        self.orientation_combo.currentIndexChanged.connect(self.on_orientation_changed)
+        orientation_label_layout.addWidget(self.orientation_combo)
+
+        orientation_layout.addLayout(orientation_label_layout)
+        content_layout.addWidget(orientation_group)
+
         # Comments group
         comments_group = QGroupBox("Comments")
         comments_layout = QVBoxLayout(comments_group)
@@ -187,6 +207,13 @@ class AttributesSidebar(QWidget):
         self.date_hint_edit.setText(datetime_str)
         self.inferred_exif.setText(box_data.attributes.exif_date)
 
+        # Update orientation
+        orientation = box_data.attributes.orientation
+        for i in range(self.orientation_combo.count()):
+            if self.orientation_combo.itemData(i) == orientation:
+                self.orientation_combo.setCurrentIndex(i)
+                break
+
         # Update comments
         current_comments = self.comments_edit.toPlainText()
         new_comments = box_data.attributes.comments
@@ -230,6 +257,18 @@ class AttributesSidebar(QWidget):
             if current_box:
                 self.update_validation_display(current_box)
 
+    def on_orientation_changed(self):
+        """Handle orientation changes."""
+        if not self.updating_ui and self.current_box:
+            selected_orientation = self.orientation_combo.currentData()
+            if selected_orientation:
+                self.emit_attributes_changed("orientation", selected_orientation)
+
+                # Update validation display
+                current_box = self.get_current_box_data()
+                if current_box:
+                    self.update_validation_display(current_box)
+
     def emit_attributes_changed(self, key: str, value: str):
         """Emit attribute change with current box ID."""
         if self.current_box:
@@ -249,6 +288,7 @@ class AttributesSidebar(QWidget):
         if not self.current_box:
             return PhotoAttributes()
         # return self._current_attributes.copy()
+        orientation = self.orientation_combo.currentData() or PhotoOrientation.NORMAL
         return PhotoAttributes(
             date_hint=self.date_hint_edit.text().strip(),
             exif_date=self.inferred_exif.text(),
@@ -256,6 +296,7 @@ class AttributesSidebar(QWidget):
             date_inconsistent=getattr(
                 self._current_attributes, "date_inconsistent", False
             ),
+            orientation=orientation,
         )
 
     def get_current_box_data(self) -> BoundingBoxData | None:

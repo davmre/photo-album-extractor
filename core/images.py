@@ -96,6 +96,12 @@ def save_cropped_images(
         # Get attributes from the bounding box data
         attributes = bbox_data.attributes
 
+        # Apply orientation correction if needed
+        rotation_degrees = attributes.orientation.rotation_degrees
+        if rotation_degrees != 0:
+            # PIL's rotate method rotates counterclockwise for positive angles
+            cropped = cropped.rotate(rotation_degrees, expand=True)
+
         # Generate filename
         filename = f"{base_name}_{i:03d}.jpg"
         filepath = os.path.join(output_dir, filename)
