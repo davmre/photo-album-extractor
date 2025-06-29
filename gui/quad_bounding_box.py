@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 
 import core.photo_types as photo_types
 from core import geometry
-from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.bounding_box import BoundingBox, PhotoAttributes
 from core.validation_utils import Severity, ValidationIssue, validate_bounding_box
 
 
@@ -25,7 +25,7 @@ class QuadBoundingBox(QGraphicsObject):
     changed = pyqtSignal()
     selected_changed = pyqtSignal(str)  # Emits box_id when selection changes
 
-    def __init__(self, box_data: BoundingBoxData, parent=None):
+    def __init__(self, box_data: BoundingBox, parent=None):
         super().__init__(parent)
 
         # Store the four corner points, unique id, and attributes
@@ -311,17 +311,17 @@ class QuadBoundingBox(QGraphicsObject):
         """Set the photo attributes."""
         self.attributes = attributes
 
-    def get_bounding_box_data(self) -> BoundingBoxData:
+    def get_bounding_box_data(self) -> BoundingBox:
         """Get the complete bounding box data (corners + attributes)."""
         corners_array = self.get_ordered_corners_for_extraction()
-        return BoundingBoxData(
+        return BoundingBox(
             box_id=self.box_id,
             corners=corners_array,
             attributes=self.attributes,
             marked_as_good=self.marked_as_good,
         )
 
-    def set_bounding_box_data(self, data: BoundingBoxData):
+    def set_bounding_box_data(self, data: BoundingBox):
         """Set the complete bounding box data (corners + attributes)."""
         if self.box_id != data.box_id:
             raise ValueError("box id doesn't match!")

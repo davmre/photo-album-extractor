@@ -6,7 +6,7 @@ import json
 import os
 from typing import Any
 
-from core.bounding_box_data import BoundingBoxData
+from core.bounding_box import BoundingBox
 
 
 class BoundingBoxStorage:
@@ -38,7 +38,7 @@ class BoundingBoxStorage:
     def set_bounding_boxes(
         self,
         image_filename: str,
-        bounding_boxes: list[BoundingBoxData],
+        bounding_boxes: list[BoundingBox],
         save_data: bool = True,
     ) -> None:
         """Save bounding boxes for a specific image."""
@@ -62,13 +62,13 @@ class BoundingBoxStorage:
                 del self.data[filename]
         self.save_data()
 
-    def get_bounding_boxes(self, image_filename: str) -> list[BoundingBoxData]:
+    def get_bounding_boxes(self, image_filename: str) -> list[BoundingBox]:
         """Load bounding box data with IDs for a specific image."""
         boxes = self.data.get(image_filename, [])
-        return [BoundingBoxData.from_dict(box_dict) for box_dict in boxes]
+        return [BoundingBox.from_dict(box_dict) for box_dict in boxes]
 
     def update_box_data(
-        self, image_filename: str, bounding_box_data: BoundingBoxData, save_data=True
+        self, image_filename: str, bounding_box_data: BoundingBox, save_data=True
     ) -> bool:
         """Update complete bounding box data for a specific box."""
         if image_filename not in self.data:

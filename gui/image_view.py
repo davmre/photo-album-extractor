@@ -21,11 +21,11 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QMenu
 
 import core.geometry as geometry
-import photo_detection.inscribed_rectangle as inscribed_rectangle
-from core.bounding_box_data import BoundingBoxData
+import core.inscribed_rectangle as inscribed_rectangle
+from core import refinement_strategies
+from core.bounding_box import BoundingBox
 from core.settings import app_settings
 from gui.quad_bounding_box import QuadBoundingBox
-from photo_detection import refinement_strategies
 
 
 class ImageView(QGraphicsView):
@@ -34,7 +34,7 @@ class ImageView(QGraphicsView):
     # Signal emitted when boxes are added or removed
     boxes_changed = pyqtSignal()
     # Signal emitted when a box is selected
-    box_selected = pyqtSignal(BoundingBoxData)  # Emits (box_id, BoundingBoxData)
+    box_selected = pyqtSignal(BoundingBox)  # Emits (box_id, BoundingBoxData)
     # Signal emitted when no box is selected
     box_deselected = pyqtSignal()
     # Signal emitted when mouse moves over image
@@ -114,7 +114,7 @@ class ImageView(QGraphicsView):
         # Emit signal for magnifier
         self.image_updated.emit()
 
-    def add_bounding_box(self, box_data: BoundingBoxData):
+    def add_bounding_box(self, box_data: BoundingBox):
         """Add a pre-created bounding box object to the scene."""
         if self.image_item is None:
             return None
@@ -164,7 +164,7 @@ class ImageView(QGraphicsView):
                 self.remove_bounding_box(box)
             # Note: remove_bounding_box already emits boxes_changed for each removal
 
-    def get_bounding_box_data_list(self) -> list[BoundingBoxData]:
+    def get_bounding_box_data_list(self) -> list[BoundingBox]:
         """Get all bounding box data for extraction."""
         return [box.get_bounding_box_data() for box in self.bounding_boxes]
 
@@ -341,7 +341,7 @@ class ImageView(QGraphicsView):
         """Get the currently selected box."""
         return self.selected_box
 
-    def update_box_data(self, bounding_box_data: BoundingBoxData):
+    def update_box_data(self, bounding_box_data: BoundingBox):
         """Update complete bounding box data for a specific box."""
         for box in self.bounding_boxes:
             if (
@@ -394,7 +394,7 @@ class ImageView(QGraphicsView):
                 # self.temp_box = None
                 self.temp_box.set_corners(corners)
             else:
-                self.temp_box = QuadBoundingBox(BoundingBoxData.new(corners=corners))
+                self.temp_box = QuadBoundingBox(BoundingBox.new(corners=corners))
                 self._scene.addItem(self.temp_box)
 
         super().mouseMoveEvent(event)
@@ -424,7 +424,7 @@ class ImageView(QGraphicsView):
                         QPointF(self.drag_start_pos.x(), scene_pos.y()),
                     ]
                     # Create new box with unique ID
-                    box_data = BoundingBoxData.new(corners=corners)
+                    box_data = BoundingBox.new(corners=corners)
                     self.add_bounding_box(box_data)
 
             # Reset drag state

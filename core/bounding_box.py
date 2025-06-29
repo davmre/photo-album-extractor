@@ -63,7 +63,13 @@ class PhotoAttributes:
 
     def __hash__(self):
         return hash(
-            (self.date_hint, self.exif_date, self.comments, self.date_inconsistent, self.orientation)
+            (
+                self.date_hint,
+                self.exif_date,
+                self.comments,
+                self.date_inconsistent,
+                self.orientation,
+            )
         )
 
     def copy(self) -> PhotoAttributes:
@@ -77,7 +83,7 @@ class PhotoAttributes:
 
 
 @dataclass
-class BoundingBoxData:
+class BoundingBox:
     """Data model for a photo bounding box."""
 
     corners: QuadArray
@@ -87,7 +93,7 @@ class BoundingBoxData:
 
     @classmethod
     def new(cls, corners: BoundingBoxAny, attributes: PhotoAttributes | None = None):
-        return BoundingBoxData(
+        return BoundingBox(
             corners=bounding_box_as_array(corners),
             box_id=str(uuid.uuid4()),
             attributes=attributes if attributes else PhotoAttributes(),
@@ -120,7 +126,7 @@ class BoundingBoxData:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> BoundingBoxData:
+    def from_dict(cls, data: dict) -> BoundingBox:
         """Create from dictionary loaded from JSON."""
 
         # Extract and convert corners

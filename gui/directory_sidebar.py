@@ -255,7 +255,11 @@ class DirectoryImageList(QWidget):
 
     def invalidate_validation_cache(self):
         """Invalidate and reload validation cache for current directory."""
-        if not self.current_directory or not hasattr(self, "storage") or not self.storage:
+        if (
+            not self.current_directory
+            or not hasattr(self, "storage")
+            or not self.storage
+        ):
             return
 
         # Preserve current selection

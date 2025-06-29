@@ -6,7 +6,7 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from core.bounding_box_data import BoundingBoxData
+from core.bounding_box import BoundingBox
 from core.photo_types import bounding_box_as_list_of_qpointfs
 
 
@@ -23,7 +23,7 @@ class MagnifierWidget(QWidget):
         self.source_pixmap = None
         self.cursor_pos = QPointF(0, 0)  # Cursor position in image coordinates
         self.image_rect = QRectF()  # Image bounds
-        self.bounding_boxes: list[BoundingBoxData] = []
+        self.bounding_boxes: list[BoundingBox] = []
 
         # Tracking mode
         self.tracking_mode = "cursor"  # "cursor" or "corner"
@@ -80,7 +80,7 @@ class MagnifierWidget(QWidget):
             self.tracking_mode = "cursor"
         self.update_magnifier()
 
-    def set_bounding_boxes(self, boxes: list[BoundingBoxData]):
+    def set_bounding_boxes(self, boxes: list[BoundingBox]):
         """Set the list of bounding boxes to overlay."""
         self.bounding_boxes = boxes
         self.update_magnifier()

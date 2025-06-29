@@ -2,18 +2,21 @@
 Image processing utilities for loading, cropping, and saving photos.
 """
 
-# ruff: noqa N806, N803
+from __future__ import annotations
 
 import os
-from typing import Optional
 
 import core.photo_types as photo_types
 import numpy as np
 import piexif
 import PIL.Image
 from core import date_utils, geometry
-from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.bounding_box import BoundingBox, PhotoAttributes
 from PIL import Image
+
+# Allow math variables with uppercase letters.
+# ruff: noqa N806
+
 
 # Semantic type aliases
 PILImage = PIL.Image.Image  # PIL/Pillow images
@@ -22,9 +25,10 @@ PILImage = PIL.Image.Image  # PIL/Pillow images
 def extract_perspective_image(
     image: PILImage,
     corner_points: photo_types.BoundingBoxAny,
-    output_width: Optional[int] = None,
-    output_height: Optional[int] = None,
+    output_width: int | None = None,
+    output_height: int | None = None,
     mode: PIL.Image.Resampling = Image.Resampling.BICUBIC,
+    rotation_clockwise_degrees: int = 0,
 ) -> PILImage:
     """Crop image using four corner points."""
     # Convert corner points to numpy array
@@ -37,10 +41,33 @@ def extract_perspective_image(
     output_height = output_height if output_height else int(max_height)
 
     # Define the output rectangle corners (in order: top-left, top-right, bottom-right, bottom-left)
-    output_corners = np.array(
+    # Apply rotation by rotating these output corners
+    base_corners = np.array(
         [[0, 0], [output_width, 0], [output_width, output_height], [0, output_height]],
         dtype=np.float32,
     )
+
+    if rotation_clockwise_degrees != 0:
+        # Create rotation matrix (rotate around center of rectangle)
+        center_x, center_y = output_width / 2, output_height / 2
+        angle_rad = np.radians(
+            -rotation_clockwise_degrees
+        )  # Negative because we want clockwise rotation
+        cos_a, sin_a = np.cos(angle_rad), np.sin(angle_rad)
+
+        # Translate to origin, rotate, translate back
+        output_corners = []
+        for x, y in base_corners:
+            # Translate to center
+            x_centered, y_centered = x - center_x, y - center_y
+            # Rotate
+            x_rotated = x_centered * cos_a - y_centered * sin_a
+            y_rotated = x_centered * sin_a + y_centered * cos_a
+            # Translate back
+            output_corners.append([x_rotated + center_x, y_rotated + center_y])
+        output_corners = np.array(output_corners, dtype=np.float32)
+    else:
+        output_corners = base_corners
 
     # Calculate transformation matrix
     # We need to map from output_corners to corners
@@ -71,7 +98,7 @@ def load_image(filepath: str) -> PILImage:
 
 def save_cropped_images(
     image: PILImage,
-    bounding_box_data_list: list[BoundingBoxData],
+    bounding_box_data_list: list[BoundingBox],
     output_dir: str,
     base_name: str = "photo",
 ) -> list[str]:
@@ -90,17 +117,12 @@ def save_cropped_images(
     os.makedirs(output_dir, exist_ok=True)
 
     for i, bbox_data in enumerate(bounding_box_data_list):
-        # Extract the image using the corners
-        cropped = extract_perspective_image(image, bbox_data.corners)
-
-        # Get attributes from the bounding box data
+        # Extract the image using the corners, incorporating rotation into the perspective transform
         attributes = bbox_data.attributes
-
-        # Apply orientation correction if needed
         rotation_degrees = attributes.orientation.rotation_degrees
-        if rotation_degrees != 0:
-            # PIL's rotate method rotates counterclockwise for positive angles
-            cropped = cropped.rotate(rotation_degrees, expand=True)
+        cropped = extract_perspective_image(
+            image, bbox_data.corners, rotation_clockwise_degrees=rotation_degrees
+        )
 
         # Generate filename
         filename = f"{base_name}_{i:03d}.jpg"

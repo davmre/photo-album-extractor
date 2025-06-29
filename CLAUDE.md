@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Photo Album Extractor is a PyQt6-based GUI application for extracting individual photos from scanned album pages. It supports perspective correction, AI-based photo detection, boundary refinement, and EXIF metadata preservation.
+Photo Album Extractor is a PyQt6-based GUI application for extracting individual photos from a directory of scanned album pages. It supports perspective correction, AI-based photo detection, boundary refinement, and EXIF metadata preservation.
 
 ## Development Commands
 
@@ -75,20 +75,20 @@ possible. Avoid boilerplate OOP structures.
 For new code, always consider the data model first. Factor out fundamental structures
 and logic under `core`, and then add interfaces under `gui` and/or `cli` as appropriate.
 
-All new code should have type annotations. Use `from __future__ import annotations`
-in new files for deferred evaluation of type annotations.
+All new code should have type annotations. Define new semantic types as appropriate, putting any globally-useful types in `core/photo_types.py`. Validate with `pyright` and `ruff` frequently.
 
-
-## Architecture
+Test-driven development: before adding new functionality, consider what semantics any new methods or classes should satisfy. If appropriate, offer to write tests, and check the implementation against these tests. Prefer a test-driven methodology especially for core methods that can be easily tested in isolation.
 
 ### Key Components
 
 1. **Core app functionality** (`core/`):
-   - `bounding_box_data.py`: core data model for a bounding box / photo to be extracted.
+   - `bounding_box.py`: core data model for a bounding box / photo to be extracted.
    - `photo_types.py` and `errors.py`: custom types and exceptions used throughout
-   - `bounding_box_storage.py` - Saves bounding boxes as JSON in `.photo_extractor_data.json` files per directory
+   - `bounding_box_storage.py` - Loads and stores bounding boxes as JSON in `.photo_extractor_data.json` files per directory, and functions as a global registry of bounding boxes.
    - `images.py`: Handles perspective correction, EXIF metadata, and image saving
    - `settings.py`: Defines app configuration.
+   - `detection_strategies.py`: Multiple photo detection strategies including Gemini AI
+   - `refinement_strategies.py`: Multiple algorithms for refining bounding boxes.
 
 2. **GUI Layer** (`gui/`): PyQt6-based interface
    - `main_window.py`: Main application window orchestrating all components
@@ -96,18 +96,5 @@ in new files for deferred evaluation of type annotations.
    - `quad_bounding_box.py`: Quadrilateral (4-point) bounding box implementation - NOT restricted to rectangles
 
 3. **CLI Layer** (`cli/`): command-line interface
-   - Commands `info`, `detect`, `extract`, etc. operate on single images or batches of
-     images, using saved bounding-box data.
-
-4. **Photo detection** (`photo_detection/`): Methods to detect and refine photo bounding boxes
-   - `detection_strategies.py`: Multiple photo detection strategies including Gemini AI
-   - `refinement_strategies.py`: Multiple algorithms for refining bounding boxes.
-
-### File Organization
-
-**Type-First Development**: When adding new modules:
-
-1. Start with type definitions in appropriate module
-2. Import semantic types from `core/photo_types.py`
-3. Add proper type annotations from the beginning
-4. Validate with `pyright` and `ruff` frequently
+   - Commands `info`, `detect`, `extract`, `refine`, etc. operate on single images
+   or batches of images, using saved bounding-box data.

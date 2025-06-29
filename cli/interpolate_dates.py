@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from core import date_utils
-from core.bounding_box_data import BoundingBoxData
+from core.bounding_box import BoundingBox
 from core.bounding_box_storage import BoundingBoxStorage
 
 
@@ -25,7 +25,7 @@ def cmd_interpolate_dates(directory: str, trial_run=False):
 
     # Construct a list of intervals giving possible dates for each photo.
     photo_filenames: list[str] = []
-    photo_boxes: list[BoundingBoxData] = []
+    photo_boxes: list[BoundingBox] = []
     date_intervals: list[tuple[datetime, datetime] | None] = []
 
     for image_filename in image_filenames:

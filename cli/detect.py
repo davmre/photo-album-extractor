@@ -10,8 +10,8 @@ import PIL.Image
 
 from cli.utils import get_image_files
 from core.bounding_box_storage import BoundingBoxStorage
+from core.detection_strategies import configure_detection_strategy
 from core.settings import app_settings
-from photo_detection.detection_strategies import configure_detection_strategy
 
 
 def cmd_detect(paths: list[str], force: bool = False) -> int:

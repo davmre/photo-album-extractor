@@ -12,7 +12,7 @@ import google.generativeai as genai  # type: ignore
 import numpy as np
 import PIL.Image
 
-from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.bounding_box import BoundingBox, PhotoAttributes
 from core.errors import AppError
 from core.photo_types import QuadArray
 from core.settings import AppSettings
@@ -34,7 +34,7 @@ class DetectionStrategy(ABC):
         pass
 
     @abstractmethod
-    def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBoxData]:
+    def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBox]:
         """
         Detect photos in an image and return their bounding quadrilaterals.
 
@@ -97,7 +97,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
 
     def _get_bounding_box_data_from_json(
         self, entry, rescale_coordinates: np.ndarray | None = None
-    ) -> BoundingBoxData:
+    ) -> BoundingBox:
         if "box_2d" in entry:
             corners = self._corner_points_from_bbox(entry["box_2d"])
             if rescale_coordinates is not None:
@@ -110,7 +110,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
             attributes.date_hint = entry["date"]
         if "caption" in entry:
             attributes.comments = entry["caption"]
-        return BoundingBoxData.new(corners=corners, attributes=attributes)
+        return BoundingBox.new(corners=corners, attributes=attributes)
 
     def _corner_points_from_bbox(self, box_2d: list[float]) -> QuadArray:
         y_min, x_min, y_max, x_max = box_2d
@@ -118,7 +118,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
             [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
         )
 
-    def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBoxData]:
+    def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBox]:
         if not image or not self._model:
             return []
 
@@ -217,7 +217,7 @@ class GeminiWithRefinementDetectionStrategy(DetectionStrategy):
     def set_refinement_strategy(self, refine_fn):
         self.refine_fn = refine_fn
 
-    def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBoxData]:
+    def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBox]:
         detected_boxes = self.gemini_strategy.detect_photos(image)
         for box in detected_boxes:
             refined_corners = self.refine_fn(image, box.corners)

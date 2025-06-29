@@ -10,11 +10,11 @@ import PIL.Image
 
 from cli.utils import get_image_files
 from core.bounding_box_storage import BoundingBoxStorage
-from core.settings import app_settings
-from photo_detection.refinement_strategies import (
+from core.refinement_strategies import (
     REFINEMENT_STRATEGIES,
     configure_refinement_strategy,
 )
+from core.settings import app_settings
 
 
 def cmd_refine(

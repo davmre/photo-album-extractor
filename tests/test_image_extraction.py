@@ -12,7 +12,7 @@ import piexif
 import pytest
 from PIL import Image
 
-from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.bounding_box import BoundingBox, PhotoAttributes
 
 # Add parent directory to path to import app modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -131,7 +131,7 @@ class TestImageProcessor:
 
         # Define crop data (simple rectangle)
         crop_data = [
-            BoundingBoxData(
+            BoundingBox(
                 corners=np.array(
                     [[100, 150], [400, 150], [400, 450], [100, 450]], dtype=float
                 ),
@@ -162,7 +162,7 @@ class TestImageProcessor:
 
         # Define crop data with attributes
         crop_data = [
-            BoundingBoxData.new(
+            BoundingBox.new(
                 corners=[(100, 150), (400, 150), (400, 450), (100, 450)],
                 attributes=PhotoAttributes(
                     date_hint="1985-06-20", comments="Test extraction with EXIF data"
@@ -219,9 +219,7 @@ class TestImageProcessor:
             [[500, 150], [800, 150], [800, 450], [500, 450]],
             [[100, 500], [400, 500], [400, 800], [100, 800]],
         ]
-        crop_data = [
-            BoundingBoxData.new(corners=np.array(c, dtype=float)) for c in corners
-        ]
+        crop_data = [BoundingBox.new(corners=np.array(c, dtype=float)) for c in corners]
 
         # Save all crops
         saved_files = images.save_cropped_images(

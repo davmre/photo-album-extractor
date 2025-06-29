@@ -22,16 +22,16 @@ from PyQt6.QtWidgets import (
 )
 
 from core import images
-from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.bounding_box import BoundingBox, PhotoAttributes
 from core.bounding_box_storage import BoundingBoxStorage
 from core.date_inference import infer_dates_for_current_directory
+from core.detection_strategies import configure_detection_strategy
 from core.errors import AppError
 from core.settings import app_settings
 from gui.attributes_sidebar import AttributesSidebar
 from gui.directory_sidebar import DirectoryImageList
 from gui.image_view import ImageView
 from gui.settings_dialog import SettingsDialog
-from photo_detection.detection_strategies import configure_detection_strategy
 
 
 class PhotoExtractorApp(QMainWindow):
@@ -349,7 +349,7 @@ class PhotoExtractorApp(QMainWindow):
         """Clear all bounding boxes."""
         self.image_view.clear_boxes()
 
-    def on_box_selected(self, bounding_box_data: BoundingBoxData):
+    def on_box_selected(self, bounding_box_data: BoundingBox):
         """Handle box selection from ImageView."""
         # Extract coordinates for the sidebar coordinate display
         self.attributes_sidebar.set_box_data(bounding_box_data)
@@ -367,7 +367,7 @@ class PhotoExtractorApp(QMainWindow):
         if selected_box and selected_box.box_id == box_id:
             # Create updated BoundingBoxData with new attributes but existing corners
             current_data = selected_box.get_bounding_box_data()
-            updated_data = BoundingBoxData(
+            updated_data = BoundingBox(
                 corners=current_data.corners, box_id=box_id, attributes=attributes
             )
 

@@ -13,17 +13,61 @@ import core.images as images
 import cv2
 import numpy as np
 from core.photo_types import (
+    AnyArray,
     BoundingBoxAny,
     FloatArray,
+    IntArray,
     QuadArray,
     UInt8Array,
     bounding_box_as_array,
 )
 from PIL import Image
 
-from photo_detection.refine_bounds import annotate_image, save_image
-
 LOGGER = logging.getLogger("logger")
+
+
+# Utils to save debugging images.
+
+
+def annotate_image(
+    img: AnyArray | Image.Image,
+    contours=None,
+    edges: list[IntArray] | tuple[IntArray, ...] | None = None,
+) -> AnyArray:
+    if isinstance(img, Image.Image):
+        img = np.array(img)
+    img = img.copy()
+    if contours:
+        cv2.drawContours(
+            img,
+            np.array(np.round(contours), dtype=int),  # type: ignore
+            -1,
+            (0, 0, 255),
+            1,  # type: ignore
+        )  # type: ignore
+    if edges:
+        colors = [
+            (255, 0, 0),
+            (0, 255, 0),
+            (0, 0, 255),
+            (255, 0, 255),
+            (255, 255, 0),
+            (0, 255, 255),
+        ]
+        for edge, color in zip(edges, colors):
+            cv2.line(img, (edge[0, 0], edge[0, 1]), (edge[1, 0], edge[1, 1]), color, 1)
+    return img
+
+
+def save_image(file_path: str, img: AnyArray | Image.Image) -> None:
+    if not isinstance(img, Image.Image):
+        img = Image.fromarray(img)
+    if img.mode == "F":
+        # PNG supports greyscale images with 8-bit int pixels.
+        img = img.convert("L")
+
+    img.save(file_path)
+    LOGGER.info(f"saved: {file_path}")
 
 
 # Strip-based edge detection implementation

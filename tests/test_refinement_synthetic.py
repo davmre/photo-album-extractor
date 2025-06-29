@@ -5,8 +5,7 @@ import numpy as np
 import pytest
 
 import core.geometry as geometry
-import photo_detection.refine_bounds as refine_bounds
-from photo_detection import refine_strips
+from core import refine_strips
 
 DEBUG_IMAGES_BASE_DIR = (
     None  # "/Users/dave/photos_tests/"  # Edit to save debug images.
@@ -234,12 +233,11 @@ class TestSyntheticImageRefinement:
         resolution_scale_factor=1.0,
         debug_name="",
     ):
-        refined_box = refine_bounds.refine_bounding_box(
+        refined_box = refine_strips.refine_bounding_box_strips(
             image,
             input_box,
             reltol=reltol,
             enforce_parallel_sides=True,
-            resolution=200,
             debug_dir=(
                 os.path.join(DEBUG_IMAGES_BASE_DIR, debug_name)
                 if DEBUG_IMAGES_BASE_DIR
@@ -304,12 +302,11 @@ class TestSyntheticImageRefinement:
     ):
         image, gold_boxes, name = test_generator_fn()
         for box_idx, gold_box in enumerate(gold_boxes):
-            refined_box = refine_bounds.refine_bounding_box(
+            refined_box = refine_strips.refine_bounding_box_strips(
                 image,
                 gold_box,
                 reltol=reltol,
                 enforce_parallel_sides=True,
-                resolution=200,
                 debug_dir=(
                     os.path.join(
                         DEBUG_IMAGES_BASE_DIR, f"{name}_box{box_idx}_gold_init"

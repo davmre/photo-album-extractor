@@ -5,10 +5,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 from PIL import Image
 
-from core import geometry
+from core import geometry, refine_strips
 from core.photo_types import QuadArray, UInt8Array
 from core.settings import AppSettings
-from photo_detection import refine_bounds, refine_strips
 
 
 class RefinementStrategy(ABC):
@@ -31,22 +30,6 @@ class RefinementStrategy(ABC):
         Refine the corners of a photo's bounding box within a scanned image.
         """
         pass
-
-
-class RefinementStrategyOriginalMultiscale(RefinementStrategy):
-    @property
-    def name(self):
-        return "Original (multiscale)"
-
-    def refine(
-        self,
-        image: Image.Image | UInt8Array,
-        corner_points: QuadArray,
-        debug_dir: str | None,
-    ):
-        return refine_bounds.refine_bounding_box_multiscale(
-            image, corner_points, enforce_parallel_sides=True, debug_dir=debug_dir
-        )
 
 
 class RefinementStrategyStrips(RefinementStrategy):
@@ -100,7 +83,6 @@ class RefinementStrategyStripsIterated(RefinementStrategy):
 _REFINEMENT_STRATEGIES: list[RefinementStrategy] = [
     RefinementStrategyStrips(),
     RefinementStrategyStripsIterated(),
-    RefinementStrategyOriginalMultiscale(),
 ]
 
 REFINEMENT_STRATEGIES: dict[str, RefinementStrategy] = {

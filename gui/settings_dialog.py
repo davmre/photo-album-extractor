@@ -16,9 +16,9 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from core.detection_strategies import DETECTION_STRATEGIES
+from core.refinement_strategies import REFINEMENT_STRATEGIES
 from core.settings import app_settings
-from photo_detection.detection_strategies import DETECTION_STRATEGIES
-from photo_detection.refinement_strategies import REFINEMENT_STRATEGIES
 
 
 class SettingsDialog(QDialog):

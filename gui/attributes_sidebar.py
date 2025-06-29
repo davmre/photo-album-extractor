@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core.bounding_box_data import BoundingBoxData, PhotoAttributes
+from core.bounding_box import BoundingBox, PhotoAttributes
 from core.photo_types import PhotoOrientation
 from core.validation_utils import Severity, validate_bounding_box
 from gui.magnifier_widget import MagnifierWidget
@@ -124,7 +124,7 @@ class AttributesSidebar(QWidget):
         orientation_group = QGroupBox("Orientation")
         orientation_layout = QVBoxLayout(orientation_group)
 
-        orientation_label_layout = QHBoxLayout()
+        orientation_label_layout = QVBoxLayout()
         orientation_label = QLabel("Photo orientation:")
         orientation_label_layout.addWidget(orientation_label)
 
@@ -143,7 +143,7 @@ class AttributesSidebar(QWidget):
         comments_layout = QVBoxLayout(comments_group)
 
         self.comments_edit = QTextEdit()
-        self.comments_edit.setMaximumHeight(150)
+        self.comments_edit.setMaximumHeight(100)
         self.comments_edit.setPlaceholderText("Add comments about this photo...")
         self.comments_edit.textChanged.connect(self.on_comments_changed)
         comments_layout.addWidget(self.comments_edit)
@@ -190,7 +190,7 @@ class AttributesSidebar(QWidget):
             scroll_area.hide()
         self.no_selection_label.show()
 
-    def set_box_data(self, box_data: BoundingBoxData):
+    def set_box_data(self, box_data: BoundingBox):
         """Show attributes for the selected box."""
         self.updating_ui = True
         self.current_box = box_data
@@ -299,18 +299,18 @@ class AttributesSidebar(QWidget):
             orientation=orientation,
         )
 
-    def get_current_box_data(self) -> BoundingBoxData | None:
+    def get_current_box_data(self) -> BoundingBox | None:
         """Get current bounding box data from UI state."""
         if not self.current_box:
             return None
 
-        return BoundingBoxData(
+        return BoundingBox(
             corners=self.current_box.corners,
             box_id=self.current_box.box_id,
             attributes=self.get_current_attributes(),
         )
 
-    def update_validation_display(self, box_data: BoundingBoxData):
+    def update_validation_display(self, box_data: BoundingBox):
         """Update the validation display for the current bounding box."""
         issues = validate_bounding_box(box_data)
 
