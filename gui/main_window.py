@@ -428,7 +428,11 @@ class PhotoExtractorApp(QMainWindow):
 
     def detect_photos(self):
         """Run the configured detection strategy to automatically detect photos."""
-        if not self.current_image_path or not self.current_image:
+        if (
+            not self.current_image_path
+            or not self.current_image
+            or not self.bounding_box_storage
+        ):
             return
 
         try:
@@ -447,6 +451,14 @@ class PhotoExtractorApp(QMainWindow):
             # Create bounding boxes
             for box_data in detected_boxes:
                 self.image_view.add_bounding_box(box_data)
+
+            # Save detected bounding boxes.
+            filename = os.path.basename(self.current_image_path)
+            self.bounding_box_storage.set_bounding_boxes(filename, detected_boxes)
+            # Update directory sidebar validation for this file
+            self.directory_list.update_file_validation(
+                filename, storage=self.bounding_box_storage
+            )
 
             self.status_bar.showMessage(
                 f"Detected {len(detected_boxes)} photos using {selected_strategy.name}"

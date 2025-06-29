@@ -14,7 +14,7 @@ import PIL.Image
 
 from core.bounding_box import BoundingBox, PhotoAttributes
 from core.errors import AppError
-from core.photo_types import QuadArray
+from core.photo_types import PhotoOrientation, QuadArray
 from core.settings import AppSettings
 
 
@@ -110,6 +110,15 @@ class GeminiDetectionStrategy(DetectionStrategy):
             attributes.date_hint = entry["date"]
         if "caption" in entry:
             attributes.comments = entry["caption"]
+        if "orientation" in entry:
+            if entry["orientation"] == "TOP_EDGE_ON_RIGHT":
+                attributes.orientation = PhotoOrientation.ROTATED_90_CW
+            elif entry["orientation"] == "TOP_EDGE_ON_LEFT":
+                attributes.orientation = PhotoOrientation.ROTATED_90_CCW
+            elif entry["orientation"] == "TOP_EDGE_ON_BOTTOM":
+                attributes.orientation = PhotoOrientation.UPSIDE_DOWN
+            else:
+                print(f"Unrecognized orientation: '{entry['orientation']}'. Ignoring.")
         return BoundingBox.new(corners=corners, attributes=attributes)
 
     def _corner_points_from_bbox(self, box_2d: list[float]) -> QuadArray:
@@ -145,9 +154,18 @@ detected photos. Each entry contains:
    text related to this photo). If there is no date or caption written, simply omit
    these fields.
 
+- **Optional**: most photos will be right-side-up. If a photo is not right-side-up,
+  you may include an additional string field `orientation` with possible values
+  "TOP_EDGE_ON_LEFT" (photo is rotated 90 degrees counterclockwise),
+  "TOP_EDGE_ON_BOTTOM" (photo is rotated 180 degrees), or "TOP_EDGE_ON_RIGHT"
+  (photo is rotated 90 degrees clockwise). Do not include this field for photos that
+  are only mildly tilted or if the orientation is unclear. Be careful to consider each
+  photo separately as different photos on the same page may have different
+  orientations.
+
 This project has sentimental value and your help is appreciated!
 
-Example response for a page with two photos:
+Example response for a page with three photos:
 
 {
     [
@@ -157,6 +175,10 @@ Example response for a page with two photos:
     [
       "box_2d": [photo2_y_min, photo2_x_min, photo2_y_max, photo2_x_max],
       "caption": "Dinner with Susan",
+      "orientation": "TOP_EDGE_FACES_LEFT",
+    ],
+    [
+      "box_2d": [photo3_y_min, photo3_x_min, photo3_y_max, photo3_x_max],
     ]
 }
 
@@ -174,8 +196,7 @@ Return only the JSON response, no additional text."""
             # Parse the JSON response
             try:
                 result = self._parse_as_json(response)
-                print("GOT Gemini response")
-                print(result)
+                print(f"Gemini response: {result}")
 
                 detected_bboxes = []
                 for entry in result:
@@ -185,7 +206,7 @@ Return only the JSON response, no additional text."""
                         )
                         detected_bboxes.append(bbox_data)
                     except ValueError as e:
-                        print("NO BBOX??", e)
+                        print("Could not extract bounding box from response: ", e)
                         continue
                 return detected_bboxes
 

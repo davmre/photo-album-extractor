@@ -58,9 +58,6 @@ class PhotoAttributes:
             "orientation": self.orientation.value,
         }
 
-    def __bool__(self) -> bool:
-        return bool(self.date_hint or self.comments)
-
     def __hash__(self):
         return hash(
             (
@@ -96,7 +93,7 @@ class BoundingBox:
         return BoundingBox(
             corners=bounding_box_as_array(corners),
             box_id=str(uuid.uuid4()),
-            attributes=attributes if attributes else PhotoAttributes(),
+            attributes=attributes if attributes is not None else PhotoAttributes(),
         )
 
     def __hash__(self):
