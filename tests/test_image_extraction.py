@@ -13,6 +13,7 @@ import pytest
 from PIL import Image
 
 from core.bounding_box import BoundingBox, PhotoAttributes
+from core.photo_types import PhotoOrientation
 
 # Add parent directory to path to import app modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -104,6 +105,80 @@ class TestPerspectiveExtraction:
         # Should be close to original dimensions
         assert abs(extracted.width - 400) <= 2
         assert abs(extracted.height - 300) <= 2
+
+    def test_extract_with_90_degree_rotation_is_transpose(self, test_image):
+        """Test that 90-degree rotation produces the transpose of the normal extraction."""
+        # Create a non-square region to make rotation effects clearly visible
+        corners = np.array(
+            [[150, 100], [250, 100], [250, 150], [150, 150]],
+            dtype=float,  # 100x50 rectangle
+        )
+
+        # Extract without rotation
+        extracted_normal = images.extract_perspective_image(test_image, corners)
+
+        # Extract with 90-degree clockwise rotation
+        extracted_rotated = images.extract_perspective_image(
+            test_image, corners, orientation=PhotoOrientation.ROTATED_90_CW
+        )
+
+        # After 90° CW rotation, dimensions should be swapped
+        assert extracted_normal.width == extracted_rotated.height
+        assert extracted_normal.height == extracted_rotated.width
+
+        # Convert to numpy arrays for comparison
+        pixels_normal = np.array(extracted_normal)
+        pixels_rotated = np.array(extracted_rotated)
+
+        expected_rotated = np.transpose(
+            pixels_normal, (1, 0, 2)
+        )  # transpose width/height
+
+        # Due to interpolation differences, we check that most pixels are close
+        # rather than requiring exact equality
+        pixel_diff = np.abs(
+            pixels_rotated.astype(float) - expected_rotated.astype(float)
+        )
+        mean_diff = np.mean(pixel_diff)
+
+        # Allow for some interpolation error but should be very close
+        assert mean_diff < 5.0, (
+            f"Mean pixel difference {mean_diff} too large for proper rotation"
+        )
+
+    def test_extract_with_180_degree_rotation_is_double_flip(self, test_image):
+        """Test that 180-degree rotation produces a double-flipped version."""
+        corners = np.array(
+            [[150, 100], [250, 100], [250, 200], [150, 200]], dtype=float
+        )
+
+        # Extract without rotation
+        extracted_normal = images.extract_perspective_image(test_image, corners)
+
+        # Extract with 180-degree rotation
+        extracted_rotated = images.extract_perspective_image(
+            test_image, corners, orientation=PhotoOrientation.UPSIDE_DOWN
+        )
+
+        # Dimensions should remain the same
+        assert extracted_normal.size == extracted_rotated.size
+
+        # Convert to numpy arrays
+        pixels_normal = np.array(extracted_normal)
+        pixels_rotated = np.array(extracted_rotated)
+
+        # 180° rotation should be equivalent to flipping both horizontally and vertically
+        expected_rotated = np.flipud(np.fliplr(pixels_normal))
+
+        # Check similarity allowing for interpolation differences
+        pixel_diff = np.abs(
+            pixels_rotated.astype(float) - expected_rotated.astype(float)
+        )
+        mean_diff = np.mean(pixel_diff)
+
+        assert mean_diff < 5.0, (
+            f"Mean pixel difference {mean_diff} too large for 180° rotation"
+        )
 
 
 class TestImageProcessor:
@@ -236,6 +311,55 @@ class TestImageProcessor:
             img = Image.open(filepath)
             assert img.width > 0
             assert img.height > 0
+
+    def test_save_cropped_images_with_orientation(
+        self, test_images_dir, temp_output_dir
+    ):
+        """Test saving cropped images with different orientations applied."""
+        # Load test image
+        test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
+        image = images.load_image(test_image_path)
+
+        # Create same bounding box with different orientations
+        corners = np.array(
+            [[100, 150], [400, 150], [400, 300], [100, 300]], dtype=float
+        )
+
+        crop_data = [
+            BoundingBox.new(
+                corners=corners,
+                attributes=PhotoAttributes(
+                    orientation=PhotoOrientation.NORMAL, comments="Normal orientation"
+                ),
+            ),
+            BoundingBox.new(
+                corners=corners,
+                attributes=PhotoAttributes(
+                    orientation=PhotoOrientation.ROTATED_90_CW,
+                    comments="90° CW rotation",
+                ),
+            ),
+        ]
+
+        # Save cropped images
+        saved_files = images.save_cropped_images(
+            image, crop_data, temp_output_dir, base_name="orientation_test"
+        )
+
+        assert len(saved_files) == 2
+
+        # Load both images and verify they have different dimensions
+        normal_img = Image.open(saved_files[0])
+        rotated_img = Image.open(saved_files[1])
+
+        # For 90° rotation, width and height should be swapped
+        assert normal_img.width == rotated_img.height
+        assert normal_img.height == rotated_img.width
+
+        # Images should be different due to rotation
+        normal_pixels = np.array(normal_img)
+        rotated_pixels = np.array(rotated_img)
+        assert not np.array_equal(normal_pixels, rotated_pixels)
 
 
 class TestEXIFHandling:

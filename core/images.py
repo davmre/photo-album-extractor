@@ -12,6 +12,7 @@ import piexif
 import PIL.Image
 from core import date_utils, geometry
 from core.bounding_box import BoundingBox, PhotoAttributes
+from core.photo_types import PhotoOrientation
 from PIL import Image
 
 # Allow math variables with uppercase letters.
@@ -28,7 +29,7 @@ def extract_perspective_image(
     output_width: int | None = None,
     output_height: int | None = None,
     mode: PIL.Image.Resampling = Image.Resampling.BICUBIC,
-    rotation_clockwise_degrees: int = 0,
+    orientation: PhotoOrientation = PhotoOrientation.NORMAL,
 ) -> PILImage:
     """Crop image using four corner points."""
     # Convert corner points to numpy array
@@ -40,34 +41,57 @@ def extract_perspective_image(
     output_width = output_width if output_width else int(max_width)
     output_height = output_height if output_height else int(max_height)
 
+    # For 90° and 270° rotations, swap dimensions
+    if orientation in (PhotoOrientation.ROTATED_90_CW, PhotoOrientation.ROTATED_90_CCW):
+        output_width, output_height = output_height, output_width
+
     # Define the output rectangle corners (in order: top-left, top-right, bottom-right, bottom-left)
-    # Apply rotation by rotating these output corners
-    base_corners = np.array(
-        [[0, 0], [output_width, 0], [output_width, output_height], [0, output_height]],
-        dtype=np.float32,
-    )
-
-    if rotation_clockwise_degrees != 0:
-        # Create rotation matrix (rotate around center of rectangle)
-        center_x, center_y = output_width / 2, output_height / 2
-        angle_rad = np.radians(
-            -rotation_clockwise_degrees
-        )  # Negative because we want clockwise rotation
-        cos_a, sin_a = np.cos(angle_rad), np.sin(angle_rad)
-
-        # Translate to origin, rotate, translate back
-        output_corners = []
-        for x, y in base_corners:
-            # Translate to center
-            x_centered, y_centered = x - center_x, y - center_y
-            # Rotate
-            x_rotated = x_centered * cos_a - y_centered * sin_a
-            y_rotated = x_centered * sin_a + y_centered * cos_a
-            # Translate back
-            output_corners.append([x_rotated + center_x, y_rotated + center_y])
-        output_corners = np.array(output_corners, dtype=np.float32)
+    # These corners define where the input corners should map to in the output
+    if orientation == PhotoOrientation.NORMAL:
+        output_corners = np.array(
+            [
+                [0, 0],
+                [output_width, 0],
+                [output_width, output_height],
+                [0, output_height],
+            ],
+            dtype=np.float32,
+        )
+    elif orientation == PhotoOrientation.ROTATED_90_CCW:
+        # rotate 90° CW: top-left → top-right, top-right → bottom-right, etc.
+        output_corners = np.array(
+            [
+                [output_width, 0],
+                [output_width, output_height],
+                [0, output_height],
+                [0, 0],
+            ],
+            dtype=np.float32,
+        )
+    elif orientation == PhotoOrientation.UPSIDE_DOWN:
+        # rotate 180°: top-left → bottom-right, top-right → bottom-left, etc.
+        output_corners = np.array(
+            [
+                [output_width, output_height],
+                [0, output_height],
+                [0, 0],
+                [output_width, 0],
+            ],
+            dtype=np.float32,
+        )
+    elif orientation == PhotoOrientation.ROTATED_90_CW:
+        # rotate 270° CW (90° CCW): top-left → bottom-left, top-right → top-left, etc.
+        output_corners = np.array(
+            [
+                [0, output_height],
+                [0, 0],
+                [output_width, 0],
+                [output_width, output_height],
+            ],
+            dtype=np.float32,
+        )
     else:
-        output_corners = base_corners
+        raise ValueError(f"Invalid orientation! {orientation}")
 
     # Calculate transformation matrix
     # We need to map from output_corners to corners
@@ -88,7 +112,10 @@ def extract_perspective_image(
 
     # Apply perspective transformation
     return image.transform(
-        (output_width, output_height), Image.Transform.PERSPECTIVE, coeffs, mode
+        (output_width, output_height),
+        Image.Transform.PERSPECTIVE,
+        coeffs,
+        mode,
     )
 
 
@@ -119,9 +146,8 @@ def save_cropped_images(
     for i, bbox_data in enumerate(bounding_box_data_list):
         # Extract the image using the corners, incorporating rotation into the perspective transform
         attributes = bbox_data.attributes
-        rotation_degrees = attributes.orientation.rotation_degrees
         cropped = extract_perspective_image(
-            image, bbox_data.corners, rotation_clockwise_degrees=rotation_degrees
+            image, bbox_data.corners, orientation=attributes.orientation
         )
 
         # Generate filename
