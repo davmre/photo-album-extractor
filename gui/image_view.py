@@ -39,7 +39,7 @@ class ImageView(QGraphicsView):
     box_deselected = pyqtSignal()
     # Signal emitted when mouse moves over image
     mouse_moved = pyqtSignal(object)  # Emits QPointF in scene coordinates
-    # Signal emitted when image or bounding boxes change
+    # Signal emitted when image changes
     image_updated = pyqtSignal()
     # Signal emitted when mouse enters viewport
     mouse_entered_viewport = pyqtSignal()
@@ -105,16 +105,13 @@ class ImageView(QGraphicsView):
         self.image_item = QGraphicsPixmapItem(pixmap)
         self._scene.addItem(self.image_item)
 
-        # Clear existing bounding boxes
-        self.clear_boxes()
-
         # Fit image in view
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
 
         # Emit signal for magnifier
         self.image_updated.emit()
 
-    def add_bounding_box(self, box_data: BoundingBox):
+    def add_bounding_box(self, box_data: BoundingBox, emit_signals=True):
         """Add a pre-created bounding box object to the scene."""
         if self.image_item is None:
             return None
@@ -134,12 +131,12 @@ class ImageView(QGraphicsView):
         box.selected_changed.connect(self.on_box_selection_changed)
 
         # Emit signal that boxes changed
-        self.boxes_changed.emit()
-        self.image_updated.emit()
+        if emit_signals:
+            self.boxes_changed.emit()
 
         return box
 
-    def remove_bounding_box(self, box):
+    def remove_bounding_box(self, box, emit_signals=True):
         """Remove a bounding box from the scene."""
         if box in self.bounding_boxes:
             # Remove handles
@@ -152,16 +149,16 @@ class ImageView(QGraphicsView):
             self.bounding_boxes.remove(box)
 
             # Emit signal that boxes changed
-            self.boxes_changed.emit()
-            self.image_updated.emit()
+            if emit_signals:
+                self.boxes_changed.emit()
 
-    def clear_boxes(self):
+    def clear_boxes(self, emit_signals=True):
         """Remove all bounding boxes."""
         if self.bounding_boxes:  # Only emit signal if there were boxes to remove
             for box in self.bounding_boxes[
                 :
             ]:  # Copy list to avoid modification during iteration
-                self.remove_bounding_box(box)
+                self.remove_bounding_box(box, emit_signals=emit_signals)
             # Note: remove_bounding_box already emits boxes_changed for each removal
 
     def get_bounding_box_data_list(self) -> list[BoundingBox]:
@@ -229,7 +226,7 @@ class ImageView(QGraphicsView):
     def box_changed(self):
         """Handle bounding box changes and update magnifier."""
         # Emit signal to update magnifier with new bounding box positions
-        self.image_updated.emit()
+        self.boxes_changed.emit()
 
     def image_as_numpy(self, format="rgb"):
         image = self._image_qt
@@ -350,7 +347,7 @@ class ImageView(QGraphicsView):
             ):
                 box.set_bounding_box_data(bounding_box_data)
                 # Update magnifier
-                self.image_updated.emit()
+                self.boxes_changed.emit()
                 break
 
     def mousePressEvent(self, event: QMouseEvent):

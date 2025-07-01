@@ -133,7 +133,7 @@ class PhotoExtractorApp(QMainWindow):
 
         # Create image view (center panel)
         self.image_view = ImageView()
-        self.image_view.boxes_changed.connect(self.update_extract_button_state)
+        self.image_view.boxes_changed.connect(self.on_box_changed)
         self.image_view.box_selected.connect(self.on_box_selected)
         self.image_view.box_deselected.connect(self.on_box_deselected)
         main_splitter.addWidget(self.image_view)
@@ -147,7 +147,8 @@ class PhotoExtractorApp(QMainWindow):
         self.image_view.mouse_moved.connect(
             self.attributes_sidebar.magnifier.set_cursor_position
         )
-        self.image_view.image_updated.connect(self.on_box_changed)
+        self.image_view.image_updated.connect(self.on_image_updated)
+
         self.image_view.mouse_entered_viewport.connect(
             self.attributes_sidebar.magnifier.resume_cursor_tracking
         )
@@ -566,7 +567,7 @@ class PhotoExtractorApp(QMainWindow):
             selected_box_id = selected_box.box_id if selected_box else None
 
             # Clear existing boxes
-            self.image_view.clear_boxes()
+            self.image_view.clear_boxes(emit_signals=False)
 
             # Load saved boxes using BoundingBoxData
             for bbox_data in saved_data:
@@ -607,27 +608,29 @@ class PhotoExtractorApp(QMainWindow):
                 image_path = next_item.data(Qt.ItemDataRole.UserRole)
                 self.load_image_from_path(image_path)
 
+    def on_image_updated(self):
+        if not self.image_view.image_item:
+            return
+        # Set magnifier source image
+        pixmap = self.image_view.image_item.pixmap()
+        self.attributes_sidebar.magnifier.set_source_image(pixmap)
+
     def on_box_changed(self):
         """Handle changes to box properties (eg corners) from the image view."""
 
-        if (
-            not self.image_view.image_item
-            or not self.bounding_box_storage
-            or not self.current_image_path
-        ):
+        if not self.bounding_box_storage or not self.current_image_path:
             return
 
         filename = os.path.basename(self.current_image_path)
         bounding_box_data_list = self.image_view.get_bounding_box_data_list()
-        for box in bounding_box_data_list:
-            self.bounding_box_storage.update_box_data(filename, box, save_data=False)
+        self.bounding_box_storage.set_bounding_boxes(
+            filename, bounding_box_data_list, save_data=False
+        )
+        # for box in bounding_box_data_list:
+        #    self.bounding_box_storage.update_box_data(filename, box, save_data=False)
         self.directory_list.update_file_validation(
             filename, storage=self.bounding_box_storage
         )
-
-        # Set magnifier source image
-        pixmap = self.image_view.image_item.pixmap()
-        self.attributes_sidebar.magnifier.set_source_image(pixmap)
 
         # Set magnifier bounding boxes
         self.attributes_sidebar.magnifier.set_bounding_boxes(bounding_box_data_list)
@@ -636,6 +639,8 @@ class PhotoExtractorApp(QMainWindow):
         selected_box = self.image_view.get_selected_box()
         if selected_box and self.attributes_sidebar.current_box:
             self.attributes_sidebar.set_box_data(selected_box.get_bounding_box_data())
+
+        self.update_extract_button_state()
 
     def open_settings(self):
         """Open the settings dialog."""
