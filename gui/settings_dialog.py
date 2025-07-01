@@ -77,7 +77,7 @@ class SettingsDialog(QDialog):
         current_index = 0
         for i, strategy in enumerate(self.refinement_strategies.values()):
             self.refinement_strategy_combo.addItem(strategy.name, strategy)
-            if strategy == app_settings.refinement_strategy:
+            if strategy.name == app_settings.refinement_strategy:
                 current_index = i
         self.refinement_strategy_combo.setCurrentIndex(current_index)
 
