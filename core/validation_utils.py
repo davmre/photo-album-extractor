@@ -94,7 +94,7 @@ def validate_bounding_box(box) -> list[ValidationIssue]:
     # Check if aspect ratio is non-standard (WARNING)
     if app_settings.warn_nonstandard_aspect:
         width, height = geometry.dimension_bounds(box.corners)
-        aspect_ratio_reciprocal = height / width
+        aspect_ratio_reciprocal = height / width if width > 0 else np.nan
         standard_ratios = np.array(app_settings.standard_aspect_ratios)
         if (
             np.min(np.abs(aspect_ratio_reciprocal * standard_ratios - 1))
@@ -104,7 +104,7 @@ def validate_bounding_box(box) -> list[ValidationIssue]:
                 ValidationIssue(
                     type="nonstandard_aspect",
                     severity=Severity.WARNING,
-                    message=f"Aspect ratio {width / height: .2f} is not a standard photo size; is the bounding box correct?",
+                    message=f"Aspect ratio {width / height if height > 0 else np.nan: .2f} is not a standard photo size; is the bounding box correct?",
                 )
             )
 
