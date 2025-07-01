@@ -305,6 +305,7 @@ def line_integral_vectorized(
     # Extract coordinates - shape (N,)
     x0, y0 = start_points[:, 0], start_points[:, 1]
     x1, y1 = end_points[:, 0], end_points[:, 1]
+    lengths = np.linalg.norm(end_points - start_points, axis=1)
 
     if x_spans_full_width:
         # Represent x as scalar for faster performance.
@@ -334,8 +335,8 @@ def line_integral_vectorized(
     # Zero out samples that were out of bounds
     sampled = np.where(mask, sampled, 0)
 
-    # Sum along the samples dimension to get integral for each line
-    results = np.sum(sampled, axis=1)
+    # Average along the samples dimension to get integral for each line
+    results = np.mean(sampled, axis=1) * lengths
 
     return results
 
