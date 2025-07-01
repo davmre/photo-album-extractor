@@ -12,9 +12,11 @@ from core.bounding_box import BoundingBox
 class BoundingBoxStorage:
     """Handles saving and loading bounding box data for images in a directory."""
 
-    def __init__(self, directory: str) -> None:
+    def __init__(
+        self, directory: str, json_file_name: str = ".photo_extractor_data.json"
+    ) -> None:
         self.directory = directory
-        self.data_file = os.path.join(directory, ".photo_extractor_data.json")
+        self.data_file = os.path.join(directory, json_file_name)
         self.data: dict[str, list[dict[str, Any]]] = self._load_data()
 
     def _load_data(self) -> dict[str, list[dict[str, Any]]]:
@@ -72,14 +74,18 @@ class BoundingBoxStorage:
     ) -> bool:
         """Update complete bounding box data for a specific box."""
         if image_filename not in self.data:
-            return False
+            self.data[image_filename] = []
 
         updated_dict = bounding_box_data.to_dict()
 
+        box_exists = False
         for i, saved_box_data in enumerate(self.data[image_filename]):
             if saved_box_data.get("id") == bounding_box_data.box_id:
                 self.data[image_filename][i] = updated_dict
-                if save_data:
-                    self.save_data()
-                return True
-        return False
+                box_exists = True
+                break
+        if not box_exists:
+            self.data[image_filename].append(updated_dict)
+        if save_data:
+            self.save_data()
+        return True
