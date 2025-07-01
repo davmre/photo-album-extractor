@@ -2,17 +2,18 @@
 # To run:
 # python3 -m tests/test_refinement_on_real_scans
 
+import dataclasses
 import json
 import os
+from collections.abc import Sequence
 
 import numpy as np
 import PIL.Image as Image
 
 from core import geometry
-from photo_detection.refinement_strategies import (
-    REFINEMENT_STRATEGIES,
-    RefinementStrategy,
-)
+from core.bounding_box import BoundingBox
+from core.bounding_box_storage import BoundingBoxStorage
+from core.refinement_strategies import REFINEMENT_STRATEGIES, RefinementStrategy
 
 # Utility to evaluate refinement strategies by comparing results to gold boxes
 # on real scanned album pages.
@@ -32,46 +33,46 @@ def load_json(file_name):
         return json.load(f)
 
 
-GOLD_DATA = load_json(os.path.join(REFINEMENT_TEST_DATA_DIR, "gold_boxes.json"))
-INIT_DATA = load_json(os.path.join(REFINEMENT_TEST_DATA_DIR, "init_boxes.json"))
-
-
-def get_matched_corner_deviations(rect, gold_rects):
+def get_matched_corner_deviations(rect: np.ndarray, gold_boxes: Sequence[BoundingBox]):
     deviations = np.array(
-        [geometry.get_corner_deviations(rect, gold) for gold in gold_rects]
+        [geometry.get_corner_deviations(rect, gold.corners) for gold in gold_boxes]
     )
     best_avg_match_idx = np.argmin(np.mean(deviations, axis=-1))
     return deviations[best_avg_match_idx]
 
 
 class ImageWithBoxes:
-    def __init__(self, file_name):
+    def __init__(self, file_name, storage_objects: dict[str, BoundingBoxStorage]):
         self.file_name = file_name
         self.image = Image.open(os.path.join(REFINEMENT_TEST_DATA_DIR, file_name))
-        self.gold_boxes = np.array(
-            [box_data["corners"] for box_data in GOLD_DATA[file_name]]
-        )
-        self.init_boxes = np.array(
-            [box_data["corners"] for box_data in INIT_DATA[file_name]]
-        )
-        self.refined_boxes = {}
+
+        self.storage_objects = storage_objects
+        self.gold_boxes = storage_objects["gold"].get_bounding_boxes(file_name)
+        self.init_boxes = storage_objects["init"].get_bounding_boxes(file_name)
+
+        self.refined_corners = {}
         self.corner_deviations = {}
 
     def refine_all_boxes(self, refine_strategy: RefinementStrategy):
         refined_boxes = []
         for box in self.init_boxes:
-            refined = refine_strategy.refine(self.image, box, debug_dir=None)
+            refined = refine_strategy.refine(self.image, box.corners, debug_dir=None)
             refined_boxes.append(refined)
-        self.refined_boxes[refine_strategy.name] = refined_boxes
+            self.storage_objects[refine_strategy.name].update_box_data(
+                self.file_name,
+                dataclasses.replace(box, corners=refined),
+                save_data=True,
+            )
+        self.refined_corners[refine_strategy.name] = refined_boxes
 
     def score_refinements(self):
-        for strategy in self.refined_boxes.keys():
+        for strategy_name in self.refined_corners.keys():
             corner_deviations = []
-            for box in self.refined_boxes[strategy]:
+            for corners in self.refined_corners[strategy_name]:
                 corner_deviations.append(
-                    get_matched_corner_deviations(box, self.gold_boxes)
+                    get_matched_corner_deviations(corners, self.gold_boxes)
                 )
-            self.corner_deviations[strategy] = corner_deviations
+            self.corner_deviations[strategy_name] = corner_deviations
 
     def dump_debug_images_for_failures(
         self,
@@ -81,12 +82,12 @@ class ImageWithBoxes:
         allowed_max_deviation=3,
     ):
         strategy_names = (
-            [refine_strategy] if refine_strategy else self.refined_boxes.keys()
+            [refine_strategy] if refine_strategy else self.refined_corners.keys()
         )
         for strategy_name in strategy_names:
             strategy = REFINEMENT_STRATEGIES[strategy_name]
-            for i in range(len(self.corner_deviations[strategy])):
-                box_deviations = self.corner_deviations[strategy][i]
+            for i in range(len(self.corner_deviations[strategy_name])):
+                box_deviations = self.corner_deviations[strategy_name][i]
                 if (
                     np.max(box_deviations) > allowed_max_deviation
                     or np.mean(box_deviations) > allowed_average_deviation
@@ -94,11 +95,17 @@ class ImageWithBoxes:
                     # Rerun refinement to dump debugging info
                     strategy.refine(
                         self.image,
-                        self.init_boxes[i],
+                        self.init_boxes[i].corners,
                         debug_dir=os.path.join(
-                            debug_dir, self.file_name, f"box_{i}", strategy.name
+                            debug_dir,
+                            self.file_name,
+                            f"{sanitize_filename(strategy_name)}_box_{i}",
                         ),
                     )
+
+
+def sanitize_filename(s):
+    return s.lower().replace("(", "").replace(")", "").replace(" ", "_")
 
 
 def main():
@@ -112,8 +119,18 @@ def main():
 
     corner_deviations = {s.name: [] for s in strategies}
 
+    storage_objects = {
+        s: BoundingBoxStorage(
+            REFINEMENT_TEST_DATA_DIR,
+            json_file_name=f"{sanitize_filename(s)}_boxes.json",
+        )
+        for s in list(REFINEMENT_STRATEGIES.keys()) + ["gold", "init"]
+    }
+    for k, s in storage_objects.items():
+        print(f"{k}: data file {s.data_file}")
+
     for filename in test_image_filenames:
-        test_object = ImageWithBoxes(filename)
+        test_object = ImageWithBoxes(filename, storage_objects)
         for strategy in strategies:
             test_object.refine_all_boxes(strategy)
         test_object.score_refinements()
@@ -124,6 +141,10 @@ def main():
             print(
                 f"{filename} {strategy.name}: {test_object.corner_deviations[strategy.name]}"
             )
+        test_object.dump_debug_images_for_failures(
+            debug_dir=os.path.join(REFINEMENT_TEST_DATA_DIR, "debugging_dumps"),
+            refine_strategy="Strips (native res)",
+        )
 
     print("OVERALL RESULTS")
     for strategy in strategies:
