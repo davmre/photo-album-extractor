@@ -78,30 +78,35 @@ class ImageWithBoxes:
         self,
         debug_dir: str,
         refine_strategy=None,
-        allowed_average_deviation=2,
-        allowed_max_deviation=3,
+        allowed_average_deviation=2.0,
+        allowed_max_deviation=3.0,
+        box_idxs=None,
     ):
         strategy_names = (
             [refine_strategy] if refine_strategy else self.refined_corners.keys()
         )
         for strategy_name in strategy_names:
             strategy = REFINEMENT_STRATEGIES[strategy_name]
-            for i in range(len(self.corner_deviations[strategy_name])):
-                box_deviations = self.corner_deviations[strategy_name][i]
-                if (
-                    np.max(box_deviations) > allowed_max_deviation
-                    or np.mean(box_deviations) > allowed_average_deviation
-                ):
-                    # Rerun refinement to dump debugging info
-                    strategy.refine(
-                        self.image,
-                        self.init_boxes[i].corners,
-                        debug_dir=os.path.join(
-                            debug_dir,
-                            self.file_name,
-                            f"{sanitize_filename(strategy_name)}_box_{i}",
-                        ),
-                    )
+            if box_idxs is None:
+                box_idxs = []
+                for i in range(len(self.corner_deviations[strategy_name])):
+                    box_deviations = self.corner_deviations[strategy_name][i]
+                    if (
+                        np.max(box_deviations) > allowed_max_deviation
+                        or np.mean(box_deviations) > allowed_average_deviation
+                    ):
+                        box_idxs.append(i)
+            for i in box_idxs:
+                # Rerun refinement to dump debugging info
+                strategy.refine(
+                    self.image,
+                    self.init_boxes[i].corners,
+                    debug_dir=os.path.join(
+                        debug_dir,
+                        self.file_name,
+                        f"{sanitize_filename(strategy_name)}_box_{i}",
+                    ),
+                )
 
 
 def sanitize_filename(s):
@@ -117,6 +122,8 @@ def main():
         if os.path.splitext(name)[1] in (".png", ".jpg")
     ]
 
+    # test_image_filenames = ["2025-05-27-0010 small.jpg"]
+
     corner_deviations = {s.name: [] for s in strategies}
 
     storage_objects = {
@@ -131,6 +138,7 @@ def main():
 
     for filename in test_image_filenames:
         test_object = ImageWithBoxes(filename, storage_objects)
+
         for strategy in strategies:
             test_object.refine_all_boxes(strategy)
         test_object.score_refinements()
@@ -141,10 +149,13 @@ def main():
             print(
                 f"{filename} {strategy.name}: {test_object.corner_deviations[strategy.name]}"
             )
-        test_object.dump_debug_images_for_failures(
-            debug_dir=os.path.join(REFINEMENT_TEST_DATA_DIR, "debugging_dumps"),
-            refine_strategy="Strips (native res)",
-        )
+
+        # test_object.dump_debug_images_for_failures(
+        #    debug_dir=os.path.join(REFINEMENT_TEST_DATA_DIR, "debugging_dumps"),
+        #    refine_strategy="Hough transform (greedy)",
+        #    allowed_average_deviation=0.0,  # dump all
+        #    # refine_strategy="Strips (native res)",
+        # )
 
     print("OVERALL RESULTS")
     for strategy in strategies:

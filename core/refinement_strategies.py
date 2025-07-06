@@ -5,9 +5,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 from PIL import Image
 
-from core import geometry, refine_strips
+from core import geometry, refine_strips, refine_strips_hough
 from core.photo_types import QuadArray, UInt8Array
-from core.settings import AppSettings
+from core.settings import AppSettings, app_settings
 
 
 class RefinementStrategy(ABC):
@@ -41,15 +41,91 @@ class RefinementStrategyStrips(RefinementStrategy):
         self,
         image: Image.Image | UInt8Array,
         corner_points: QuadArray,
-        debug_dir: str | None,
+        reltol: float = 0.05,
+        debug_dir: str | None = None,
     ):
         return refine_strips.refine_bounding_box_strips(
             image,
             corner_points,
             enforce_parallel_sides=True,
             debug_dir=debug_dir,
-            reltol=0.05,
+            reltol=reltol,
         )
+
+
+class RefinementStrategyHoughGreedy(RefinementStrategy):
+    @property
+    def name(self):
+        return "Hough transform (greedy)"
+
+    def refine(
+        self,
+        image: Image.Image | UInt8Array,
+        corner_points: QuadArray,
+        reltol: float = 0.05,
+        debug_dir: str | None = None,
+    ):
+        print("refining with debug dir", debug_dir)
+        return refine_strips_hough.refine_strips_hough(
+            image,
+            corner_points,
+            debug_dir=debug_dir,
+            reltol=reltol,
+            candidate_aspect_ratios=app_settings.standard_aspect_ratios,
+        )
+
+
+class RefinementStrategyDoubleHoughGreedy(RefinementStrategy):
+    @property
+    def name(self):
+        return "Hough transform (greedy) repeated"
+
+    def refine(
+        self,
+        image: Image.Image | UInt8Array,
+        corner_points: QuadArray,
+        debug_dir: str | None,
+    ):
+        corner_points = refine_strips_hough.refine_strips_hough(
+            image,
+            corner_points,
+            debug_dir=debug_dir,
+            reltol=0.07,
+        )
+        corner_points = refine_strips_hough.refine_strips_hough(
+            image,
+            corner_points,
+            debug_dir=debug_dir,
+            reltol=0.04,
+        )
+        return corner_points
+
+
+class RefinementStrategyHoughStrips(RefinementStrategy):
+    @property
+    def name(self):
+        return "Hough then strips"
+
+    def refine(
+        self,
+        image: Image.Image | UInt8Array,
+        corner_points: QuadArray,
+        debug_dir: str | None,
+    ):
+        corner_points = refine_strips_hough.refine_strips_hough(
+            image,
+            corner_points,
+            debug_dir=debug_dir,
+            reltol=0.06,
+        )
+        corner_points = refine_strips.refine_bounding_box_strips(
+            image,
+            corner_points,
+            enforce_parallel_sides=True,
+            debug_dir=debug_dir,
+            reltol=0.04,
+        )
+        return corner_points
 
 
 class RefinementStrategyStripsIterated(RefinementStrategy):
@@ -83,6 +159,9 @@ class RefinementStrategyStripsIterated(RefinementStrategy):
 _REFINEMENT_STRATEGIES: list[RefinementStrategy] = [
     RefinementStrategyStrips(),
     RefinementStrategyStripsIterated(),
+    RefinementStrategyHoughGreedy(),
+    RefinementStrategyDoubleHoughGreedy(),
+    RefinementStrategyHoughStrips(),
 ]
 
 REFINEMENT_STRATEGIES: dict[str, RefinementStrategy] = {

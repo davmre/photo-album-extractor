@@ -8,15 +8,12 @@ import os
 import pathlib
 from typing import Callable
 
-import core.geometry as geometry
-import core.images as images
 import cv2
 import numpy as np
+from core import debug_plots, geometry, images
 from core.photo_types import (
-    AnyArray,
     BoundingBoxAny,
     FloatArray,
-    IntArray,
     QuadArray,
     UInt8Array,
     bounding_box_as_array,
@@ -24,50 +21,6 @@ from core.photo_types import (
 from PIL import Image
 
 LOGGER = logging.getLogger("logger")
-
-
-# Utils to save debugging images.
-
-
-def annotate_image(
-    img: AnyArray | Image.Image,
-    contours=None,
-    edges: list[IntArray] | tuple[IntArray, ...] | None = None,
-) -> AnyArray:
-    if isinstance(img, Image.Image):
-        img = np.array(img)
-    img = img.copy()
-    if contours:
-        cv2.drawContours(
-            img,
-            np.array(np.round(contours), dtype=int),  # type: ignore
-            -1,
-            (0, 0, 255),
-            1,  # type: ignore
-        )  # type: ignore
-    if edges:
-        colors = [
-            (255, 0, 0),
-            (0, 255, 0),
-            (0, 0, 255),
-            (255, 0, 255),
-            (255, 255, 0),
-            (0, 255, 255),
-        ]
-        for edge, color in zip(edges, colors):
-            cv2.line(img, (edge[0, 0], edge[0, 1]), (edge[1, 0], edge[1, 1]), color, 1)
-    return img
-
-
-def save_image(file_path: str, img: AnyArray | Image.Image) -> None:
-    if not isinstance(img, Image.Image):
-        img = Image.fromarray(img)
-    if img.mode == "F":
-        # PNG supports greyscale images with 8-bit int pixels.
-        img = img.convert("L")
-
-    img.save(file_path)
-    LOGGER.info(f"saved: {file_path}")
 
 
 # Strip-based edge detection implementation
@@ -286,7 +239,7 @@ def evaluate_edges_at_angle(strip, angle, strip_type, debug_dir=None):
     """Evaluate all possible edge positions at given angle in a strip."""
     if debug_dir is not None:
         debug_dir = os.path.join(debug_dir, "candidates")
-        pathlib.Path(debug_dir).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(debug_dir).expanduser().mkdir(parents=True, exist_ok=True)
 
     image = strip.edge_response
     step = 1.0
@@ -451,9 +404,11 @@ def get_edges_as_image_coordinates(edge_indices, strips, angle_offset, debug_dir
     if debug_dir:
         for name, strip in strips.items():
             edge = edges_strip[name]
-            save_image(
+            debug_plots.save_image(
                 os.path.join(debug_dir, f"edge_{name}.png"),
-                annotate_image(strip.edge_response, edges=[np.array(edge, dtype=int)]),
+                debug_plots.annotate_image(
+                    strip.edge_response, edges=[np.array(edge, dtype=int)]
+                ),
             )
 
     # Convert to image coordinates
@@ -527,8 +482,9 @@ def refine_bounding_box_strips(
     if debug_dir is not None:
         pathlib.Path(debug_dir).mkdir(parents=True, exist_ok=True)
         LOGGER.info(f"logging to debug dir {debug_dir}")
-        save_image(
-            os.path.join(debug_dir, "init.png"), annotate_image(image, [corner_points])
+        debug_plots.save_image(
+            os.path.join(debug_dir, "init.png"),
+            debug_plots.annotate_image(image, [corner_points]),
         )
 
     # Get minimum bounding rectangle
@@ -549,10 +505,10 @@ def refine_bounding_box_strips(
     # Save debug images if requested
     if debug_dir:
         for name, strip in strips.items():
-            save_image(
+            debug_plots.save_image(
                 os.path.join(debug_dir, f"strip_{name}.png"), strip.pixels[:, :, ::-1]
             )
-            save_image(
+            debug_plots.save_image(
                 os.path.join(debug_dir, f"edge_response_{name}.png"),
                 strip.edge_response,
             )
@@ -587,8 +543,9 @@ def refine_bounding_box_strips(
     corners = find_corner_intersections(best_edges)
     LOGGER.debug(f"returning refined corners {corners}")
     if debug_dir is not None:
-        save_image(
-            os.path.join(debug_dir, "result.png"), annotate_image(image, [corners])
+        debug_plots.save_image(
+            os.path.join(debug_dir, "result.png"),
+            debug_plots.annotate_image(image, [corners]),
         )
     return corners
 

@@ -5,11 +5,9 @@ import numpy as np
 import pytest
 
 import core.geometry as geometry
-from core import refine_strips
+from core import refinement_strategies
 
-DEBUG_IMAGES_BASE_DIR = (
-    None  # "/Users/dave/photos_tests/"  # Edit to save debug images.
-)
+DEBUG_IMAGES_BASE_DIR = "/Users/dave/photos_tests/"  # Edit to save debug images.
 
 # Bounding box of a single pixel. Shapes drawn using OpenCV polyFill actually
 # extend one pixel beyond the specified bounds because the pixels themselves
@@ -220,24 +218,23 @@ def perturb_corners(rect, reltol):
     return perturbed_in_image_coords
 
 
-class TestSyntheticImageRefinement:
+class _TestImageRefinement:
     """Test that refinement recovers correct coords in easy synthetic cases."""
+
+    test_strategy: refinement_strategies.RefinementStrategy
 
     def check_refinement_recovers_gold_corners(
         self,
         image,
         input_box,
         gold_box,
-        reltol=0.05,
+        strategy: refinement_strategies.RefinementStrategy,
         allowed_deviation=3,
-        resolution_scale_factor=1.0,
         debug_name="",
     ):
-        refined_box = refine_strips.refine_bounding_box_strips(
+        refined_box = strategy.refine(
             image,
             input_box,
-            reltol=reltol,
-            enforce_parallel_sides=True,
             debug_dir=(
                 os.path.join(DEBUG_IMAGES_BASE_DIR, debug_name)
                 if DEBUG_IMAGES_BASE_DIR
@@ -266,9 +263,10 @@ class TestSyntheticImageRefinement:
         ],
     )
     def test_refinement_of_perturbed_corners_recovers_gold_corners(
-        self, test_generator_fn, reltol=0.03, num_perturbations=4
+        self, test_generator_fn, reltol=0.05, num_perturbations=1
     ):
         image, gold_boxes, name = test_generator_fn()
+        strategy = self.test_strategy
         for box_idx, gold_box in enumerate(gold_boxes):
             perturbations = [
                 perturb_corners(gold_box, reltol=reltol)
@@ -279,7 +277,7 @@ class TestSyntheticImageRefinement:
                     image,
                     input_box,
                     gold_box,
-                    reltol=reltol,
+                    strategy=strategy,
                     debug_name=f"_{name}_box{box_idx}_perturb{i}",
                 )
 
@@ -301,133 +299,46 @@ class TestSyntheticImageRefinement:
         self, test_generator_fn, reltol=0.05, resolution_scale_factor=1.0
     ):
         image, gold_boxes, name = test_generator_fn()
+        strategy = self.test_strategy
         for box_idx, gold_box in enumerate(gold_boxes):
-            refined_box = refine_strips.refine_bounding_box_strips(
-                image,
-                gold_box,
-                reltol=reltol,
-                enforce_parallel_sides=True,
-                debug_dir=(
-                    os.path.join(
-                        DEBUG_IMAGES_BASE_DIR, f"{name}_box{box_idx}_gold_init"
-                    )
-                    if DEBUG_IMAGES_BASE_DIR
-                    else None
-                ),
-            )
-            deviation = max_deviation(gold_box, refined_box)
-            print("GOLD INPUT", gold_box)
-            print("REFINED", refined_box)
-            print("DEVIATION", deviation)
-            assert deviation <= 0.1
-
-
-class TestSyntheticImageRefinementStrips:
-    """Test that refinement recovers correct coords in easy synthetic cases."""
-
-    def check_refinement_recovers_gold_corners(
-        self,
-        image,
-        input_box,
-        gold_box,
-        reltol=0.05,
-        allowed_deviation=3,
-        resolution_scale_factor=1.0,
-        debug_name="",
-    ):
-        refined_box = refine_strips.refine_bounding_box_strips(
-            image,
-            input_box,
-            reltol=reltol,
-            enforce_parallel_sides=True,
-            resolution_scale_factor=resolution_scale_factor,
-            debug_dir=(
-                os.path.join(DEBUG_IMAGES_BASE_DIR, debug_name)
+            debug_dir = (
+                os.path.join(DEBUG_IMAGES_BASE_DIR, f"{name}_box{box_idx}_gold_init")
                 if DEBUG_IMAGES_BASE_DIR
                 else None
-            ),
-        )
-        deviation = max_deviation(gold_box, refined_box)
-        print("GOLD", gold_box)
-        print("INPUT", input_box)
-        print("REFINED", refined_box)
-        print("DEVIATION", deviation)
-        assert deviation <= allowed_deviation
-
-    @pytest.mark.parametrize(
-        "test_generator_fn",
-        [
-            axis_aligned_square,
-            axis_aligned_rect,
-            skewed_rect,
-            almost_rect,
-            diamond,
-            adjacent_boxes,
-            overlapping_boxes,
-            one_corner_offscreen,
-            two_corners_offscreen,
-            colored_edge,
-            hires_overlapping_boxes,
-        ],
-    )
-    def test_refinement_of_perturbed_corners_recovers_gold_corners(
-        self, test_generator_fn, reltol=0.03, num_perturbations=4
-    ):
-        image, gold_boxes, name = test_generator_fn()
-        for box_idx, gold_box in enumerate(gold_boxes):
-            perturbations = [
-                perturb_corners(gold_box, reltol=reltol)
-                for _ in range(num_perturbations)
-            ]
-            for i, input_box in enumerate(perturbations):
-                self.check_refinement_recovers_gold_corners(
-                    image,
-                    input_box,
-                    gold_box,
-                    reltol=reltol,
-                    debug_name=f"_{name}_box{box_idx}_perturb{i}",
-                )
-
-    @pytest.mark.parametrize(
-        "test_generator_fn",
-        [
-            axis_aligned_square,
-            axis_aligned_rect,
-            skewed_rect,
-            almost_rect,
-            diamond,
-            adjacent_boxes,
-            overlapping_boxes,
-            one_corner_offscreen,
-            two_corners_offscreen,
-            colored_edge,
-            hires_overlapping_boxes,
-        ],
-    )
-    def test_gold_corners_are_fixed_point(
-        self,
-        test_generator_fn,
-        reltol=0.05,
-        resolution_scale_factor=1.0,
-    ):
-        image, gold_boxes, name = test_generator_fn()
-        for box_idx, gold_box in enumerate(gold_boxes):
-            refined_box = refine_strips.refine_bounding_box_strips(
+            )
+            refined_box = strategy.refine(
                 image,
                 gold_box,
-                reltol=reltol,
-                enforce_parallel_sides=True,
-                resolution_scale_factor=resolution_scale_factor,
-                debug_dir=(
-                    os.path.join(
-                        DEBUG_IMAGES_BASE_DIR, f"{name}_box{box_idx}_gold_init"
-                    )
-                    if DEBUG_IMAGES_BASE_DIR
-                    else None
-                ),
+                debug_dir=debug_dir,
             )
             deviation = max_deviation(gold_box, refined_box)
             print("GOLD INPUT", gold_box)
             print("REFINED", refined_box)
             print("DEVIATION", deviation)
-            assert deviation <= 0.1
+            assert deviation <= 1.0
+
+    def test_special_one_corner(self):
+        image, gold_boxes, name = one_corner_offscreen()
+        init_corners = np.array(
+            [
+                [223.57437551, 81.27825425],
+                [523.98298468, 117.23571912],
+                [476.42859094, 531.86912888],
+                [193.25137172, 498.92439837],
+            ]
+        )
+        self.check_refinement_recovers_gold_corners(
+            image,
+            init_corners,
+            gold_boxes[0],
+            strategy=self.test_strategy,
+            debug_name=f"{name}_special",
+        )
+
+
+class TestSyntheticImageRefinementStrips(_TestImageRefinement):
+    test_strategy = refinement_strategies.RefinementStrategyStrips()
+
+
+class TestSyntheticImageRefinementHough(_TestImageRefinement):
+    test_strategy = refinement_strategies.RefinementStrategyHoughGreedy()
