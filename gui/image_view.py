@@ -287,6 +287,7 @@ class ImageView(QGraphicsView):
                 image_bgr, corner_coords, debug_dir=debug_dir
             )
             box.set_corners(refined_corners)
+            box.set_marked_as_good(False)
             box.keep_rectangular = geometry.is_rectangle(refined_corners)
 
         except Exception as e:
