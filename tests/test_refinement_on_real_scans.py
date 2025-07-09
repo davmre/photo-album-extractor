@@ -14,12 +14,10 @@ import PIL.Image as Image
 from core import geometry
 from core.bounding_box import BoundingBox
 from core.bounding_box_storage import BoundingBoxStorage
-from core.refinement_strategies import (
+from core.refinement_strategies import (  # RefinementStrategyHoughGreedy,; RefinementStrategyStrips,
     REFINEMENT_STRATEGIES,
     RefinementStrategy,
-    RefinementStrategyHoughGreedy,
     RefinementStrategyHoughReranked,
-    RefinementStrategyStrips,
 )
 
 # Utility to evaluate refinement strategies by comparing results to gold boxes
@@ -128,8 +126,6 @@ def sanitize_filename(s):
 
 def main():
     strategies = [
-        RefinementStrategyStrips(),
-        RefinementStrategyHoughGreedy(),
         RefinementStrategyHoughReranked(),
     ]  # REFINEMENT_STRATEGIES.values()
 
