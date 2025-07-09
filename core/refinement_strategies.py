@@ -53,108 +53,6 @@ class RefinementStrategyStrips(RefinementStrategy):
         )
 
 
-class RefinementStrategyHoughGreedy(RefinementStrategy):
-    @property
-    def name(self):
-        return "Hough transform (greedy)"
-
-    def refine(
-        self,
-        image: Image.Image | UInt8Array,
-        corner_points: QuadArray,
-        reltol: float = 0.05,
-        debug_dir: str | None = None,
-    ):
-        print("refining with debug dir", debug_dir)
-        return refine_strips_hough.refine_strips_hough(
-            image,
-            corner_points,
-            debug_dir=debug_dir,
-            reltol=reltol,
-            candidate_aspect_ratios=app_settings.standard_aspect_ratios,
-            max_candidate_angles=1,
-            max_candidate_intercepts_per_angle=1,
-        )
-
-
-class RefinementStrategyHoughReranked(RefinementStrategy):
-    @property
-    def name(self):
-        return "Hough transform (reranked)"
-
-    def refine(
-        self,
-        image: Image.Image | UInt8Array,
-        corner_points: QuadArray,
-        reltol: float = 0.05,
-        debug_dir: str | None = None,
-    ):
-        print("refining with debug dir", debug_dir)
-        return refine_strips_hough.refine_strips_hough(
-            image,
-            corner_points,
-            debug_dir=debug_dir,
-            reltol=reltol,
-            max_candidate_angles=3,
-            max_candidate_intercepts_per_angle=2,
-            aspect_preference_strength=0.05,
-            candidate_aspect_ratios=app_settings.standard_aspect_ratios,
-        )
-
-
-class RefinementStrategyDoubleHoughGreedy(RefinementStrategy):
-    @property
-    def name(self):
-        return "Hough transform (greedy) repeated"
-
-    def refine(
-        self,
-        image: Image.Image | UInt8Array,
-        corner_points: QuadArray,
-        debug_dir: str | None,
-    ):
-        corner_points = refine_strips_hough.refine_strips_hough(
-            image,
-            corner_points,
-            debug_dir=debug_dir,
-            reltol=0.07,
-        )
-        corner_points = refine_strips_hough.refine_strips_hough(
-            image,
-            corner_points,
-            debug_dir=debug_dir,
-            reltol=0.04,
-        )
-        return corner_points
-
-
-class RefinementStrategyHoughStrips(RefinementStrategy):
-    @property
-    def name(self):
-        return "Hough then strips"
-
-    def refine(
-        self,
-        image: Image.Image | UInt8Array,
-        corner_points: QuadArray,
-        debug_dir: str | None,
-    ):
-        corner_points = refine_strips_hough.refine_strips_hough(
-            image,
-            corner_points,
-            debug_dir=debug_dir,
-            reltol=0.06,
-        )
-        corner_points = refine_strips.refine_bounding_box_strips(
-            image,
-            corner_points,
-            enforce_parallel_sides=True,
-            debug_dir=debug_dir,
-            reltol=0.04,
-        )
-        return corner_points
-
-
 class RefinementStrategyStripsIterated(RefinementStrategy):
     def __init__(self, max_iterations=4, atol=2.0):
         self.max_iterations = max_iterations
@@ -183,13 +81,61 @@ class RefinementStrategyStripsIterated(RefinementStrategy):
         return new_corner_points
 
 
+class RefinementStrategyHoughReranked(RefinementStrategy):
+    @property
+    def name(self):
+        return "Hough transform (reranked)"
+
+    def refine(
+        self,
+        image: Image.Image | UInt8Array,
+        corner_points: QuadArray,
+        reltol: float = 0.05,
+        debug_dir: str | None = None,
+    ):
+        print("refining with Hough and debug dir", debug_dir)
+        return refine_strips_hough.refine_strips_hough(
+            image,
+            corner_points,
+            debug_dir=debug_dir,
+            reltol=reltol,
+            max_candidate_angles=2,
+            max_candidate_intercepts_per_angle=2,
+            aspect_preference_strength=0.1,
+            candidate_aspect_ratios=app_settings.standard_aspect_ratios,
+        )
+
+
+class RefinementStrategyHoughGreedy(RefinementStrategy):
+    @property
+    def name(self):
+        return "Hough transform (greedy)"
+
+    def refine(
+        self,
+        image: Image.Image | UInt8Array,
+        corner_points: QuadArray,
+        reltol: float = 0.05,
+        debug_dir: str | None = None,
+    ):
+        print("refining with Hough greedy and debug dir", debug_dir)
+        return refine_strips_hough.refine_strips_hough(
+            image,
+            corner_points,
+            debug_dir=debug_dir,
+            reltol=reltol,
+            max_candidate_angles=1,
+            max_candidate_intercepts_per_angle=1,
+            aspect_preference_strength=0.05,
+            candidate_aspect_ratios=app_settings.standard_aspect_ratios,
+        )
+
+
 _REFINEMENT_STRATEGIES: list[RefinementStrategy] = [
     RefinementStrategyStrips(),
     RefinementStrategyStripsIterated(),
     RefinementStrategyHoughGreedy(),
     RefinementStrategyHoughReranked(),
-    RefinementStrategyDoubleHoughGreedy(),
-    RefinementStrategyHoughStrips(),
 ]
 
 REFINEMENT_STRATEGIES: dict[str, RefinementStrategy] = {

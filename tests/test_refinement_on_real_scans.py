@@ -17,6 +17,7 @@ from core.bounding_box_storage import BoundingBoxStorage
 from core.refinement_strategies import (  # RefinementStrategyHoughGreedy,; RefinementStrategyStrips,
     REFINEMENT_STRATEGIES,
     RefinementStrategy,
+    RefinementStrategyHoughGreedy,
     RefinementStrategyHoughReranked,
 )
 
@@ -127,6 +128,7 @@ def sanitize_filename(s):
 def main():
     strategies = [
         RefinementStrategyHoughReranked(),
+        RefinementStrategyHoughGreedy(),
     ]  # REFINEMENT_STRATEGIES.values()
 
     test_image_filenames = [
