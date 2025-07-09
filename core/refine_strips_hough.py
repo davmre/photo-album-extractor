@@ -58,9 +58,9 @@ class StripData:
     intercept_scores: FloatArray
     intercept_bins: FloatArray
 
-    candidate_intercepts: Sequence[np.floating[Any]]
-    candidate_intercept_scores: Sequence[np.floating[Any]]
-    candidate_edges: Sequence[FloatArray]
+    candidate_intercepts: dict[float, Sequence[np.floating[Any]]]
+    candidate_intercept_scores: dict[float, Sequence[np.floating[Any]]]
+    candidate_edges: dict[float, Sequence[FloatArray]]
 
     def __init__(
         self,
@@ -77,6 +77,10 @@ class StripData:
         self.strip_to_image = strip_to_image_transform
         self.image_height = image_height
         self.image_width = image_width
+
+        self.candidate_edges = {}
+        self.candidate_intercepts = {}
+        self.candidate_intercept_scores = {}
 
 
 def snap_to(x, candidates):
@@ -443,6 +447,16 @@ def add_sampled_functions(xs, ys, kind="cubic"):
     return x_valid, y_sum
 
 
+def get_sorted_peak_indices(scores: FloatArray, max_num_peaks=2) -> IntArray:
+    peaks, extra = find_peaks(scores, prominence=np.max(scores) / 10.0)
+    if len(peaks) == 0:
+        return np.array([np.argmax(scores)])
+    else:
+        perm = np.argsort(extra["prominences"])
+        # Return peaks sorted by score in descending order.
+        return np.array(peaks)[perm][: -max_num_peaks - 1 : -1]
+
+
 def score_angles_in_strip(
     strip: StripData, debug_dir: str | None = None
 ) -> tuple[FloatArray, FloatArray]:
@@ -476,9 +490,11 @@ def score_angles_in_strip(
     return angles, angle_scores
 
 
-def find_best_overall_angle(
-    strips: dict[StripPosition, StripData], debug_dir: str | None = None
-) -> float:
+def find_best_overall_angles(
+    strips: dict[StripPosition, StripData],
+    debug_dir: str | None = None,
+    max_num_peaks=3,
+) -> list[float]:
     # Compute angle scores from each edge strip.
     strip_angles, strip_angle_scores = zip(
         *[
@@ -510,10 +526,14 @@ def find_best_overall_angle(
             overall_angle_scores,
             f"overall angle peaks {[np.degrees(a) for a in angle_peaks]}",
         )
-    best_idx = np.argmax(overall_angle_scores)
-    best_angle = combined_angles[best_idx]
-    print("best angle", np.degrees(best_angle))
-    return best_angle - np.pi / 2
+
+    best_idxs = get_sorted_peak_indices(
+        overall_angle_scores, max_num_peaks=max_num_peaks
+    )
+    # best_idx = np.argmax(overall_angle_scores)
+    best_angles = [combined_angles[int(idx)] for idx in best_idxs]
+    print("best angle", [np.degrees(a) for a in best_angles])
+    return [a - (np.pi / 2) for a in best_angles]
 
 
 def line_from_points(y1: float, x1: float, y2: float, x2: float):
@@ -648,16 +668,6 @@ def intercept_of_line_touching_image_edge(
     )
 
 
-def get_sorted_peak_indices(scores: FloatArray, max_num_peaks=2) -> IntArray:
-    peaks, extra = find_peaks(scores, prominence=np.max(scores) / 10.0)
-    if len(peaks) == 0:
-        return np.array([np.argmax(scores)])
-    else:
-        perm = np.argsort(extra["prominences"])
-        # Return peaks sorted by score in descending order.
-        return np.array(peaks)[perm][: -max_num_peaks - 1 : -1]
-
-
 def intercept_to_image_points(
     strip: StripData, slope: float, intercept: float
 ) -> FloatArray:
@@ -674,7 +684,10 @@ def intercept_to_image_points(
 
 
 def get_candidate_edges(
-    strips: dict[StripPosition, StripData], candidate_angle, debug_dir=None
+    strips: dict[StripPosition, StripData],
+    candidate_angle,
+    max_num_peaks: int = 1,
+    debug_dir=None,
 ):
     slope = np.tan(candidate_angle)
     print("candidate angle", candidate_angle, "slope", slope)
@@ -703,28 +716,104 @@ def get_candidate_edges(
 
     # For each strip, identify the most prominent candidate edges.
     for position, strip in strips.items():
-        peak_indices = get_sorted_peak_indices(strip.intercept_scores)
+        peak_indices = get_sorted_peak_indices(
+            strip.intercept_scores, max_num_peaks=max_num_peaks
+        )
         peak_indices = [int(i) for i in peak_indices]  # Make the type checker happy.
-        strip.candidate_intercepts = [strip.intercept_bins[i] for i in peak_indices]
-        strip.candidate_intercept_scores = [
+        strip.candidate_intercepts[candidate_angle] = [
+            strip.intercept_bins[i] for i in peak_indices
+        ]
+        strip.candidate_intercept_scores[candidate_angle] = [
             strip.intercept_scores[i] for i in peak_indices
         ]
         print(
-            f"{position}: candidate intercepts {strip.candidate_intercepts} with scores {strip.candidate_intercept_scores}"
+            f"angle {np.degrees(candidate_angle): .2f} {position}: candidate intercepts {strip.candidate_intercepts} with scores {strip.candidate_intercept_scores}"
         )
 
         if debug_dir:
             debug_plots.save_histogram(
-                os.path.join(debug_dir, f"intercepts_{position.value}.png"),
+                os.path.join(
+                    debug_dir,
+                    f"intercepts_at_{np.degrees(candidate_angle): .2f}_{position.value}.png",
+                ),
                 strip.intercept_bins,
                 strip.intercept_scores,
-                f"{position.value} intercepts {strip.candidate_intercepts}",
+                f"{position.value} intercepts at {np.degrees(candidate_angle): .2f} {strip.candidate_intercepts[candidate_angle]}",
             )
 
-        strip.candidate_edges = [
-            intercept_to_image_points(strip, slope=slope, intercept=intercept)
-            for intercept in strip.candidate_intercepts
+        strip.candidate_edges[candidate_angle] = [
+            intercept_to_image_points(strip, slope=slope, intercept=float(intercept))
+            for intercept in strip.candidate_intercepts[candidate_angle]
         ]
+
+
+def enumerate_hypotheses(strips: dict[StripPosition, StripData]):
+    angles = strips[StripPosition.TOP].candidate_intercepts.keys()
+    for angle in angles:
+        for top_idx in range(
+            len(strips[StripPosition.TOP].candidate_intercepts[angle])
+        ):
+            for bottom_idx in range(
+                len(strips[StripPosition.BOTTOM].candidate_intercepts[angle])
+            ):
+                for left_idx in range(
+                    len(strips[StripPosition.LEFT].candidate_intercepts[angle])
+                ):
+                    for right_idx in range(
+                        len(strips[StripPosition.RIGHT].candidate_intercepts[angle])
+                    ):
+                        edges = {
+                            StripPosition.TOP: strips[
+                                StripPosition.TOP
+                            ].candidate_edges[angle][top_idx],
+                            StripPosition.BOTTOM: strips[
+                                StripPosition.BOTTOM
+                            ].candidate_edges[angle][bottom_idx],
+                            StripPosition.LEFT: strips[
+                                StripPosition.LEFT
+                            ].candidate_edges[angle][left_idx],
+                            StripPosition.RIGHT: strips[
+                                StripPosition.RIGHT
+                            ].candidate_edges[angle][right_idx],
+                        }
+                        scores = [
+                            strips[StripPosition.TOP].candidate_intercept_scores[angle][
+                                top_idx
+                            ],
+                            strips[StripPosition.BOTTOM].candidate_intercept_scores[
+                                angle
+                            ][bottom_idx],
+                            strips[StripPosition.LEFT].candidate_intercept_scores[
+                                angle
+                            ][left_idx],
+                            strips[StripPosition.RIGHT].candidate_intercept_scores[
+                                angle
+                            ][right_idx],
+                        ]
+                        print(
+                            f"proposing hypothesis w angle {angle} idx {(top_idx, bottom_idx, left_idx, right_idx)} edge score {sum(scores)}"
+                        )
+                        yield edges, scores
+
+
+def score_aspect_ratio(
+    corners: QuadArray,
+    candidate_aspect_ratios,
+    aspect_preference_strength=1.0,
+    aspect_rtol=0.025,
+):
+    width, height = geometry.dimension_bounds(corners)
+    aspect = max(width, height) / min(width, height)
+    print(f"scoring aspect {aspect: .3f}")
+    score = 0.0
+    for candidate_aspect in candidate_aspect_ratios:
+        relative_aspect = aspect / candidate_aspect
+        aspect_error = abs(relative_aspect - 1.0)
+        if aspect_error > aspect_rtol:
+            continue
+        score += aspect_preference_strength * (1 - (aspect_error / aspect_rtol) ** 2)
+        print(f"   matches candidate {candidate_aspect: .3f}! score boost {score}")
+    return score
 
 
 def refine_strips_hough(
@@ -732,6 +821,9 @@ def refine_strips_hough(
     corner_points,
     reltol=0.05,
     debug_dir=None,
+    max_candidate_angles=2,
+    max_candidate_intercepts_per_angle=2,
+    aspect_preference_strength: float = 0.1,
     candidate_aspect_ratios: list[float] | None = None,
 ):
     if debug_dir is not None:
@@ -775,27 +867,55 @@ def refine_strips_hough(
                 strip.edge_weights * 255.0,
             )
 
-    best_angle = find_best_overall_angle(strips, debug_dir=debug_dir)
-    get_candidate_edges(
-        strips,
-        candidate_angle=best_angle,
-        debug_dir=debug_dir,
+    best_angles = find_best_overall_angles(
+        strips, debug_dir=debug_dir, max_num_peaks=max_candidate_angles
     )
+    for candidate_angle in best_angles:
+        get_candidate_edges(
+            strips,
+            candidate_angle=candidate_angle,
+            debug_dir=debug_dir,
+            max_num_peaks=max_candidate_intercepts_per_angle,
+        )
+
+    best_score = 0.0
+    best_edges = None
+    best_corners = None
+    total_border_pixels = sum(
+        [
+            strip.pixels.shape[1 if strip.position.is_horizontal else 0]
+            for strip in strips.values()
+        ]
+    )
+    for edges, edge_scores in enumerate_hypotheses(strips):
+        corners = refine_strips.find_corner_intersections(
+            {p.value: e for (p, e) in edges.items()}
+        )
+        edge_score = sum(edge_scores)
+        aspect_score = score_aspect_ratio(
+            corners,
+            candidate_aspect_ratios,
+            # TODO calibrate preference strength vs edge scores / pixel resolution.
+            aspect_preference_strength=aspect_preference_strength * total_border_pixels,
+        )
+        score = edge_score + aspect_score
+        if score > best_score:
+            best_score = score
+            best_edges = edges
+            best_corners = corners
+
+    if best_edges is None or best_corners is None:
+        raise ValueError("no hypotheses had positive score!!")  # should never happen.
 
     if debug_dir:
         for position, strip in strips.items():
-            strip_edge = strip.image_to_strip(strip.candidate_edges[0])
+            strip_edge = strip.image_to_strip(best_edges[position])
             debug_plots.save_image(
                 os.path.join(debug_dir, f"edge_{position.value}.png"),
                 debug_plots.annotate_image(
                     strip.pixels, edges=[np.round(strip_edge).astype(int)]
                 ),
             )
-
-    best_edges = {
-        position.value: strip.candidate_edges[0] for (position, strip) in strips.items()
-    }
-    best_corners = refine_strips.find_corner_intersections(best_edges)
 
     if debug_dir is not None:
         debug_plots.save_image(

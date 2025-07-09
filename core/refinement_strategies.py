@@ -72,6 +72,33 @@ class RefinementStrategyHoughGreedy(RefinementStrategy):
             debug_dir=debug_dir,
             reltol=reltol,
             candidate_aspect_ratios=app_settings.standard_aspect_ratios,
+            max_candidate_angles=1,
+            max_candidate_intercepts_per_angle=1,
+        )
+
+
+class RefinementStrategyHoughReranked(RefinementStrategy):
+    @property
+    def name(self):
+        return "Hough transform (reranked)"
+
+    def refine(
+        self,
+        image: Image.Image | UInt8Array,
+        corner_points: QuadArray,
+        reltol: float = 0.05,
+        debug_dir: str | None = None,
+    ):
+        print("refining with debug dir", debug_dir)
+        return refine_strips_hough.refine_strips_hough(
+            image,
+            corner_points,
+            debug_dir=debug_dir,
+            reltol=reltol,
+            max_candidate_angles=3,
+            max_candidate_intercepts_per_angle=2,
+            aspect_preference_strength=0.05,
+            candidate_aspect_ratios=app_settings.standard_aspect_ratios,
         )
 
 
@@ -160,6 +187,7 @@ _REFINEMENT_STRATEGIES: list[RefinementStrategy] = [
     RefinementStrategyStrips(),
     RefinementStrategyStripsIterated(),
     RefinementStrategyHoughGreedy(),
+    RefinementStrategyHoughReranked(),
     RefinementStrategyDoubleHoughGreedy(),
     RefinementStrategyHoughStrips(),
 ]

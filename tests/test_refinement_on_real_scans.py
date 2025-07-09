@@ -5,6 +5,7 @@
 import dataclasses
 import json
 import os
+import time
 from collections.abc import Sequence
 
 import numpy as np
@@ -13,7 +14,13 @@ import PIL.Image as Image
 from core import geometry
 from core.bounding_box import BoundingBox
 from core.bounding_box_storage import BoundingBoxStorage
-from core.refinement_strategies import REFINEMENT_STRATEGIES, RefinementStrategy
+from core.refinement_strategies import (
+    REFINEMENT_STRATEGIES,
+    RefinementStrategy,
+    RefinementStrategyHoughGreedy,
+    RefinementStrategyHoughReranked,
+    RefinementStrategyStrips,
+)
 
 # Utility to evaluate refinement strategies by comparing results to gold boxes
 # on real scanned album pages.
@@ -52,18 +59,24 @@ class ImageWithBoxes:
 
         self.refined_corners = {}
         self.corner_deviations = {}
+        self.times = {}
 
     def refine_all_boxes(self, refine_strategy: RefinementStrategy):
         refined_boxes = []
+        times = []
         for box in self.init_boxes:
+            t0 = time.time()
             refined = refine_strategy.refine(self.image, box.corners, debug_dir=None)
+            t1 = time.time()
             refined_boxes.append(refined)
+            times.append(t1 - t0)
             self.storage_objects[refine_strategy.name].update_box_data(
                 self.file_name,
                 dataclasses.replace(box, corners=refined),
                 save_data=True,
             )
         self.refined_corners[refine_strategy.name] = refined_boxes
+        self.times[refine_strategy.name] = times
 
     def score_refinements(self):
         for strategy_name in self.refined_corners.keys():
@@ -114,7 +127,11 @@ def sanitize_filename(s):
 
 
 def main():
-    strategies = REFINEMENT_STRATEGIES.values()
+    strategies = [
+        RefinementStrategyStrips(),
+        RefinementStrategyHoughGreedy(),
+        RefinementStrategyHoughReranked(),
+    ]  # REFINEMENT_STRATEGIES.values()
 
     test_image_filenames = [
         name
@@ -125,6 +142,7 @@ def main():
     # test_image_filenames = ["2025-05-27-0010 small.jpg"]
 
     corner_deviations = {s.name: [] for s in strategies}
+    times = {s.name: [] for s in strategies}
 
     storage_objects = {
         s: BoundingBoxStorage(
@@ -146,6 +164,7 @@ def main():
             corner_deviations[strategy.name].extend(
                 test_object.corner_deviations[strategy.name]
             )
+            times[strategy.name].extend(test_object.times[strategy.name])
             print(
                 f"{filename} {strategy.name}: {test_object.corner_deviations[strategy.name]}"
             )
@@ -153,7 +172,7 @@ def main():
         # test_object.dump_debug_images_for_failures(
         #    debug_dir=os.path.join(REFINEMENT_TEST_DATA_DIR, "debugging_dumps"),
         #    refine_strategy="Hough transform (greedy)",
-        #    allowed_average_deviation=0.0,  # dump all
+        #    allowed_average_deviation=4.0,
         #    # refine_strategy="Strips (native res)",
         # )
 
@@ -162,9 +181,12 @@ def main():
         avg_case = np.mean(corner_deviations[strategy.name])
         worst_case = np.max(corner_deviations[strategy.name])
         median = np.median(corner_deviations[strategy.name])
+        avg_time = np.mean(times[strategy.name])
+        stddev_time = np.std(times[strategy.name])
         print(
-            f"{strategy}: median {median: .2f} avg {avg_case: .2f} worst {worst_case: .2f}"
+            f"{strategy.name}: median {median: .2f} avg {avg_case: .2f} worst {worst_case: .2f}"
         )
+        print(f"  time: avg {avg_time} stddev {stddev_time}")
 
 
 if __name__ == "__main__":
