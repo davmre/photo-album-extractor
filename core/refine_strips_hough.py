@@ -147,73 +147,127 @@ def snap_to(x, candidates):
     return min(candidates, key=lambda c: abs(x - c))
 
 
-def calculate_strip_boundaries(
-    width: float,
-    height: float,
+def calculate_strip_bounds_unit_square(
+    position: StripPosition,
+    converter: geometry.PatchCoordinatesConverter,
+    rect_shape,
+    image_shape,
     reltol_x: float,
     reltol_y: float,
-    candidate_aspect_ratios: list[float] | None = None,
-) -> tuple[float, float, float, float]:
-    """Calculate the boundaries for border strips, including aspect ratio expansion.
+    candidate_aspect_ratios: Sequence[float] | None,
+):
+    del candidate_aspect_ratios  # Currently unused.
 
-    This function determines how far to extend the strips beyond the initial
-    rectangle boundaries. If candidate aspect ratios are provided, it expands
-    the strips to ensure they would capture edges at the expected ratios.
+    if position == StripPosition.TOP:
+        top_y = -reltol_y
+        bottom_y = reltol_y
+        left_x = -reltol_x
+        right_x = 1 + reltol_x
+    elif position == StripPosition.BOTTOM:
+        top_y = 1 - reltol_y
+        bottom_y = 1 + reltol_y
+        left_x = -reltol_x
+        right_x = 1 + reltol_x
+    elif position == StripPosition.LEFT:
+        top_y = -reltol_y
+        bottom_y = 1 + reltol_y
+        left_x = -reltol_x
+        right_x = reltol_x
+    elif position == StripPosition.RIGHT:
+        top_y = -reltol_y
+        bottom_y = 1 + reltol_y
+        left_x = 1 - reltol_x
+        right_x = 1 + reltol_x
 
-    The expansion logic accounts for portrait vs landscape orientation and
-    ensures the strips are wide enough to detect edges that might be positioned
-    differently if the photo has a different aspect ratio than initially estimated.
-
-    Args:
-        width: Rectangle width
-        height: Rectangle height
-        reltol_x: Relative tolerance in x direction
-        reltol_y: Relative tolerance in y direction
-        candidate_aspect_ratios: Optional list of expected aspect ratios
-
-    Returns:
-        Tuple of (strip_left_x, strip_right_x, strip_top_y, strip_bottom_y)
-        representing the strip boundaries in normalized coordinates
-    """
-    long = max(width, height)
-    short = min(width, height)
-    portrait = width < height
-    init_aspect_ratio = long / short
-
-    if candidate_aspect_ratios:
-        target_aspect_ratio = snap_to(init_aspect_ratio, candidate_aspect_ratios)
-        print(
-            f"expanding to include canddiate aspect ratio {target_aspect_ratio} (from {init_aspect_ratio})"
-        )
-    else:
-        target_aspect_ratio = init_aspect_ratio
-
-    # Calculate how much to expand strips for target aspect ratio
-    # If target is wider than current, expand horizontally (aspect_expansion_x > 0)
-    # If target is taller than current, expand vertically (aspect_expansion_y > 0)
-    aspect_expansion_x = target_aspect_ratio / init_aspect_ratio - 1.0
-    aspect_expansion_y = init_aspect_ratio / target_aspect_ratio - 1.0
-
-    # For portrait images, swap x and y expansions since long/short are flipped
-    if portrait:
-        aspect_expansion_x, aspect_expansion_y = aspect_expansion_y, aspect_expansion_x
-
-    # TODO: aspect ratio expansion is not just translated across top/bottom
-    # and left/right! we want to push up the top boundary of the top strip,
-    # and down the bottom boundary of the bottom strip.
-    # and generally it matters what sign aspect_expansion_x is
-    # 05-24-0008 top image is a test case
-    strip_boundary_left = min(-reltol_x, -reltol_x + aspect_expansion_x)
-    strip_boundary_right = max(reltol_x, reltol_x + aspect_expansion_x)
-    strip_boundary_top = min(-reltol_y, -reltol_y + aspect_expansion_y)
-    strip_boundary_bottom = max(reltol_y, reltol_y + aspect_expansion_y)
-
-    return (
-        strip_boundary_left,
-        strip_boundary_right,
-        strip_boundary_top,
-        strip_boundary_bottom,
+    initial_normalized_bounds = np.array(
+        [
+            [left_x, top_y],
+            [right_x, top_y],
+            [right_x, bottom_y],
+            [left_x, bottom_y],
+        ]
     )
+
+    image_height, image_width = image_shape
+    (img_top_left, img_top_right, img_bottom_right, img_bottom_left) = (
+        converter.image_to_unit_square(
+            np.array(
+                [
+                    [0.0, 0.0],
+                    [image_width - 1, 0.0],
+                    [image_width - 1.0, image_height - 1.0],
+                    [0.0, image_height - 1.0],
+                ]
+            )
+        )
+    )
+    xs = np.array([left_x, right_x])
+    ys = np.array([top_y, bottom_y])
+    offset = 0.01
+
+    top_edge_slope, top_edge_icept, top_edge_is_vertical = line_from_points(
+        y1=img_top_left[1], x1=img_top_left[0], y2=img_top_right[1], x2=img_top_right[0]
+    )
+    if not top_edge_is_vertical:
+        y_intercepts_at_bounds = top_edge_icept + xs * top_edge_slope
+        top_y = max(top_y, np.min(y_intercepts_at_bounds) - offset)
+    bottom_edge_slope, bottom_edge_icept, bottom_edge_is_vertical = line_from_points(
+        y1=img_bottom_left[1],
+        x1=img_bottom_left[0],
+        y2=img_bottom_right[1],
+        x2=img_bottom_right[0],
+    )
+    if not bottom_edge_is_vertical:
+        y_intercepts_at_bounds = bottom_edge_icept + xs * bottom_edge_slope
+        bottom_y = min(bottom_y, np.max(y_intercepts_at_bounds) + offset)
+    (
+        left_edge_transpose_slope,
+        left_edge_transpose_icept,
+        left_edge_transpose_is_vertical,
+    ) = line_from_points(
+        y1=img_top_left[0],
+        x1=img_top_left[1],
+        y2=img_bottom_left[0],
+        x2=img_bottom_left[1],
+    )
+    if not left_edge_transpose_is_vertical:
+        x_intercepts_at_bounds = (
+            left_edge_transpose_icept + ys * left_edge_transpose_slope
+        )
+        left_x = max(left_x, np.min(x_intercepts_at_bounds) - offset)
+    (
+        right_edge_transpose_slope,
+        right_edge_transpose_icept,
+        right_edge_transpose_is_vertical,
+    ) = line_from_points(
+        y1=img_top_right[0],
+        x1=img_top_right[1],
+        y2=img_bottom_right[0],
+        x2=img_bottom_right[1],
+    )
+    if not right_edge_transpose_is_vertical:
+        x_intercepts_at_bounds = (
+            right_edge_transpose_icept + ys * right_edge_transpose_slope
+        )
+        right_x = min(right_x, np.max(x_intercepts_at_bounds) + offset)
+
+    if left_x >= right_x or top_y >= bottom_y:
+        import pdb
+
+        pdb.set_trace()
+
+    normalized_bounds = np.array(
+        [
+            [left_x, top_y],
+            [right_x, top_y],
+            [right_x, bottom_y],
+            [left_x, bottom_y],
+        ]
+    )
+    if np.any(np.abs(normalized_bounds - initial_normalized_bounds) > 0.0001):
+        print("initial bounds", initial_normalized_bounds)
+        print("shrinking to bounds", normalized_bounds)
+    return normalized_bounds
 
 
 def create_strip_coordinate_transforms(
@@ -936,47 +990,22 @@ def extract_border_strips(
 
     reltol_x = max(reltol, min_image_pixels / width)
     reltol_y = max(reltol, min_image_pixels / height)
+    converter = geometry.PatchCoordinatesConverter(rect)
 
-    # Calculate strip boundaries with aspect ratio expansion
-    (
-        strip_boundary_left,
-        strip_boundary_right,
-        strip_boundary_top,
-        strip_boundary_bottom,
-    ) = calculate_strip_boundaries(
-        width, height, reltol_x, reltol_y, candidate_aspect_ratios
-    )
-
-    # Define normalized coordinates for each strip in the unit square
-    # Horizontal strips (top and bottom)
-    top_strip_normalized = np.array(
-        [
-            [0 - reltol_x, strip_boundary_top],
-            [1 + reltol_x, strip_boundary_top],
-            [1 + reltol_x, strip_boundary_bottom],
-            [0 - reltol_x, strip_boundary_bottom],
-        ]
-    )
-
-    # Vertical strips (left and right)
-    left_strip_normalized = np.array(
-        [
-            [strip_boundary_left, 0 - reltol_y],
-            [strip_boundary_right, 0 - reltol_y],
-            [strip_boundary_right, 1 + reltol_y],
-            [strip_boundary_left, 1 + reltol_y],
-        ]
-    )
-
-    strip_boundaries_unit_square = StripSet(
-        top=top_strip_normalized,
-        bottom=top_strip_normalized + np.array([0.0, 1.0]),
-        left=left_strip_normalized,
-        right=left_strip_normalized + np.array([1.0, 0.0]),
+    strip_boundaries_unit_square = map_strip_set(
+        functools.partial(
+            calculate_strip_bounds_unit_square,
+            converter=converter,
+            image_shape=(pil_image.height, pil_image.width),
+            rect_shape=(height, width),
+            reltol_x=reltol_x,
+            reltol_y=reltol_y,
+            candidate_aspect_ratios=candidate_aspect_ratios,
+        ),
+        STRIP_POSITIONS,
     )
 
     # Convert to image coordinates and extract each strip
-    converter = geometry.PatchCoordinatesConverter(rect)
 
     def create_strip(position: StripPosition, unit_square_boundary: FloatArray):
         # Convert normalized coords to image coords
@@ -1010,6 +1039,7 @@ def extract_border_strips(
             image_shape=(pil_image.height, pil_image.width),
             patch_shape=pixels_array.shape,
             image_to_patch_coords=image_to_strip_transform,
+            offset=-2,
         ).astype(pixels_array.dtype)
         edge_weights = detect_edges(position, pixels_array, strip_mask)
         if soft_boundaries:
