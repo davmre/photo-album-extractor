@@ -72,6 +72,28 @@ class Strip:
     image_width: int
 
 
+@dataclass
+class RectangleBounds:
+    top_y: float
+    bottom_y: float
+    left_x: float
+    right_x: float
+
+    def to_corners_array(self) -> QuadArray:
+        """Returns rectangle corners, ordered clockwise from top right."""
+        return np.array(
+            [
+                [self.left_x, self.top_y],
+                [self.right_x, self.top_y],
+                [self.right_x, self.bottom_y],
+                [self.left_x, self.bottom_y],
+            ]
+        )
+
+    def __iter__(self):
+        yield from (self.top_y, self.bottom_y, self.left_x, self.right_x)
+
+
 @dataclass(frozen=True)
 class AngleScores:
     """Immutable angle scoring results."""
@@ -147,70 +169,59 @@ def snap_to(x, candidates):
     return min(candidates, key=lambda c: abs(x - c))
 
 
-def calculate_strip_bounds_unit_square(
-    position: StripPosition,
-    converter: geometry.PatchCoordinatesConverter,
-    rect_shape,
-    image_shape,
-    reltol_x: float,
-    reltol_y: float,
-    candidate_aspect_ratios: Sequence[float] | None,
-):
-    del candidate_aspect_ratios  # Currently unused.
-
+def get_default_normalized_bounds_for_strip(
+    position: StripPosition, reltol_x: float, reltol_y: float
+) -> RectangleBounds:
     if position == StripPosition.TOP:
-        top_y = -reltol_y
-        bottom_y = reltol_y
-        left_x = -reltol_x
-        right_x = 1 + reltol_x
-    elif position == StripPosition.BOTTOM:
-        top_y = 1 - reltol_y
-        bottom_y = 1 + reltol_y
-        left_x = -reltol_x
-        right_x = 1 + reltol_x
-    elif position == StripPosition.LEFT:
-        top_y = -reltol_y
-        bottom_y = 1 + reltol_y
-        left_x = -reltol_x
-        right_x = reltol_x
-    elif position == StripPosition.RIGHT:
-        top_y = -reltol_y
-        bottom_y = 1 + reltol_y
-        left_x = 1 - reltol_x
-        right_x = 1 + reltol_x
-
-    initial_normalized_bounds = np.array(
-        [
-            [left_x, top_y],
-            [right_x, top_y],
-            [right_x, bottom_y],
-            [left_x, bottom_y],
-        ]
-    )
-
-    image_height, image_width = image_shape
-    (img_top_left, img_top_right, img_bottom_right, img_bottom_left) = (
-        converter.image_to_unit_square(
-            np.array(
-                [
-                    [0.0, 0.0],
-                    [image_width - 1, 0.0],
-                    [image_width - 1.0, image_height - 1.0],
-                    [0.0, image_height - 1.0],
-                ]
-            )
+        return RectangleBounds(
+            top_y=-reltol_y, bottom_y=reltol_y, left_x=-reltol_x, right_x=1 + reltol_x
         )
+    elif position == StripPosition.BOTTOM:
+        return RectangleBounds(
+            top_y=1 - reltol_y,
+            bottom_y=1 + reltol_y,
+            left_x=-reltol_x,
+            right_x=1 + reltol_x,
+        )
+    elif position == StripPosition.LEFT:
+        return RectangleBounds(
+            top_y=-reltol_y, bottom_y=1 + reltol_y, left_x=-reltol_x, right_x=reltol_x
+        )
+    elif position == StripPosition.RIGHT:
+        return RectangleBounds(
+            top_y=-reltol_y,
+            bottom_y=1 + reltol_y,
+            left_x=1 - reltol_x,
+            right_x=1 + reltol_x,
+        )
+
+
+def shrink_normalized_strip_bounds_to_image(
+    bounds: RectangleBounds,
+    image_rect_in_normalized_coords: FloatArray,
+    slack=0.01,
+) -> RectangleBounds:
+    top_y, bottom_y, left_x, right_x = bounds
+    (img_top_left, img_top_right, img_bottom_right, img_bottom_left) = (
+        image_rect_in_normalized_coords
     )
     xs = np.array([left_x, right_x])
     ys = np.array([top_y, bottom_y])
-    offset = 0.01
 
+    # For each of the four bounds, find where the relevant border of the image
+    # intersects the strip. For example, for the top bound, we find where the
+    # image top border crosses the strip at its left and right bounds.
+    # If *both* of these points are inside the strip (both intercepts are positive),
+    # then shrink the bound inwards until it contacts the first one (optionally
+    # minus some slack).
     top_edge_slope, top_edge_icept, top_edge_is_vertical = line_from_points(
         y1=img_top_left[1], x1=img_top_left[0], y2=img_top_right[1], x2=img_top_right[0]
     )
     if not top_edge_is_vertical:
         y_intercepts_at_bounds = top_edge_icept + xs * top_edge_slope
-        top_y = max(top_y, np.min(y_intercepts_at_bounds) - offset)
+        top_y = max(top_y, np.min(y_intercepts_at_bounds) - slack)
+
+    # Bottom bound
     bottom_edge_slope, bottom_edge_icept, bottom_edge_is_vertical = line_from_points(
         y1=img_bottom_left[1],
         x1=img_bottom_left[0],
@@ -219,7 +230,9 @@ def calculate_strip_bounds_unit_square(
     )
     if not bottom_edge_is_vertical:
         y_intercepts_at_bounds = bottom_edge_icept + xs * bottom_edge_slope
-        bottom_y = min(bottom_y, np.max(y_intercepts_at_bounds) + offset)
+        bottom_y = min(bottom_y, np.max(y_intercepts_at_bounds) + slack)
+
+    # Left bound
     (
         left_edge_transpose_slope,
         left_edge_transpose_icept,
@@ -234,7 +247,9 @@ def calculate_strip_bounds_unit_square(
         x_intercepts_at_bounds = (
             left_edge_transpose_icept + ys * left_edge_transpose_slope
         )
-        left_x = max(left_x, np.min(x_intercepts_at_bounds) - offset)
+        left_x = max(left_x, np.min(x_intercepts_at_bounds) - slack)
+
+    # Right bound
     (
         right_edge_transpose_slope,
         right_edge_transpose_icept,
@@ -249,25 +264,47 @@ def calculate_strip_bounds_unit_square(
         x_intercepts_at_bounds = (
             right_edge_transpose_icept + ys * right_edge_transpose_slope
         )
-        right_x = min(right_x, np.max(x_intercepts_at_bounds) + offset)
+        right_x = min(right_x, np.max(x_intercepts_at_bounds) + slack)
 
     if left_x >= right_x or top_y >= bottom_y:
-        import pdb
-
-        pdb.set_trace()
-
-    normalized_bounds = np.array(
-        [
-            [left_x, top_y],
-            [right_x, top_y],
-            [right_x, bottom_y],
-            [left_x, bottom_y],
-        ]
+        raise ValueError("Strip does not contact the image!")
+    return RectangleBounds(
+        top_y=float(top_y),
+        bottom_y=float(bottom_y),
+        left_x=float(left_x),
+        right_x=float(right_x),
     )
-    if np.any(np.abs(normalized_bounds - initial_normalized_bounds) > 0.0001):
-        print("initial bounds", initial_normalized_bounds)
-        print("shrinking to bounds", normalized_bounds)
-    return normalized_bounds
+
+
+def calculate_strip_bounds_unit_square(
+    position: StripPosition,
+    converter: geometry.PatchCoordinatesConverter,
+    rect_shape,
+    image_shape,
+    reltol_x: float,
+    reltol_y: float,
+    candidate_aspect_ratios: Sequence[float] | None,
+) -> RectangleBounds:
+    del candidate_aspect_ratios  # Currently unused.
+
+    initial_bounds = get_default_normalized_bounds_for_strip(
+        position, reltol_x, reltol_y
+    )
+    image_height, image_width = image_shape
+    bounds = shrink_normalized_strip_bounds_to_image(
+        initial_bounds,
+        image_rect_in_normalized_coords=converter.image_to_unit_square(
+            np.array(
+                [
+                    [0.0, 0.0],
+                    [image_width - 1, 0.0],
+                    [image_width - 1.0, image_height - 1.0],
+                    [0.0, image_height - 1.0],
+                ]
+            )
+        ),
+    )
+    return bounds
 
 
 def create_strip_coordinate_transforms(
@@ -1007,9 +1044,11 @@ def extract_border_strips(
 
     # Convert to image coordinates and extract each strip
 
-    def create_strip(position: StripPosition, unit_square_boundary: FloatArray):
+    def create_strip(position: StripPosition, unit_square_bounds: RectangleBounds):
         # Convert normalized coords to image coords
-        strip_corners_image = converter.unit_square_to_image(unit_square_boundary)
+        strip_corners_image = converter.unit_square_to_image(
+            unit_square_bounds.to_corners_array()
+        )
         strip_corners_image = np.round(strip_corners_image)
         width, height = geometry.dimension_bounds(strip_corners_image)
         strip_width = int(np.ceil(width * resolution_scale_factor))
