@@ -106,6 +106,32 @@ class RefinementStrategyHoughReranked(RefinementStrategy):
         )
 
 
+class RefinementStrategyHoughSoft(RefinementStrategy):
+    @property
+    def name(self):
+        return "Hough transform (soft reranked)"
+
+    def refine(
+        self,
+        image: Image.Image | UInt8Array,
+        corner_points: QuadArray,
+        reltol: float = 0.05,
+        debug_dir: str | None = None,
+    ):
+        print("refining with Hough and debug dir", debug_dir)
+        return refine_strips_hough.refine_strips_hough(
+            image,
+            corner_points,
+            debug_dir=debug_dir,
+            reltol=reltol,
+            soft_boundaries=True,
+            max_candidate_angles=2,
+            max_candidate_intercepts_per_angle=2,
+            aspect_preference_strength=0.1,
+            candidate_aspect_ratios=app_settings.standard_aspect_ratios,
+        )
+
+
 class RefinementStrategyHoughGreedy(RefinementStrategy):
     @property
     def name(self):
@@ -136,6 +162,7 @@ _REFINEMENT_STRATEGIES: list[RefinementStrategy] = [
     RefinementStrategyStripsIterated(),
     RefinementStrategyHoughGreedy(),
     RefinementStrategyHoughReranked(),
+    RefinementStrategyHoughSoft(),
 ]
 
 REFINEMENT_STRATEGIES: dict[str, RefinementStrategy] = {

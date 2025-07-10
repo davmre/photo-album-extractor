@@ -820,6 +820,75 @@ def score_aspect_ratio(
     return score
 
 
+def rescore_rects_with_edge_integral(
+    strips: StripSet[Strip], corner_points: FloatArray
+):
+    """Evaluates a list of candidate rectangles by total edge weight under their edges.
+
+    This should be similar to the sum of their intercept scores (which also sum edge
+    weights), but may be slightly more informative because
+    a) while the intercept scores integrated across the entire line, here we have
+       corner points, so we can integrate only over the line *segment* up to the
+       relevant corner, which is ultimately what matters for the rectangle.
+    b) ....
+
+    Args:
+      strips: set of edge strips with edge weights to integrate over
+      corner_points: array of size [num_candidates, 4, 2] containing candidate rectangle
+      corners [x, y] in image coordinates in clockwise
+      `[top_left, top_right, bottom_right, bottom_left]` order.
+
+    Returns:
+      integrals: array of size `[num_candidates, 4]` containing line integrals
+        over the relevant edge weights for the top, bottom, left, right edges
+        respectively.
+    """
+    top_edge_scores = geometry.line_integral_chunked(
+        image=strips.top.edge_weights,
+        start_points=strips.top.image_to_strip_transform(corner_points[:, 0, :]),
+        end_points=strips.top.image_to_strip_transform(corner_points[:, 1, :]),
+    )
+    right_edge_scores = geometry.line_integral_chunked(
+        image=strips.right.edge_weights,
+        start_points=strips.right.image_to_strip_transform(corner_points[:, 1, :]),
+        end_points=strips.right.image_to_strip_transform(corner_points[:, 2, :]),
+    )
+    bottom_edge_scores = geometry.line_integral_chunked(
+        image=strips.bottom.edge_weights,
+        start_points=strips.bottom.image_to_strip_transform(corner_points[:, 2, :]),
+        end_points=strips.bottom.image_to_strip_transform(corner_points[:, 3, :]),
+    )
+    left_edge_scores = geometry.line_integral_chunked(
+        image=strips.left.edge_weights,
+        start_points=strips.left.image_to_strip_transform(corner_points[:, 3, :]),
+        end_points=strips.left.image_to_strip_transform(corner_points[:, 0, :]),
+    )
+    return np.stack(
+        [top_edge_scores, bottom_edge_scores, left_edge_scores, right_edge_scores],
+        axis=-1,
+    )
+
+
+def get_soft_edge_prior(
+    initial_rect_in_patch_coords: QuadArray, position: StripPosition, patch_shape
+):
+    height, width = patch_shape
+    left_x, top_y = initial_rect_in_patch_coords[0, :]  # top left corner
+    right_x, bottom_y = initial_rect_in_patch_coords[2, :]  # bottom right corner
+    if position == StripPosition.TOP:
+        abs_offsets = np.abs(np.arange(height) - top_y)[..., np.newaxis]
+    elif position == StripPosition.BOTTOM:
+        abs_offsets = np.abs(np.arange(height) - bottom_y)[..., np.newaxis]
+    elif position == StripPosition.LEFT:
+        abs_offsets = np.abs(np.arange(width) - left_x)[np.newaxis, :]
+    elif position == StripPosition.RIGHT:
+        abs_offsets = np.abs(np.arange(width) - right_x)[np.newaxis, :]
+    # Weight the edges by a Gaussian prior.
+    stddev = np.max(abs_offsets) / 2.0
+    weights = np.exp(-0.5 * (abs_offsets / stddev) ** 2)
+    return weights
+
+
 # ===================================================================
 # CORE FUNCTIONS
 # ===================================================================
@@ -829,6 +898,7 @@ def extract_border_strips(
     image: Image.Image | UInt8Array,
     rect: QuadArray,
     reltol: float,
+    soft_boundaries: bool = False,
     resolution_scale_factor: float = DEFAULT_RESOLUTION_SCALE_FACTOR,
     min_image_pixels: int = MIN_IMAGE_PIXELS_DEFAULT,
     candidate_aspect_ratios: list[float] | None = None,
@@ -860,6 +930,9 @@ def extract_border_strips(
     # Ensure rect is sorted clockwise
     rect = geometry.sort_clockwise(rect)
     width, height = geometry.dimension_bounds(rect)
+
+    # if soft_boundaries:
+    #    reltol *= 2
 
     reltol_x = max(reltol, min_image_pixels / width)
     reltol_y = max(reltol, min_image_pixels / height)
@@ -905,7 +978,7 @@ def extract_border_strips(
     # Convert to image coordinates and extract each strip
     converter = geometry.PatchCoordinatesConverter(rect)
 
-    def create_strip(position, unit_square_boundary):
+    def create_strip(position: StripPosition, unit_square_boundary: FloatArray):
         # Convert normalized coords to image coords
         strip_corners_image = converter.unit_square_to_image(unit_square_boundary)
         strip_corners_image = np.round(strip_corners_image)
@@ -939,6 +1012,13 @@ def extract_border_strips(
             image_to_patch_coords=image_to_strip_transform,
         ).astype(pixels_array.dtype)
         edge_weights = detect_edges(position, pixels_array, strip_mask)
+        if soft_boundaries:
+            edge_scaling = get_soft_edge_prior(
+                initial_rect_in_patch_coords=image_to_strip_transform(rect),
+                position=position,
+                patch_shape=edge_weights.shape,
+            )
+            edge_weights *= edge_scaling
 
         return Strip(
             position=position,
@@ -1224,6 +1304,7 @@ def refine_strips_hough(
     image: Image.Image | np.ndarray,
     corner_points: QuadArray,
     reltol: float = 0.05,
+    soft_boundaries: bool = False,
     debug_dir: str | None = None,
     max_candidate_angles: int = 2,
     max_candidate_intercepts_per_angle: int = 2,
@@ -1280,6 +1361,7 @@ def refine_strips_hough(
         pil_image,
         rect,
         reltol=reltol,
+        soft_boundaries=soft_boundaries,
         resolution_scale_factor=DEFAULT_RESOLUTION_SCALE_FACTOR,
         candidate_aspect_ratios=candidate_aspect_ratios,
         debug_dir=debug_dir,

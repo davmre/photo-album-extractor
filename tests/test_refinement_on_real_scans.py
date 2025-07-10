@@ -19,6 +19,7 @@ from core.refinement_strategies import (  # RefinementStrategyHoughGreedy,; Refi
     RefinementStrategy,
     RefinementStrategyHoughGreedy,
     RefinementStrategyHoughReranked,
+    RefinementStrategyHoughSoft,
 )
 
 # Utility to evaluate refinement strategies by comparing results to gold boxes
@@ -129,6 +130,7 @@ def main():
     strategies = [
         RefinementStrategyHoughReranked(),
         RefinementStrategyHoughGreedy(),
+        RefinementStrategyHoughSoft(),
     ]  # REFINEMENT_STRATEGIES.values()
 
     test_image_filenames = [
