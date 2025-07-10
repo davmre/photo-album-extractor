@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import pathlib
@@ -57,11 +58,6 @@ class StripPosition(Enum):
         return self.value in ("top", "bottom")
 
 
-# ===================================================================
-# NEW FUNCTIONAL DATA STRUCTURES
-# ===================================================================
-
-
 @dataclass(frozen=True)
 class Strip:
     """Immutable basic strip information."""
@@ -70,16 +66,10 @@ class Strip:
     pixels: UInt8Array
     image_to_strip_transform: Callable[[FloatArray], FloatArray]
     strip_to_image_transform: Callable[[FloatArray], FloatArray]
-    image_height: int
-    image_width: int
-
-
-@dataclass(frozen=True)
-class EdgeData:
-    """Immutable edge detection results."""
-
     edge_weights: FloatArray
     mask: UInt8Array
+    image_height: int
+    image_width: int
 
 
 @dataclass(frozen=True)
@@ -99,38 +89,13 @@ class CandidateEdges:
     angle_to_edges: dict[float, Sequence[FloatArray]]
 
 
-@dataclass(frozen=True)
-class StripWithEdges:
-    """Strip combined with edge detection results."""
-
-    strip: Strip
-    edge_data: EdgeData
-
-
-@dataclass(frozen=True)
-class StripWithAngleScores:
-    """Strip combined with edge detection and angle scoring results."""
-
-    strip: Strip
-    edge_data: EdgeData
-    angle_scores: AngleScores
-
-
-@dataclass(frozen=True)
-class StripWithCandidates:
-    """Strip combined with edge detection and candidate edges."""
-
-    strip: Strip
-    edge_data: EdgeData
-    candidates: CandidateEdges
-
-
 T = TypeVar("T")
 U = TypeVar("U")
+V = TypeVar("V")
 
 
 @dataclass(frozen=True)
-class FourWayContainer(Generic[T]):
+class StripSet(Generic[T]):
     """Generic container for top/bottom/left/right elements."""
 
     top: T
@@ -138,14 +103,8 @@ class FourWayContainer(Generic[T]):
     left: T
     right: T
 
-    def map(self, func: Callable[[T], U]) -> "FourWayContainer[U]":
-        """Apply a function to each element, returning a new FourWayContainer."""
-        return FourWayContainer(
-            top=func(self.top),
-            bottom=func(self.bottom),
-            left=func(self.left),
-            right=func(self.right),
-        )
+    def __iter__(self):
+        yield from (self.top, self.bottom, self.left, self.right)
 
     def to_dict(self) -> dict[StripPosition, T]:
         """Convert to dictionary for compatibility with existing code."""
@@ -157,10 +116,22 @@ class FourWayContainer(Generic[T]):
         }
 
 
-# Type aliases for backward compatibility
-StripSet = FourWayContainer[Strip]
-StripSetWithEdges = FourWayContainer[StripWithEdges]
-StripSetWithCandidates = FourWayContainer[StripWithCandidates]
+STRIP_POSITIONS = StripSet(
+    top=StripPosition.TOP,
+    bottom=StripPosition.BOTTOM,
+    left=StripPosition.LEFT,
+    right=StripPosition.RIGHT,
+)
+
+
+def map_strip_set(f: Callable[[T], U], x: StripSet[T]) -> StripSet[U]:
+    return StripSet(*map(f, x))
+
+
+def map2_strip_set(
+    f: Callable[[T, V], U], x: StripSet[T], y: StripSet[V]
+) -> StripSet[U]:
+    return StripSet(*map(f, x, y))
 
 
 def snap_to(x, candidates):
@@ -594,9 +565,7 @@ def get_sorted_peak_indices(scores: FloatArray, max_num_peaks=2) -> IntArray:
         return np.array(peaks)[perm][: -max_num_peaks - 1 : -1]
 
 
-def score_angles_in_strip(
-    strip_with_edges: StripWithEdges, debug_dir: str | None = None
-) -> tuple[FloatArray, FloatArray]:
+def score_angles_in_strip(strip: Strip, debug_dir: str | None = None) -> AngleScores:
     """Score angles in a strip using FFT-based analysis.
 
     This function uses the 2D FFT of the edge weights to detect dominant
@@ -608,22 +577,20 @@ def score_angles_in_strip(
     - Vertical strips: 0 (horizontal sampling)
 
     Args:
-        strip_with_edges: The strip with edge detection results
+        strip: The strip with edge detection results
         debug_dir: Optional directory for saving debug plots
 
     Returns:
         Tuple of (angles, angle_scores) where both are sorted by angle.
         Angles are in image coordinates (not strip coordinates).
     """
-    _, magnitude = compute_fft_spectrum(strip_with_edges.edge_data.edge_weights)
-    image_angles, profile = radial_profile_corrected(
+    _, magnitude = compute_fft_spectrum(strip.edge_weights)
+    central_angle = np.pi / 2 if strip.position.is_horizontal else 0.0
+    strip_angles, profile = radial_profile_corrected(
         magnitude,
-        central_angle=np.pi / 2
-        if strip_with_edges.strip.position.is_horizontal
-        else 0.0,
+        central_angle=central_angle,
     )
-    if strip_with_edges.strip.position.is_horizontal:
-        image_angles = (image_angles - np.pi / 2) % np.pi
+    image_angles = (strip_angles - central_angle) % np.pi - np.pi / 2
 
     perm = np.argsort(image_angles)
     angles = image_angles[perm]
@@ -638,19 +605,17 @@ def score_angles_in_strip(
         debug_plots.save_image(
             os.path.join(
                 debug_dir,
-                f"log_fft_magnitude_{strip_with_edges.strip.position.value}.png",
+                f"log_fft_magnitude_{strip.position.value}.png",
             ),
             normed_log_magnitude,
         )
         debug_plots.save_plot(
-            os.path.join(
-                debug_dir, f"angles_fft_{strip_with_edges.strip.position.value}.png"
-            ),
+            os.path.join(debug_dir, f"angles_fft_{strip.position.value}.png"),
             np.degrees(angles),
             angle_scores,
-            f"{strip_with_edges.strip.position} image angles max {angles[np.argmax(profile)]}",
+            f"{strip.position} image angles max {angles[np.argmax(profile)]}",
         )
-    return angles, angle_scores
+    return AngleScores(angles, angle_scores)
 
 
 def line_from_points(y1: float, x1: float, y2: float, x2: float):
@@ -748,7 +713,7 @@ def bincount_histogram(xs, bin_min, bin_max, weights):
 
 
 def score_intercepts_for_strip_functional(
-    strip_with_edges: StripWithEdges, slope: float
+    strip: Strip, slope: float
 ) -> tuple[FloatArray, FloatArray]:
     """Score all possible intercepts for a given slope using edge voting.
 
@@ -765,9 +730,9 @@ def score_intercepts_for_strip_functional(
         - intercept_scores: Histogram of edge vote scores for each intercept
         - intercept_bins: Bin center values for the histogram
     """
-    weights = strip_with_edges.edge_data.edge_weights
-    height, width = strip_with_edges.strip.pixels.shape[:2]
-    if strip_with_edges.strip.position.is_horizontal:
+    weights = strip.edge_weights
+    height, width = strip.pixels.shape[:2]
+    if strip.position.is_horizontal:
         x_coords = np.arange(width) - (width // 2) + 0.5
         y_coords = np.arange(height)[:, None] + 0.5
         intercepts = y_coords - slope * x_coords
@@ -787,7 +752,7 @@ def score_intercepts_for_strip_functional(
         weights=weights.flatten(),
     )
     print(
-        f"strip {strip_with_edges.strip.position.value} shape {strip_with_edges.strip.pixels.shape[:2]} min intercept {intercept_bins[0]} max intercept {intercept_bins[-1]} bins {len(intercept_bins)}"
+        f"strip {strip.position.value} shape {strip.pixels.shape[:2]} min intercept {intercept_bins[0]} max intercept {intercept_bins[-1]} bins {len(intercept_bins)}"
     )
     return intercept_scores, intercept_bins
 
@@ -816,23 +781,6 @@ def intercept_to_image_points_functional(
     pt1_image = strip.strip_to_image_transform(pt1.reshape((1, -1)))
     pt2_image = strip.strip_to_image_transform(pt2.reshape((1, -1)))
     return np.concatenate([pt1_image, pt2_image], axis=0)
-
-
-def get_bin_idx(bins: np.ndarray, x: float):
-    """Find the bin index containing a given value.
-
-    Args:
-        bins: Array of bin boundaries
-        x: Value to find the bin for
-
-    Returns:
-        Index of the bin containing x, or None if x is outside the range
-    """
-    if x is not None and (x >= bins[0] and x < bins[-1]):
-        # Find the bin containing x (the first bin with right boundary greater than it).
-        bin_idx = np.argmax(bins[1:] > x)
-        return bin_idx
-    return None
 
 
 def score_aspect_ratio(
@@ -885,7 +833,7 @@ def extract_border_strips(
     min_image_pixels: int = MIN_IMAGE_PIXELS_DEFAULT,
     candidate_aspect_ratios: list[float] | None = None,
     debug_dir: str | None = None,
-) -> StripSet:
+) -> StripSet[Strip]:
     """Extract four border strips from around a rectangle in the image.
 
     This is a functional version that returns a StripSet instead of modifying
@@ -903,7 +851,6 @@ def extract_border_strips(
     Returns:
         StripSet containing the four extracted strips
     """
-    # Create StripData objects using the old extract_border_strips logic
     if isinstance(image, np.ndarray):
         pil_image = Image.fromarray(image)
         del image
@@ -927,8 +874,6 @@ def extract_border_strips(
         width, height, reltol_x, reltol_y, candidate_aspect_ratios
     )
 
-    strips_dict = {}
-
     # Define normalized coordinates for each strip in the unit square
     # Horizontal strips (top and bottom)
     top_strip_normalized = np.array(
@@ -939,7 +884,6 @@ def extract_border_strips(
             [0 - reltol_x, strip_boundary_bottom],
         ]
     )
-    bottom_strip_normalized = top_strip_normalized + np.array([0.0, 1.0])
 
     # Vertical strips (left and right)
     left_strip_normalized = np.array(
@@ -950,19 +894,20 @@ def extract_border_strips(
             [strip_boundary_left, 1 + reltol_y],
         ]
     )
-    right_strip_normalized = left_strip_normalized + np.array([1.0, 0.0])
+
+    strip_boundaries_unit_square = StripSet(
+        top=top_strip_normalized,
+        bottom=top_strip_normalized + np.array([0.0, 1.0]),
+        left=left_strip_normalized,
+        right=left_strip_normalized + np.array([1.0, 0.0]),
+    )
 
     # Convert to image coordinates and extract each strip
     converter = geometry.PatchCoordinatesConverter(rect)
 
-    for position, strip_normalized in [
-        (StripPosition.TOP, top_strip_normalized),
-        (StripPosition.BOTTOM, bottom_strip_normalized),
-        (StripPosition.LEFT, left_strip_normalized),
-        (StripPosition.RIGHT, right_strip_normalized),
-    ]:
+    def create_strip(position, unit_square_boundary):
         # Convert normalized coords to image coords
-        strip_corners_image = converter.unit_square_to_image(strip_normalized)
+        strip_corners_image = converter.unit_square_to_image(unit_square_boundary)
         strip_corners_image = np.round(strip_corners_image)
         width, height = geometry.dimension_bounds(strip_corners_image)
         strip_width = int(np.ceil(width * resolution_scale_factor))
@@ -988,25 +933,30 @@ def extract_border_strips(
             )
         )
 
-        # Store as Strip object
-        strips_dict[position] = Strip(
+        strip_mask = geometry.image_boundary_mask(
+            image_shape=(pil_image.height, pil_image.width),
+            patch_shape=pixels_array.shape,
+            image_to_patch_coords=image_to_strip_transform,
+        ).astype(pixels_array.dtype)
+        edge_weights = detect_edges(position, pixels_array, strip_mask)
+
+        return Strip(
             position=position,
             pixels=pixels_array,
             image_to_strip_transform=image_to_strip_transform,
             strip_to_image_transform=strip_to_image_transform,
+            edge_weights=edge_weights,
+            mask=strip_mask,
             image_height=pil_image.height,
             image_width=pil_image.width,
         )
 
-    return StripSet(
-        top=strips_dict[StripPosition.TOP],
-        bottom=strips_dict[StripPosition.BOTTOM],
-        left=strips_dict[StripPosition.LEFT],
-        right=strips_dict[StripPosition.RIGHT],
-    )
+    return map2_strip_set(create_strip, STRIP_POSITIONS, strip_boundaries_unit_square)
 
 
-def detect_edges(strip: Strip, image_shape: tuple[int, int]) -> StripWithEdges:
+def detect_edges(
+    position: StripPosition, pixels: FloatArray, mask: UInt8Array
+) -> FloatArray:
     """Detect edge weights in a strip using gradient filters.
 
     This function applies directional gradient filters to detect edges
@@ -1020,13 +970,8 @@ def detect_edges(strip: Strip, image_shape: tuple[int, int]) -> StripWithEdges:
     Returns:
         StripWithEdges containing the strip and edge detection results
     """
-    strip_mask = geometry.image_boundary_mask(
-        image_shape=image_shape,
-        patch_shape=strip.pixels.shape,
-        image_to_patch_coords=strip.image_to_strip_transform,
-    ).astype(strip.pixels.dtype)
 
-    gray = cv2.cvtColor(strip.pixels, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    gray = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY).astype(np.float32)
 
     filter = np.array(
         [[-1, -2, -1], [-1, -2, -1], [1, 2, 1], [1, 2, 1]], dtype=np.float32
@@ -1034,7 +979,7 @@ def detect_edges(strip: Strip, image_shape: tuple[int, int]) -> StripWithEdges:
     # Apply gradient filter perpendicular to strip orientation
     # Horizontal strips need vertical gradients to detect horizontal edges
     # Vertical strips need horizontal gradients to detect vertical edges
-    if strip.position.is_horizontal:
+    if position.is_horizontal:
         edge_weights = cv2.filter2D(gray, -1, filter)  # vertical gradient (sobel_y)
     else:
         edge_weights = cv2.filter2D(
@@ -1042,13 +987,13 @@ def detect_edges(strip: Strip, image_shape: tuple[int, int]) -> StripWithEdges:
         )  # horizontal gradient (sobel_x)
 
     # Apply image boundary mask and post-process edge weights
-    edge_weights *= strip_mask  # Zero out pixels outside image boundary
+    edge_weights *= mask  # Zero out pixels outside image boundary
     # Square root: favor long coherent edges over smaller areas with high response.
     edge_weights = np.sqrt(np.abs(edge_weights))
     edge_weights = cv2.GaussianBlur(
         edge_weights, EDGE_WEIGHT_BLUR_KERNEL_SIZE, EDGE_WEIGHT_BLUR_SIGMA
     )
-    edge_weights *= strip_mask  # Re-apply mask after blurring
+    edge_weights *= mask  # Re-apply mask after blurring
     # don't use votes from the edge pixels where sobel directions aren't
     # fully defined
     edge_weights[:EDGE_PIXELS_TO_ZERO, :] = 0.0
@@ -1062,16 +1007,11 @@ def detect_edges(strip: Strip, image_shape: tuple[int, int]) -> StripWithEdges:
         # If no edges detected, use uniform small weights
         edge_weights = np.ones_like(edge_weights) * 0.01
 
-    edge_data = EdgeData(
-        edge_weights=edge_weights,
-        mask=strip_mask,
-    )
-
-    return StripWithEdges(strip=strip, edge_data=edge_data)
+    return edge_weights
 
 
 def find_best_overall_angles(
-    strips_with_edges: StripSetWithEdges,
+    strips: StripSet,
     max_num_peaks: int = 3,
     debug_dir: str | None = None,
 ) -> list[float]:
@@ -1091,48 +1031,40 @@ def find_best_overall_angles(
         List of best angles in radians, sorted by confidence
     """
     # Compute angle scores from each edge strip.
-    strip_angles, strip_angle_scores = zip(
-        *[
-            score_angles_in_strip(strip_with_edges, debug_dir=debug_dir)
-            for strip_with_edges in strips_with_edges.to_dict().values()
-        ]
+    strip_scored_angles = map_strip_set(
+        lambda strip: score_angles_in_strip(strip, debug_dir=debug_dir), strips
     )
 
     # Sum scores across strips, letting each strip 'vote' for the overall angle. We
     # normalize the scores, so each strip has max score 1, to improve robustness.
-    normalized_angle_scores = [s / np.max(s) for s in strip_angle_scores]
     combined_angles, overall_angle_scores = add_sampled_functions(
-        strip_angles, normalized_angle_scores
+        [s.angles for s in strip_scored_angles],
+        [s.scores / np.max(s.scores) for s in strip_scored_angles],
     )
-
-    if debug_dir is not None:
-        peaks, _ = find_peaks(
-            overall_angle_scores,
-            prominence=np.max(overall_angle_scores) * PEAK_PROMINENCE_FRACTION,
-        )
-        angle_peaks = np.array([combined_angles[idx] for idx in peaks])
-        print(f"overall peaks {angle_peaks}")
-        debug_plots.save_plot(
-            os.path.join(debug_dir, f"angles_fft_overall.png"),
-            np.degrees(combined_angles),
-            overall_angle_scores,
-            f"overall angle peaks {[np.degrees(a) for a in angle_peaks]}",
-        )
 
     best_idxs = get_sorted_peak_indices(
         overall_angle_scores, max_num_peaks=max_num_peaks
     )
     best_angles = [combined_angles[int(idx)] for idx in best_idxs]
     print("best angle", [np.degrees(a) for a in best_angles])
-    return [a - (np.pi / 2) for a in best_angles]
+
+    if debug_dir is not None:
+        debug_plots.save_plot(
+            os.path.join(debug_dir, f"angles_fft_overall.png"),
+            np.degrees(combined_angles),
+            overall_angle_scores,
+            f"overall angle peaks {[np.degrees(a) for a in best_angles]}",
+        )
+
+    return best_angles
 
 
 def get_candidate_edges(
-    strip_with_edges: StripWithEdges,
+    strip: Strip,
     best_angles: list[float],
     max_num_peaks: int = 1,
     debug_dir: str | None = None,
-) -> StripWithCandidates:
+) -> CandidateEdges:
     """Generate candidate edges for a strip at given angles.
 
     This function orchestrates the edge detection process by:
@@ -1159,7 +1091,7 @@ def get_candidate_edges(
 
         # Score intercepts for this angle
         intercept_scores, intercept_bins = score_intercepts_for_strip_functional(
-            strip_with_edges, slope
+            strip, slope
         )
 
         # Find peaks in intercept scores
@@ -1176,9 +1108,7 @@ def get_candidate_edges(
 
         # Convert intercepts to edge lines in image coordinates
         angle_to_edges[candidate_angle] = [
-            intercept_to_image_points_functional(
-                strip_with_edges.strip, slope, float(intercept)
-            )
+            intercept_to_image_points_functional(strip, slope, float(intercept))
             for intercept in angle_to_intercepts[candidate_angle]
         ]
 
@@ -1186,28 +1116,35 @@ def get_candidate_edges(
             debug_plots.save_histogram(
                 os.path.join(
                     debug_dir,
-                    f"intercepts_at_{np.degrees(candidate_angle): .2f}_{strip_with_edges.strip.position.value}.png",
+                    f"intercepts_at_{np.degrees(candidate_angle): .2f}_{strip.position.value}.png",
                 ),
                 intercept_bins,
                 intercept_scores,
-                f"{strip_with_edges.strip.position.value} intercepts at {np.degrees(candidate_angle): .2f} {angle_to_intercepts[candidate_angle]}",
+                f"{strip.position.value} intercepts at {np.degrees(candidate_angle): .2f} {angle_to_intercepts[candidate_angle]}",
             )
 
-    candidates = CandidateEdges(
+    return CandidateEdges(
         angle_to_intercepts=angle_to_intercepts,
         angle_to_intercept_scores=angle_to_intercept_scores,
         angle_to_edges=angle_to_edges,
     )
 
-    return StripWithCandidates(
-        strip=strip_with_edges.strip,
-        edge_data=strip_with_edges.edge_data,
-        candidates=candidates,
-    )
+
+def iterate_over_edge_combinations(candidates: StripSet[CandidateEdges], angle: float):
+    for top_idx in range(len(candidates.top.angle_to_intercepts[angle])):
+        for bottom_idx in range(len(candidates.bottom.angle_to_intercepts[angle])):
+            for left_idx in range(len(candidates.left.angle_to_intercepts[angle])):
+                for right_idx in range(
+                    len(candidates.right.angle_to_intercepts[angle])
+                ):
+                    yield StripSet(
+                        top=top_idx, bottom=bottom_idx, left=left_idx, right=right_idx
+                    )
 
 
 def find_best_hypothesis(
-    strips_with_candidates: StripSetWithCandidates,
+    strips: StripSet,
+    candidates: StripSet[CandidateEdges],
     candidate_aspect_ratios: list[float] | None = None,
     aspect_preference_strength: float = 0.1,
 ) -> QuadArray:
@@ -1228,98 +1165,54 @@ def find_best_hypothesis(
     best_score = 0.0
     best_corners = None
 
-    strips_dict = strips_with_candidates.to_dict()
     total_border_pixels = sum(
         [
-            strip.strip.pixels.shape[1 if strip.strip.position.is_horizontal else 0]
-            for strip in strips_dict.values()
+            strip.pixels.shape[1 if strip.position.is_horizontal else 0]
+            for strip in strips
         ]
     )
 
     # Generate all combinations of candidate edges
-    angles = strips_dict[StripPosition.TOP].candidates.angle_to_intercepts.keys()
+    angles = candidates.top.angle_to_intercepts.keys()
     for angle in angles:
-        for top_idx in range(
-            len(strips_dict[StripPosition.TOP].candidates.angle_to_intercepts[angle])
-        ):
-            for bottom_idx in range(
-                len(
-                    strips_dict[StripPosition.BOTTOM].candidates.angle_to_intercepts[
-                        angle
-                    ]
+        for edge_indices in iterate_over_edge_combinations(candidates, angle):
+            # Get edges for this combination
+            edges = map2_strip_set(
+                lambda c, i: c.angle_to_edges[angle][i], candidates, edge_indices
+            )
+
+            # Get scores for this combination
+            edge_scores = map2_strip_set(
+                lambda c, i: c.angle_to_intercept_scores[angle][i],
+                candidates,
+                edge_indices,
+            )
+
+            print(
+                f"proposing hypothesis w angle {angle} idx {edge_indices} edge score {sum(edge_scores)}"
+            )
+
+            # Find corner intersections
+            corners = refine_strips.find_corner_intersections(
+                {p.value: e for (p, e) in edges.to_dict().items()}
+            )
+            edge_score = sum(edge_scores)
+
+            # Add aspect ratio preference if specified
+            if candidate_aspect_ratios is not None:
+                aspect_score = score_aspect_ratio(
+                    corners,
+                    candidate_aspect_ratios,
+                    aspect_preference_strength=aspect_preference_strength
+                    * total_border_pixels,
                 )
-            ):
-                for left_idx in range(
-                    len(
-                        strips_dict[StripPosition.LEFT].candidates.angle_to_intercepts[
-                            angle
-                        ]
-                    )
-                ):
-                    for right_idx in range(
-                        len(
-                            strips_dict[
-                                StripPosition.RIGHT
-                            ].candidates.angle_to_intercepts[angle]
-                        )
-                    ):
-                        # Get edges for this combination
-                        edges = {
-                            StripPosition.TOP: strips_dict[
-                                StripPosition.TOP
-                            ].candidates.angle_to_edges[angle][top_idx],
-                            StripPosition.BOTTOM: strips_dict[
-                                StripPosition.BOTTOM
-                            ].candidates.angle_to_edges[angle][bottom_idx],
-                            StripPosition.LEFT: strips_dict[
-                                StripPosition.LEFT
-                            ].candidates.angle_to_edges[angle][left_idx],
-                            StripPosition.RIGHT: strips_dict[
-                                StripPosition.RIGHT
-                            ].candidates.angle_to_edges[angle][right_idx],
-                        }
+            else:
+                aspect_score = 0.0
 
-                        # Get scores for this combination
-                        edge_scores = [
-                            strips_dict[
-                                StripPosition.TOP
-                            ].candidates.angle_to_intercept_scores[angle][top_idx],
-                            strips_dict[
-                                StripPosition.BOTTOM
-                            ].candidates.angle_to_intercept_scores[angle][bottom_idx],
-                            strips_dict[
-                                StripPosition.LEFT
-                            ].candidates.angle_to_intercept_scores[angle][left_idx],
-                            strips_dict[
-                                StripPosition.RIGHT
-                            ].candidates.angle_to_intercept_scores[angle][right_idx],
-                        ]
-
-                        print(
-                            f"proposing hypothesis w angle {angle} idx {(top_idx, bottom_idx, left_idx, right_idx)} edge score {sum(edge_scores)}"
-                        )
-
-                        # Find corner intersections
-                        corners = refine_strips.find_corner_intersections(
-                            {p.value: e for (p, e) in edges.items()}
-                        )
-                        edge_score = sum(edge_scores)
-
-                        # Add aspect ratio preference if specified
-                        if candidate_aspect_ratios is not None:
-                            aspect_score = score_aspect_ratio(
-                                corners,
-                                candidate_aspect_ratios,
-                                aspect_preference_strength=aspect_preference_strength
-                                * total_border_pixels,
-                            )
-                        else:
-                            aspect_score = 0.0
-
-                        score = edge_score + aspect_score
-                        if score > best_score:
-                            best_score = score
-                            best_corners = corners
+            score = edge_score + aspect_score
+            if score > best_score:
+                best_score = score
+                best_corners = corners
 
     if best_corners is None:
         raise ValueError("no hypotheses had positive score!!")
@@ -1376,7 +1269,6 @@ def refine_strips_hough(
     else:
         pil_image = image
 
-    image_shape = (pil_image.height, pil_image.width)
     corner_points = bounding_box_as_array(corner_points)
 
     # Get minimum bounding rectangle
@@ -1384,7 +1276,7 @@ def refine_strips_hough(
     rect = geometry.sort_clockwise(rect)
 
     # Stage 1: Extract strips (image → StripSet)
-    strips: StripSet = extract_border_strips(
+    strips: StripSet[Strip] = extract_border_strips(
         pil_image,
         rect,
         reltol=reltol,
@@ -1393,57 +1285,40 @@ def refine_strips_hough(
         debug_dir=debug_dir,
     )
 
-    # Stage 2: Detect edges (map: strip → strip + edge_data)
-    def detect_edges_with_image_shape(strip: Strip) -> StripWithEdges:
-        return detect_edges(strip, image_shape)
-
-    strips_with_edges: StripSetWithEdges = StripSetWithEdges(
-        top=detect_edges_with_image_shape(strips.top),
-        bottom=detect_edges_with_image_shape(strips.bottom),
-        left=detect_edges_with_image_shape(strips.left),
-        right=detect_edges_with_image_shape(strips.right),
-    )
-
     # Optional debug output for edge detection
     if debug_dir is not None:
-        for position, strip_with_edges in strips_with_edges.to_dict().items():
+        for strip in strips:
             debug_plots.save_image(
-                os.path.join(debug_dir, f"strip_{position.value}.png"),
-                strip_with_edges.strip.pixels[:, :, ::-1],
+                os.path.join(debug_dir, f"strip_{strip.position.value}.png"),
+                strip.pixels[:, :, ::-1],
             )
             debug_plots.save_image(
-                os.path.join(debug_dir, f"edge_weights_{position.value}.png"),
-                strip_with_edges.edge_data.edge_weights * 255.0,
+                os.path.join(debug_dir, f"edge_weights_{strip.position.value}.png"),
+                strip.edge_weights * 255.0,
             )
 
     # Stage 3: Find best angles (reduction: all strips → best angles)
     best_angles: list[float] = find_best_overall_angles(
-        strips_with_edges,
+        strips,
         max_num_peaks=max_candidate_angles,
         debug_dir=debug_dir,
     )
 
     # Stage 4: Get candidates (map: (strip, angles) → strip + candidates)
-    def get_candidates_with_angles(
-        strip_with_edges: StripWithEdges,
-    ) -> StripWithCandidates:
-        return get_candidate_edges(
-            strip_with_edges,
-            best_angles,
+    candidates = map_strip_set(
+        functools.partial(
+            get_candidate_edges,
+            best_angles=best_angles,
             max_num_peaks=max_candidate_intercepts_per_angle,
             debug_dir=debug_dir,
-        )
-
-    strips_with_candidates: StripSetWithCandidates = StripSetWithCandidates(
-        top=get_candidates_with_angles(strips_with_edges.top),
-        bottom=get_candidates_with_angles(strips_with_edges.bottom),
-        left=get_candidates_with_angles(strips_with_edges.left),
-        right=get_candidates_with_angles(strips_with_edges.right),
+        ),
+        strips,
     )
 
     # Stage 5: Find best hypothesis (reduction: all candidates → best corners)
     best_corners: QuadArray = find_best_hypothesis(
-        strips_with_candidates,
+        strips,
+        candidates,
         candidate_aspect_ratios=candidate_aspect_ratios,
         aspect_preference_strength=aspect_preference_strength,
     )
