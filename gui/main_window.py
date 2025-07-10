@@ -12,9 +12,11 @@ from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSlider,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -116,6 +118,28 @@ class PhotoExtractorApp(QMainWindow):
         self.clear_btn.clicked.connect(self.clear_all_boxes)
         self.clear_btn.setEnabled(False)
         toolbar_layout.addWidget(self.clear_btn)
+
+        # Add tolerance slider
+        tolerance_label = QLabel("Refinement tolerance:")
+        toolbar_layout.addWidget(tolerance_label)
+
+        self.tolerance_slider = QSlider(Qt.Orientation.Horizontal)
+        self.tolerance_slider.setMinimum(1)  # 0.01
+        self.tolerance_slider.setMaximum(15)  # 0.15
+        self.tolerance_slider.setValue(int(app_settings.refine_default_tolerance * 100))
+        self.tolerance_slider.setFixedWidth(100)
+        self.tolerance_slider.valueChanged.connect(self.on_tolerance_changed)
+        toolbar_layout.addWidget(self.tolerance_slider)
+
+        self.tolerance_value_label = QLabel(
+            f"{app_settings.refine_default_tolerance:.2f}"
+        )
+        # Avoid a blowup where QT seems to think this label (and thus the toolbar) needs
+        # a ton of vertical space.
+        self.tolerance_value_label.setFixedHeight(20)
+
+        self.tolerance_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        toolbar_layout.addWidget(self.tolerance_value_label)
 
         toolbar_layout.addStretch()
         main_layout.addLayout(toolbar_layout)
@@ -349,6 +373,12 @@ class PhotoExtractorApp(QMainWindow):
     def clear_all_boxes(self):
         """Clear all bounding boxes."""
         self.image_view.clear_boxes()
+
+    def on_tolerance_changed(self, value: int):
+        """Handle tolerance slider value changes."""
+        tolerance = value / 100.0
+        app_settings.refine_current_tolerance = tolerance
+        self.tolerance_value_label.setText(f"{tolerance:.2f}")
 
     def on_box_selected(self, bounding_box_data: BoundingBox):
         """Handle box selection from ImageView."""

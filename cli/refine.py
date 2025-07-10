@@ -18,7 +18,7 @@ from core.settings import app_settings
 
 
 def cmd_refine(
-    paths: list[str], strategy: str | None, debug_dir: str | None = None
+    paths: list[str], strategy: str | None, debug_dir: str | None = None, tolerance: float | None = None
 ) -> int:
     """Run photo detection on specified images."""
     logger = logging.getLogger(__name__)
@@ -73,8 +73,9 @@ def cmd_refine(
             refined_boxes = []
             for box in boxes:
                 # Run detection
+                reltol = tolerance if tolerance is not None else app_settings.refine_default_tolerance
                 refined = refinement_strategy.refine(
-                    image, corner_points=box.corners, debug_dir=debug_dir
+                    image, corner_points=box.corners, reltol=reltol, debug_dir=debug_dir
                 )
                 box.corners = refined
                 refined_boxes.append(box)

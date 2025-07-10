@@ -67,6 +67,9 @@ def main():
     refine_parser.add_argument(
         "--debug_dir", help="Optional directory to dump debugging images."
     )
+    refine_parser.add_argument(
+        "--tolerance", type=float, help="Tolerance for refinement convergence (default: app settings)"
+    )
 
     # Extract command
     extract_parser = subparsers.add_parser("extract", help="Extract photos from images")
@@ -134,6 +137,7 @@ def main():
             paths=args.paths,
             debug_dir=args.debug_dir,
             strategy=args.strategy,
+            tolerance=args.tolerance,
         )
     elif args.command in ["clear"]:
         print(f"Command '{args.command}' is not yet implemented")

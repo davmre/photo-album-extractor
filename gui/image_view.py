@@ -284,7 +284,7 @@ class ImageView(QGraphicsView):
 
         try:
             refined_corners = strategy.refine(
-                image_bgr, corner_coords, debug_dir=debug_dir
+                image_bgr, corner_coords, reltol=app_settings.refine_current_tolerance, debug_dir=debug_dir
             )
             box.set_corners(refined_corners)
             box.set_marked_as_good(False)

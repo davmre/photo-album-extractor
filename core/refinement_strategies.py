@@ -24,6 +24,7 @@ class RefinementStrategy(ABC):
         self,
         image: Image.Image | UInt8Array,
         corner_points: QuadArray,
+        reltol: float = 0.05,
         debug_dir: str | None = None,
     ) -> QuadArray:
         """
@@ -66,11 +67,12 @@ class RefinementStrategyStripsIterated(RefinementStrategy):
         self,
         image: Image.Image | UInt8Array,
         corner_points: QuadArray,
-        debug_dir: str | None,
+        reltol: float = 0.05,
+        debug_dir: str | None = None,
     ):
         for _ in range(self.max_iterations):
             new_corner_points = refine_strips.refine_bounding_box_strips(
-                image, corner_points, enforce_parallel_sides=True, debug_dir=debug_dir
+                image, corner_points, enforce_parallel_sides=True, debug_dir=debug_dir, reltol=reltol
             )
             deviations = geometry.get_corner_deviations(
                 corner_points, new_corner_points

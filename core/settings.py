@@ -12,6 +12,8 @@ class AppSettings:
     detection_strategy: str = ""
     auto_refine_detection: bool = False
     refinement_strategy: str = ""
+    refine_default_tolerance: float = 0.05
+    refine_current_tolerance: float = 0.05
 
     # Validation settings
     warn_date_inconsistent: bool = True
@@ -36,6 +38,8 @@ class AppSettings:
             detection_strategy=data.get("detection_strategy", ""),
             auto_refine_detection=bool(data.get("auto_refine_detection", False)),
             refinement_strategy=data.get("refinement_strategy", ""),
+            refine_default_tolerance=float(data.get("refine_default_tolerance", 0.05)),
+            refine_current_tolerance=float(data.get("refine_current_tolerance", 0.05)),
             warn_date_inconsistent=bool(data.get("warn_date_inconsistent", True)),
             warn_non_rectangular=bool(data.get("warn_non_rectangular", True)),
             warn_nonstandard_aspect=bool(data.get("warn_nonstandard_aspect", True)),
