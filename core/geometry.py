@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import numpy as np
 import numpy.typing as npt
+from numpy import ndarray
 
 # Import semantic types from photo_types for consistency
 from core.photo_types import (
@@ -13,7 +14,6 @@ from core.photo_types import (
     TransformMatrix,
     bounding_box_as_array,
 )
-from numpy import ndarray
 
 # Suppress lint errors from uppercase variable names
 # ruff: noqa N806, N803
@@ -461,6 +461,8 @@ def signed_distance_from_border(
     border_pt1: FloatArray,
     border_pt2: FloatArray,
 ) -> FloatArray:
+    # Compute signed distance, such that values < 0 are *outside* a polygon whose
+    # border points are presented in clockwise order.
     x1, y1 = border_pt1
     x2, y2 = border_pt2
 
