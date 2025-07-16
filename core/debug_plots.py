@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import cv2
 import numpy as np
 from PIL import Image
@@ -46,6 +49,11 @@ def annotate_image(
 
 
 def save_image(file_path: str, img: AnyArray | Image.Image) -> None:
+    dir = os.path.dirname(file_path)
+    pd = Path(dir).expanduser()
+    if not pd.exists():
+        pd.mkdir(parents=True)
+
     if not isinstance(img, Image.Image):
         img = Image.fromarray(img)
     if img.mode == "F":
