@@ -10,6 +10,8 @@ from typing import Callable
 
 import cv2
 import numpy as np
+from PIL import Image
+
 from core import debug_plots, geometry, images
 from core.photo_types import (
     BoundingBoxAny,
@@ -18,7 +20,6 @@ from core.photo_types import (
     UInt8Array,
     bounding_box_as_array,
 )
-from PIL import Image
 
 LOGGER = logging.getLogger("logger")
 
@@ -116,7 +117,14 @@ def extract_border_strips(
     else:
         pil_image = image
 
-    image_shape = (pil_image.height, pil_image.width)
+    image_corners = np.array(
+        [
+            [0.0, 0.0],
+            [pil_image.width - 1.0, 0.0],
+            [pil_image.width - 1.0, pil_image.height - 1.0],
+            [0.0, pil_image.height - 1.0],
+        ]
+    )
 
     # Ensure rect is sorted clockwise
     rect = geometry.sort_clockwise(rect)
@@ -212,10 +220,17 @@ def extract_border_strips(
             sh=strip_height: sc.unit_square_to_image(pts / np.array([sw, sh]))
         )
 
+        image_corners = np.array(
+            [
+                [0.0, 0.0],
+                [pil_image.width - 1.0, 0.0],
+                [pil_image.width - 1.0, pil_image.height - 1.0],
+                [0.0, pil_image.height - 1.0],
+            ]
+        )
         strip_mask = geometry.image_boundary_mask(
-            image_shape=image_shape,
             patch_shape=pixels_array.shape,
-            image_to_patch_coords=image_to_strip_transform,
+            mask_corners_in_patch_coords=image_to_strip_transform(image_corners),
         )
 
         edge_response = detect_edges_color(

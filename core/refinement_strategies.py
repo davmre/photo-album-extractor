@@ -72,7 +72,11 @@ class RefinementStrategyStripsIterated(RefinementStrategy):
     ):
         for _ in range(self.max_iterations):
             new_corner_points = refine_strips.refine_bounding_box_strips(
-                image, corner_points, enforce_parallel_sides=True, debug_dir=debug_dir, reltol=reltol
+                image,
+                corner_points,
+                enforce_parallel_sides=True,
+                debug_dir=debug_dir,
+                reltol=reltol,
             )
             deviations = geometry.get_corner_deviations(
                 corner_points, new_corner_points
@@ -117,7 +121,7 @@ class RefinementStrategyHoughSoft(RefinementStrategy):
         self,
         image: Image.Image | UInt8Array,
         corner_points: QuadArray,
-        reltol: float = 0.05,
+        reltol: float = 0.1,
         debug_dir: str | None = None,
     ):
         print("refining with Hough and debug dir", debug_dir)
@@ -129,7 +133,46 @@ class RefinementStrategyHoughSoft(RefinementStrategy):
             soft_boundaries=True,
             max_candidate_angles=2,
             max_candidate_intercepts_per_angle=2,
-            aspect_preference_strength=0.1,
+            include_single_strip_angle_hypotheses=True,
+            aspect_preference_strength=0.01,
+            candidate_aspect_ratios=app_settings.standard_aspect_ratios,
+        )
+
+
+class RefinementStrategyHoughMultiscale(RefinementStrategy):
+    @property
+    def name(self):
+        return "Hough transform (multiscale)"
+
+    def refine(
+        self,
+        image: Image.Image | UInt8Array,
+        corner_points: QuadArray,
+        reltol: float = 0.1,
+        debug_dir: str | None = None,
+    ):
+        result1 = refine_strips_hough.refine_strips_hough(
+            image,
+            corner_points,
+            debug_dir=debug_dir,
+            reltol=reltol,
+            soft_boundaries=True,
+            max_candidate_angles=2,
+            max_candidate_intercepts_per_angle=2,
+            include_single_strip_angle_hypotheses=True,
+            aspect_preference_strength=0.04,
+            candidate_aspect_ratios=app_settings.standard_aspect_ratios,
+        )
+        return refine_strips_hough.refine_strips_hough(
+            image,
+            result1,
+            debug_dir=debug_dir,
+            reltol=reltol / 3.0,
+            soft_boundaries=True,
+            max_candidate_angles=2,
+            max_candidate_intercepts_per_angle=1,
+            include_single_strip_angle_hypotheses=True,
+            aspect_preference_strength=0.0,
             candidate_aspect_ratios=app_settings.standard_aspect_ratios,
         )
 
@@ -165,6 +208,7 @@ _REFINEMENT_STRATEGIES: list[RefinementStrategy] = [
     RefinementStrategyHoughGreedy(),
     RefinementStrategyHoughReranked(),
     RefinementStrategyHoughSoft(),
+    RefinementStrategyHoughMultiscale(),
 ]
 
 REFINEMENT_STRATEGIES: dict[str, RefinementStrategy] = {

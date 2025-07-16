@@ -32,6 +32,7 @@ LOGGER = logging.getLogger("logger")
 # Algorithm constants
 DEFAULT_RESOLUTION_SCALE_FACTOR = 1.0
 MIN_IMAGE_PIXELS_DEFAULT = 8
+IMAGE_BOUNDS_SLACK = 0.01
 EDGE_WEIGHT_BLUR_KERNEL_SIZE = (5, 5)
 EDGE_WEIGHT_BLUR_SIGMA = 0
 EDGE_PIXELS_TO_ZERO = 2  # Zero out edge pixels where gradients aren't well-defined
@@ -39,8 +40,10 @@ FFT_MAX_RADIUS_FRACTION = 0.8  # Don't sample all the way to FFT edges
 FFT_RADIAL_SAMPLES = 50
 FFT_ANGLE_RANGE_FRACTION = 1.0 / 8.0  # +/- pi/8 around central angle
 PEAK_PROMINENCE_FRACTION = 1.0 / 10.0  # Peaks must be 1/10 of max height
-IMAGE_EDGE_BOOST_FRACTION = 1.0 / 4.0  # Boost for edges at image boundary
-SHRINK_INWARDS_PIXELS = 2.0  # Pixels to shrink edge inwards
+IMAGE_EDGE_BOOST_FRACTION = 0.15  # Boost for edges at image boundary
+SHRINK_INWARDS_PIXELS = 5.0  # Pixels to shrink edge inwards
+MIN_SLOPE_RESOLUTION = 0.0025
+UNIQUE_ANGLE_TOLERANCE = np.pi / (180.0 * 40.0)  # When to combine angle hypotheses.
 ASPECT_TOLERANCE = 0.025  # Relative tolerance for aspect ratio matching
 INTERPOLATION_ORDER = 0  # Order for ndimage.map_coordinates
 EPS_VERTICAL_LINE = 1e-10  # Threshold for detecting vertical lines
@@ -68,8 +71,7 @@ class Strip:
     strip_to_image_transform: Callable[[FloatArray], FloatArray]
     edge_weights: FloatArray
     mask: UInt8Array
-    image_height: int
-    image_width: int
+    image_corners_in_strip_coords: QuadArray
 
 
 @dataclass
@@ -100,6 +102,9 @@ class AngleScores:
 
     angles: FloatArray
     scores: FloatArray
+
+    def __iter__(self):
+        yield from (self.angles, self.scores)
 
 
 @dataclass(frozen=True)
@@ -199,7 +204,7 @@ def get_default_normalized_bounds_for_strip(
 def shrink_normalized_strip_bounds_to_image(
     bounds: RectangleBounds,
     image_rect_in_normalized_coords: FloatArray,
-    slack=0.01,
+    slack=IMAGE_BOUNDS_SLACK,
 ) -> RectangleBounds:
     top_y, bottom_y, left_x, right_x = bounds
     (img_top_left, img_top_right, img_bottom_right, img_bottom_left) = (
@@ -278,9 +283,7 @@ def shrink_normalized_strip_bounds_to_image(
 
 def calculate_strip_bounds_unit_square(
     position: StripPosition,
-    converter: geometry.PatchCoordinatesConverter,
-    rect_shape,
-    image_shape,
+    image_rect_in_normalized_coords: QuadArray,
     reltol_x: float,
     reltol_y: float,
     candidate_aspect_ratios: Sequence[float] | None,
@@ -290,19 +293,8 @@ def calculate_strip_bounds_unit_square(
     initial_bounds = get_default_normalized_bounds_for_strip(
         position, reltol_x, reltol_y
     )
-    image_height, image_width = image_shape
     bounds = shrink_normalized_strip_bounds_to_image(
-        initial_bounds,
-        image_rect_in_normalized_coords=converter.image_to_unit_square(
-            np.array(
-                [
-                    [0.0, 0.0],
-                    [image_width - 1, 0.0],
-                    [image_width - 1.0, image_height - 1.0],
-                    [0.0, image_height - 1.0],
-                ]
-            )
-        ),
+        initial_bounds, image_rect_in_normalized_coords=image_rect_in_normalized_coords
     )
     return bounds
 
@@ -381,53 +373,20 @@ def compute_fft_spectrum(image):
     return fft_shifted, magnitude
 
 
-def correct_angle_aspect(angle, height, width, eps=EPS_ANGLE_CORRECTION):
-    """Correct angles for aspect ratio effects in FFT analysis.
-
-    When analyzing FFT patterns in non-square images, angles appear distorted
-    due to the aspect ratio. This function corrects for that distortion.
-
-    Args:
-        angle: Original angle in radians
-        height: Image height
-        width: Image width
-        eps: Epsilon for handling vertical angles (near π/2)
-
-    Returns:
-        Aspect-ratio corrected angle
-    """
-    # For non-square images, the FFT scaling distorts angles
-    # The correction factor (height/width) accounts for this distortion
-    aspect_corrected_angle = np.arctan((height / width) * np.tan(angle))
-
-    # Handle vertical angles (π/2) separately since tan(π/2) is undefined
-    # Near vertical angles should remain unchanged
-    aspect_corrected_angle = np.where(
-        abs(angle - np.pi / 2) < eps,
-        angle,  # Keep vertical angles unchanged
-        aspect_corrected_angle,
-    )
-    return aspect_corrected_angle
-
-
 def calculate_angle_range_for_radial_profile(
-    central_angle: float,
-    height: int,
-    width: int,
-    num_angles: int = 180,
+    central_angle: float, height: int, width: int, transpose_coordinates: bool = False
 ) -> tuple[FloatArray, FloatArray]:
     """Calculate the angle range for radial profile sampling.
 
     This function determines the range of angles to sample around a central
-    angle, with aspect ratio corrections applied. The sampling is focused
-    within ±π/8 of the central angle.
+    angle, with aspect ratio corrections applied.
 
     Args:
         central_angle: The aspect-corrected central angle
         height: Image height
         width: Image width
-        num_angles: Number of angles to sample
-
+        transpose_coordinates: whether to pretend we are working with the
+          transposed (height/width swapped) aspect ratio.
     Returns:
         Tuple of (angles, aspect_corrected_angles) where:
         - angles: Raw angles for sampling
@@ -436,48 +395,36 @@ def calculate_angle_range_for_radial_profile(
     # Convert central angle to perpendicular for sampling range calculation
     central_angle_perpendicular = (central_angle + np.pi / 2) % np.pi
 
-    # Calculate angle range boundaries with aspect ratio correction
-    min_angle_corrected = correct_angle_aspect(
-        central_angle_perpendicular - FFT_ANGLE_RANGE_FRACTION * np.pi,
-        width=height,
-        height=width,
-    )
-    min_angle_sampling = (
-        min_angle_corrected + central_angle
-    ) % np.pi - central_angle_perpendicular
+    if transpose_coordinates:
+        width, height = height, width
 
-    max_angle_corrected = correct_angle_aspect(
-        central_angle_perpendicular + FFT_ANGLE_RANGE_FRACTION * np.pi,
-        width=height,
-        height=width,
-    )
-    max_angle_sampling = (
-        max_angle_corrected + central_angle
-    ) % np.pi - central_angle_perpendicular
+    # Generate a core set of slopes that are sufficient to resolve changes
+    # of one pixel at the far edges of the image. (Note that the actual edge
+    # would range from -height/2 to height/2; we double this to cover some lines that
+    # don't quite reach the edge).
+    slopes = np.linspace(-height, height, height * 2 + 1) / (width / 2)
 
-    angles = np.linspace(
-        min_angle_sampling, max_angle_sampling, num_angles, endpoint=False
-    )
+    # Next expand the slopes to cover the full range [-max_slope, max_slope] (if
+    # they don't already). These are sampled at a fixed resolution
+    # (MIN_SLOPE_RESOLUTION) which is generally coarser than the per-pixel resolution
+    # of the core slopes.
+    max_slope = 0.4
+    slope_gap = max_slope - np.max(slopes)
+    if slope_gap > 0:
+        num_additional_slopes = int(slope_gap // MIN_SLOPE_RESOLUTION)
+        additional_slopes_neg = np.linspace(
+            -max_slope, np.min(slopes), num_additional_slopes, endpoint=False
+        )
+        slopes = np.concatenate(
+            [additional_slopes_neg, slopes, -additional_slopes_neg[::-1]],
+            axis=0,
+        )
 
-    # Correct for aspect ratio (inverse transformation)
-    perpendicular_angle = (angles + np.pi / 2) % np.pi
-    aspect_corrected_angle = (
-        correct_angle_aspect(perpendicular_angle, height=height, width=width) % np.pi
-    )
-
-    print("min_angle_sampling", min_angle_sampling, "max", max_angle_sampling)
-    print(
-        "corrected perp min",
-        np.degrees(aspect_corrected_angle[0]),
-        "max",
-        np.degrees(aspect_corrected_angle[-1]),
-    )
-    if min_angle_sampling > max_angle_sampling:
-        import pdb
-
-        pdb.set_trace()
-
-    return angles, aspect_corrected_angle
+    # Finally convert the slopes into angles in the image and FFT, correcting
+    # for the non-square aspect ratio.
+    image_angles = np.arctan(slopes) + central_angle_perpendicular
+    fft_angles = np.arctan((width / height) * slopes) + central_angle
+    return fft_angles, image_angles
 
 
 def sample_radial_direction(
@@ -534,7 +481,7 @@ def sample_radial_direction(
         return 0.0
 
 
-def radial_profile_corrected(magnitude, central_angle, num_angles=180):
+def radial_profile_corrected(magnitude, central_angle, transpose_coordinates=False):
     """Compute radial profile with aspect ratio correction.
 
     This function samples the FFT magnitude along radial directions,
@@ -544,7 +491,8 @@ def radial_profile_corrected(magnitude, central_angle, num_angles=180):
     Args:
         magnitude: 2D FFT magnitude array
         central_angle: The aspect-corrected angle around which to focus sampling
-        num_angles: Number of angles to sample
+        transpose_coordinates: whether to treat `magnitude` as `magnitude.T` in
+          defining angles.
 
     Returns:
         Tuple of (aspect_corrected_angles, radial_profile) where:
@@ -556,11 +504,11 @@ def radial_profile_corrected(magnitude, central_angle, num_angles=180):
 
     # Calculate angle range and aspect corrections
     angles, aspect_corrected_angle = calculate_angle_range_for_radial_profile(
-        central_angle, height, width, num_angles
+        central_angle, height, width, transpose_coordinates=transpose_coordinates
     )
 
     # Sample radial profile for each angle
-    profile = np.zeros(num_angles)
+    profile = np.zeros_like(angles)
     for i, angle in enumerate(angles):
         profile[i] = sample_radial_direction(
             magnitude, angle, center_x, center_y, height, width
@@ -680,6 +628,7 @@ def score_angles_in_strip(strip: Strip, debug_dir: str | None = None) -> AngleSc
     strip_angles, profile = radial_profile_corrected(
         magnitude,
         central_angle=central_angle,
+        transpose_coordinates=not strip.position.is_horizontal,
     )
     image_angles = (strip_angles - central_angle) % np.pi - np.pi / 2
 
@@ -704,7 +653,7 @@ def score_angles_in_strip(strip: Strip, debug_dir: str | None = None) -> AngleSc
             os.path.join(debug_dir, f"angles_fft_{strip.position.value}.png"),
             np.degrees(angles),
             angle_scores,
-            f"{strip.position} image angles max {angles[np.argmax(profile)]}",
+            f"{strip.position} image angles max deg {np.degrees(angles[np.argmax(profile)])}",
         )
     return AngleScores(angles, angle_scores)
 
@@ -980,6 +929,86 @@ def get_soft_edge_prior(
     return weights
 
 
+def maybe_boost_image_edge(
+    strip: Strip,
+    candidate_angle: float,
+    intercept_bins: FloatArray,
+    intercept_scores: FloatArray,
+):
+    (top_left, top_right, bottom_right, bottom_left) = (
+        strip.image_corners_in_strip_coords
+    )
+    slope = np.tan(candidate_angle)
+    height, width = strip.pixels.shape[:2]
+    if not strip.position.is_horizontal:
+        width, height = height, width
+    x_min = -width // 2
+    x_max = x_min + width - 1
+
+    if strip.position == StripPosition.TOP:
+        intercept = intercept_for_line_bounded_by_edge(
+            top_left,
+            top_right,
+            border_slope=slope,
+            strip_x_min=0,
+            strip_x_max=width,
+            bounded_above=True,
+            shrink_inwards_by=SHRINK_INWARDS_PIXELS,
+        )
+    elif strip.position == StripPosition.BOTTOM:
+        intercept = intercept_for_line_bounded_by_edge(
+            bottom_left,
+            bottom_right,
+            border_slope=slope,
+            strip_x_min=0,
+            strip_x_max=width,
+            bounded_above=False,
+            shrink_inwards_by=SHRINK_INWARDS_PIXELS,
+        )
+    elif strip.position == StripPosition.LEFT:
+        intercept = intercept_for_line_bounded_by_edge(
+            top_left[::-1],
+            bottom_left[::-1],
+            border_slope=slope,
+            strip_x_min=0,
+            strip_x_max=height,
+            bounded_above=False,
+            shrink_inwards_by=-SHRINK_INWARDS_PIXELS,
+        )
+    elif strip.position == StripPosition.RIGHT:
+        intercept = intercept_for_line_bounded_by_edge(
+            top_right[::-1],
+            bottom_right[::-1],
+            border_slope=slope,
+            strip_x_min=0,
+            strip_x_max=height,
+            bounded_above=True,
+            shrink_inwards_by=-SHRINK_INWARDS_PIXELS,
+        )
+    if intercept is None:
+        return intercept_scores
+    if strip.position.is_horizontal:
+        centered_intercept = intercept - slope * x_min
+    else:
+        centered_intercept = intercept + slope * x_min
+    print(
+        f"strip {strip.position}: edge intercept orig {intercept} centered {centered_intercept}"
+    )
+    if centered_intercept >= np.min(intercept_bins) and centered_intercept <= np.max(
+        intercept_bins
+    ):
+        bin = np.searchsorted(intercept_bins, centered_intercept) - 1
+        print(
+            f"previous scores max {np.max(intercept_scores)} mean {np.mean(intercept_scores)} binval {intercept_scores[bin]}"
+        )
+        intercept_scores[bin] += IMAGE_EDGE_BOOST_FRACTION * (x_max - x_min)
+
+        print(
+            f"boosting bin {bin} icept {intercept_bins[bin]} by {IMAGE_EDGE_BOOST_FRACTION * (x_max - x_min)}, new val {intercept_scores[bin]}"
+        )
+    return intercept_scores
+
+
 # ===================================================================
 # CORE FUNCTIONS
 # ===================================================================
@@ -1018,6 +1047,15 @@ def extract_border_strips(
     else:
         pil_image = image
 
+    image_corners = np.array(
+        [
+            [0.0, 0.0],
+            [pil_image.width - 1.0, 0.0],
+            [pil_image.width - 1.0, pil_image.height - 1.0],
+            [0.0, pil_image.height - 1.0],
+        ]
+    )
+
     # Ensure rect is sorted clockwise
     rect = geometry.sort_clockwise(rect)
     width, height = geometry.dimension_bounds(rect)
@@ -1032,9 +1070,9 @@ def extract_border_strips(
     strip_boundaries_unit_square = map_strip_set(
         functools.partial(
             calculate_strip_bounds_unit_square,
-            converter=converter,
-            image_shape=(pil_image.height, pil_image.width),
-            rect_shape=(height, width),
+            image_rect_in_normalized_coords=converter.image_to_unit_square(
+                image_corners
+            ),
             reltol_x=reltol_x,
             reltol_y=reltol_y,
             candidate_aspect_ratios=candidate_aspect_ratios,
@@ -1074,10 +1112,11 @@ def extract_border_strips(
             )
         )
 
+        image_corners_in_patch_coords = image_to_strip_transform(image_corners)
+
         strip_mask = geometry.image_boundary_mask(
-            image_shape=(pil_image.height, pil_image.width),
             patch_shape=pixels_array.shape,
-            image_to_patch_coords=image_to_strip_transform,
+            mask_corners_in_patch_coords=image_corners_in_patch_coords,
             offset=-2,
         ).astype(pixels_array.dtype)
         edge_weights = detect_edges(position, pixels_array, strip_mask)
@@ -1096,8 +1135,7 @@ def extract_border_strips(
             strip_to_image_transform=strip_to_image_transform,
             edge_weights=edge_weights,
             mask=strip_mask,
-            image_height=pil_image.height,
-            image_width=pil_image.width,
+            image_corners_in_strip_coords=image_corners_in_patch_coords,
         )
 
     return map2_strip_set(create_strip, STRIP_POSITIONS, strip_boundaries_unit_square)
@@ -1162,6 +1200,7 @@ def detect_edges(
 def find_best_overall_angles(
     strips: StripSet,
     max_num_peaks: int = 3,
+    include_single_strip_hypotheses: bool = False,
     debug_dir: str | None = None,
 ) -> list[float]:
     """Find the best overall angles by combining evidence from all strips.
@@ -1196,13 +1235,32 @@ def find_best_overall_angles(
     )
     best_angles = [combined_angles[int(idx)] for idx in best_idxs]
     print("best angle", [np.degrees(a) for a in best_angles])
+    best_idx = int(best_idxs[0])
+    if best_idx > 0:
+        best_angles.append(combined_angles[best_idx - 1])
+    if best_idx < len(combined_angles) - 1:
+        best_angles.append(combined_angles[best_idx + 1])
+
+    print("INcluding single strip?", include_single_strip_hypotheses)
+    if include_single_strip_hypotheses:
+        for strip_angles, strip_scores in strip_scored_angles:
+            strip_best_angle = strip_angles[np.argmax(strip_scores)]
+            diffs = [strip_best_angle - a for a in best_angles]
+            print(
+                f"Considering single-strip angle {strip_best_angle:.4f} to best angles {[best_angles]}"
+            )
+            if np.min(np.abs(diffs)) > UNIQUE_ANGLE_TOLERANCE:
+                print(
+                    f"Adding single-strip angle {strip_best_angle:.4f} to best angles {[best_angles]}"
+                )
+                best_angles.append(strip_best_angle)
 
     if debug_dir is not None:
         debug_plots.save_plot(
             os.path.join(debug_dir, f"angles_fft_overall.png"),
             np.degrees(combined_angles),
             overall_angle_scores,
-            f"overall angle peaks {[np.degrees(a) for a in best_angles]}",
+            f"overall angle peaks deg {[np.degrees(a) for a in best_angles]}",
         )
 
     return best_angles
@@ -1243,6 +1301,13 @@ def get_candidate_edges(
             strip, slope
         )
 
+        intercept_scores = maybe_boost_image_edge(
+            strip=strip,
+            candidate_angle=candidate_angle,
+            intercept_bins=intercept_bins,
+            intercept_scores=intercept_scores,
+        )
+
         # Find peaks in intercept scores
         peak_indices = get_sorted_peak_indices(
             intercept_scores, max_num_peaks=max_num_peaks
@@ -1269,7 +1334,7 @@ def get_candidate_edges(
                 ),
                 intercept_bins,
                 intercept_scores,
-                f"{strip.position.value} intercepts at {np.degrees(candidate_angle): .2f} {angle_to_intercepts[candidate_angle]}",
+                f"{strip.position.value} bins {np.min(intercept_bins)} {np.max(intercept_bins)} intercepts at {np.degrees(candidate_angle): .2f} {angle_to_intercepts[candidate_angle]}",
             )
 
     return CandidateEdges(
@@ -1292,10 +1357,11 @@ def iterate_over_edge_combinations(candidates: StripSet[CandidateEdges], angle: 
 
 
 def find_best_hypothesis(
-    strips: StripSet,
+    strips: StripSet[Strip],
     candidates: StripSet[CandidateEdges],
     candidate_aspect_ratios: list[float] | None = None,
     aspect_preference_strength: float = 0.1,
+    debug_dir: str | None = None,
 ) -> QuadArray:
     """Find the best hypothesis by scoring all combinations of candidate edges.
 
@@ -1363,6 +1429,32 @@ def find_best_hypothesis(
                 best_score = score
                 best_corners = corners
 
+                if debug_dir is not None:
+                    hypothesis_dir = os.path.join(
+                        debug_dir,
+                        f"hypothesis_score_{score:.2f}_angle_deg_{np.degrees(angle):.4f}_{edge_indices}",
+                    )
+                    for strip, edge in zip(strips, edges):
+                        strip_edge = strip.image_to_strip_transform(edge)
+                        debug_plots.save_image(
+                            os.path.join(
+                                hypothesis_dir, f"edge_{strip.position.value}.png"
+                            ),
+                            debug_plots.annotate_image(
+                                strip.edge_weights * 255,
+                                edges=[np.round(strip_edge).astype(int)],
+                            ),
+                        )
+                        debug_plots.save_image(
+                            os.path.join(
+                                hypothesis_dir, f"pixels_{strip.position.value}.png"
+                            ),
+                            debug_plots.annotate_image(
+                                strip.pixels,
+                                edges=[np.round(strip_edge).astype(int)],
+                            ),
+                        )
+
     if best_corners is None:
         raise ValueError("no hypotheses had positive score!!")
 
@@ -1377,6 +1469,7 @@ def refine_strips_hough(
     debug_dir: str | None = None,
     max_candidate_angles: int = 2,
     max_candidate_intercepts_per_angle: int = 2,
+    include_single_strip_angle_hypotheses: bool = False,
     aspect_preference_strength: float = 0.1,
     candidate_aspect_ratios: list[float] | None = None,
 ) -> QuadArray:
@@ -1452,6 +1545,7 @@ def refine_strips_hough(
     best_angles: list[float] = find_best_overall_angles(
         strips,
         max_num_peaks=max_candidate_angles,
+        include_single_strip_hypotheses=include_single_strip_angle_hypotheses,
         debug_dir=debug_dir,
     )
 
@@ -1472,6 +1566,7 @@ def refine_strips_hough(
         candidates,
         candidate_aspect_ratios=candidate_aspect_ratios,
         aspect_preference_strength=aspect_preference_strength,
+        debug_dir=debug_dir,
     )
 
     # Optional debug output for final result
