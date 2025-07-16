@@ -146,7 +146,8 @@ to detect the locations of the photos on the page. Output a JSON list of
 detected photos. Each entry contains:
 
  - **Required:** the 2D bounding box of the photo `"box_2d": [y_min, x_min, y_max, x_max]`.
-   This bounding box contains the photo only; no annotations or associated text.
+   This bounding box is for the photo only; no annotations or associated text. Try to
+   include the entire photo, even if parts of it are occluded.
 
  - **Optional:**: if there is additional writing on the page that appears to be
    associated with this photo, you may include additional string fields `date` (if
@@ -159,9 +160,7 @@ detected photos. Each entry contains:
   "TOP_EDGE_ON_LEFT" (photo is rotated 90 degrees counterclockwise),
   "TOP_EDGE_ON_BOTTOM" (photo is rotated 180 degrees), or "TOP_EDGE_ON_RIGHT"
   (photo is rotated 90 degrees clockwise). Do not include this field for photos that
-  are only mildly tilted or if the orientation is unclear. Be careful to consider each
-  photo separately as different photos on the same page may have different
-  orientations.
+  are only mildly tilted or if the orientation is unclear.
 
 This project has sentimental value and your help is appreciated!
 
@@ -175,7 +174,7 @@ Example response for a page with three photos:
     [
       "box_2d": [photo2_y_min, photo2_x_min, photo2_y_max, photo2_x_max],
       "caption": "Dinner with Susan",
-      "orientation": "TOP_EDGE_FACES_LEFT",
+      "orientation": "TOP_EDGE_ON_LEFT",
     ],
     [
       "box_2d": [photo3_y_min, photo3_x_min, photo3_y_max, photo3_x_max],
