@@ -56,7 +56,6 @@ def cmd_detect(paths: list[str], force: bool = False) -> int:
 
         # Load and process image
         try:
-            logger.info(f"Processing image: {image_path}")
             print(f"Processing {image_path}...")
             with PIL.Image.open(image_path) as image:
                 # Run detection
