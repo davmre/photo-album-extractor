@@ -5,15 +5,18 @@ Image processing utilities for loading, cropping, and saving photos.
 from __future__ import annotations
 
 import os
+import platform
+from datetime import datetime
 
-import core.photo_types as photo_types
 import numpy as np
 import piexif
 import PIL.Image
+from PIL import Image
+
+import core.photo_types as photo_types
 from core import date_utils, geometry
 from core.bounding_box import BoundingBox, PhotoAttributes
 from core.photo_types import PhotoOrientation
-from PIL import Image
 
 # Allow math variables with uppercase letters.
 # ruff: noqa N806
@@ -21,6 +24,42 @@ from PIL import Image
 
 # Semantic type aliases
 PILImage = PIL.Image.Image  # PIL/Pillow images
+
+
+def get_file_creation_time(filepath: str) -> datetime | None:
+    """Get the creation time of a file as a datetime object.
+
+    On Windows, this returns the actual creation time (st_ctime).
+    On macOS, this returns the birth time (st_birthtime) if available,
+    otherwise falls back to modification time.
+    On Linux and other Unix systems, this falls back to modification time
+    since creation time is not reliably available.
+
+    Args:
+        filepath: Path to the file
+
+    Returns:
+        datetime object representing file creation time, or None if error
+    """
+    try:
+        stat = os.stat(filepath)
+
+        # Try platform-specific creation time fields
+        if platform.system() == "Windows":
+            # On Windows, st_ctime is creation time
+            ctime = stat.st_ctime
+        elif hasattr(stat, "st_birthtime"):
+            # On macOS and some other systems, st_birthtime is creation time
+            ctime = stat.st_birthtime
+        else:
+            # Fall back to modification time on Linux and other systems
+            # where creation time is not reliably available
+            ctime = stat.st_mtime
+
+        return datetime.fromtimestamp(ctime)
+    except (OSError, ValueError, AttributeError) as e:
+        print(f"Warning: Could not read creation time for {filepath}: {e}")
+        return None
 
 
 def extract_perspective_image(
@@ -128,6 +167,7 @@ def save_cropped_images(
     bounding_box_data_list: list[BoundingBox],
     output_dir: str,
     base_name: str = "photo",
+    source_image_path: str | None = None,
 ) -> list[str]:
     """Save multiple cropped images to the specified directory.
 
@@ -137,11 +177,17 @@ def save_cropped_images(
             corners and attributes for each photo to extract.
         output_dir: Directory to save images
         base_name: Base name for files
+        source_image_path: Optional path to source image file (for EXIF DateTimeDigitized creation time)
     """
     saved_files = []
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
+
+    # Read source file creation time if path provided
+    source_file_time = None
+    if source_image_path:
+        source_file_time = get_file_creation_time(source_image_path)
 
     for i, bbox_data in enumerate(bounding_box_data_list):
         # Extract the image using the corners, incorporating rotation into the perspective transform
@@ -166,7 +212,9 @@ def save_cropped_images(
             if cropped.mode != "RGB":
                 cropped = cropped.convert("RGB")
 
-            save_image_with_exif(cropped, filepath, attributes)
+            save_image_with_exif(
+                cropped, filepath, attributes, source_file_time=source_file_time
+            )
             saved_files.append(filepath)
             print(f"Saved: {filename}")
         except Exception as e:
@@ -176,29 +224,51 @@ def save_cropped_images(
 
 
 def save_image_with_exif(
-    image: PILImage, filepath: str, attributes: PhotoAttributes, jpeg_quality: int = 95
+    image: PILImage,
+    filepath: str,
+    attributes: PhotoAttributes,
+    jpeg_quality: int = 95,
+    source_file_time: datetime | None = None,
 ) -> None:
-    """Save image with EXIF data from attributes."""
+    """Save image with EXIF data from attributes.
+
+    Args:
+        image: PIL image to save
+        filepath: Output file path
+        attributes: Photo attributes containing EXIF data
+        jpeg_quality: JPEG compression quality (default 95)
+        source_file_time: Optional datetime for DateTimeDigitized (source image creation time)
+    """
     try:
         # Create EXIF dictionary
         exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
 
         # Add date/time if available
-        if attributes.date_hint:
+        date_to_parse = attributes.exif_date or attributes.date_hint
+        if date_to_parse:
             try:
                 # Parse ISO date string and convert to EXIF format
-                dt = date_utils.parse_flexible_date_as_datetime(attributes.date_hint)
+                dt = date_utils.parse_flexible_date_as_datetime(date_to_parse)
                 if dt is None:
                     raise ValueError()
 
                 exif_datetime = dt.strftime("%Y:%m:%d %H:%M:%S")
 
-                # Set multiple date fields for maximum compatibility
+                # Set DateTime and DateTimeOriginal to the inferred photo date
                 exif_dict["0th"][piexif.ImageIFD.DateTime] = exif_datetime
                 exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = exif_datetime
-                exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = exif_datetime
+
+                # Set DateTimeDigitized to source file time if available, otherwise photo date
+                if source_file_time:
+                    digitized_datetime = source_file_time.strftime("%Y:%m:%d %H:%M:%S")
+                    exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = (
+                        digitized_datetime
+                    )
+                else:
+                    exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = exif_datetime
+
             except (ValueError, AttributeError) as e:
-                print(f"Warning: Could not parse date '{attributes.date_hint}': {e}")
+                print(f"Warning: Could not parse date '{date_to_parse}': {e}")
 
         # Add comments if available
         if attributes.comments:

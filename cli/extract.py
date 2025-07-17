@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 import PIL.Image
 
@@ -29,7 +30,10 @@ def cmd_extract(paths: list[str], output_dir: str, base_name: str | None) -> int
 
     # Validate and create output directory
     try:
-        os.makedirs(output_dir, exist_ok=True)
+        p = Path(output_dir).expanduser()
+        if not p.exists():
+            p.mkdir(parents=True)
+        output_dir = str(p)
         print(f"Output directory: {output_dir}")
     except OSError as e:
         print(f"Error creating output directory '{output_dir}': {e}")
@@ -67,6 +71,7 @@ def cmd_extract(paths: list[str], output_dir: str, base_name: str | None) -> int
                     bounding_box_data_list=bounding_boxes,
                     output_dir=output_dir,
                     base_name=extract_base_name,
+                    source_image_path=str(image_path),
                 )
 
                 if saved_files:

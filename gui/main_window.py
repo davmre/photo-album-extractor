@@ -544,6 +544,7 @@ class PhotoExtractorApp(QMainWindow):
             bounding_box_data_list,
             output_directory,
             base_name,
+            source_image_path=self.current_image_path,
         )
 
         if saved_files:
