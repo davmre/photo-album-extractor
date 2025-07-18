@@ -53,6 +53,8 @@ class DetectionStrategy(ABC):
 class GeminiDetectionStrategy(DetectionStrategy):
     """Gemini AI-based strategy for detecting photos in album pages."""
 
+    model_name: str
+
     def __init__(self) -> None:
         self._model: Any | None = None
         self._api_key: str | None = None
@@ -72,14 +74,10 @@ class GeminiDetectionStrategy(DetectionStrategy):
         try:
             # Configure the API key
             genai.configure(api_key=self._api_key)  # type: ignore
-            self._model = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")  # type: ignore
+            self._model = genai.GenerativeModel(self.model_name)  # type: ignore
         except Exception as e:
             print(f"Failed to initialize Gemini: {e}")
             self._model = None
-
-    @property
-    def name(self) -> str:
-        return "Gemini AI Detection"
 
     @property
     def description(self) -> str:
@@ -219,36 +217,26 @@ Return only the JSON response, no additional text."""
             return []
 
 
-class GeminiWithRefinementDetectionStrategy(DetectionStrategy):
-    def __init__(self):
-        self.gemini_strategy = GeminiDetectionStrategy()
+class GeminiFlashDetectionStrategy(GeminiDetectionStrategy):
+    model_name = "gemini-2.5-flash"
 
     @property
-    def name(self) -> str:
-        return "Auto-refine Gemini"
+    def name(self):
+        return "Gemini 2.5 Flash"
+
+
+class GeminiProDetectionStrategy(GeminiDetectionStrategy):
+    model_name = "gemini-2.5-pro"
 
     @property
-    def description(self) -> str:
-        return "Gemini AI Detection with auto-refined corners."
-
-    def set_api_key(self, api_key: str):
-        self.gemini_strategy.set_api_key(api_key)
-
-    def set_refinement_strategy(self, refine_fn):
-        self.refine_fn = refine_fn
-
-    def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBox]:
-        detected_boxes = self.gemini_strategy.detect_photos(image)
-        for box in detected_boxes:
-            refined_corners = self.refine_fn(image, box.corners)
-            box.corners = refined_corners
-        return detected_boxes
+    def name(self):
+        return "Gemini 2.5 Pro"
 
 
 # Registry of all available strategies
 _DETECTION_STRATEGIES: list[DetectionStrategy] = [
-    GeminiDetectionStrategy(),
-    GeminiWithRefinementDetectionStrategy(),
+    GeminiFlashDetectionStrategy(),
+    GeminiProDetectionStrategy(),
 ]
 
 DETECTION_STRATEGIES: dict[str, DetectionStrategy] = {
