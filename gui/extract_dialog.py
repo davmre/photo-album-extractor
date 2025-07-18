@@ -104,11 +104,11 @@ class ExtractProcessor(QThread):
                 self.progress_updated.emit(
                     i + 1,
                     len(self.image_files),
-                    f"Processing {filename} ({i + 1}/{len(self.image_files)})",
+                    f"Processing source image {filename} ({i + 1}/{len(self.image_files)})",
                 )
 
                 self.log_message.emit(
-                    f"--- Processing {filename} ({i + 1}/{len(self.image_files)}) ---"
+                    f"--- Processing source image {filename} ({i + 1}/{len(self.image_files)}) ---"
                 )
 
                 # Extract photos from this image
@@ -120,7 +120,7 @@ class ExtractProcessor(QThread):
                     self.log_message.emit(f"  ✓ Extracted {photos_extracted} photos")
                 elif photos_extracted == 0:
                     skipped_count += 1
-                    self.log_message.emit("  Skipped - no bounding boxes found")
+                    self.log_message.emit("  Skipped")
                 else:
                     error_count += 1
 
