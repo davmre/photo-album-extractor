@@ -8,9 +8,10 @@ import glob
 import os
 
 import PIL.Image
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -18,8 +19,10 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QProgressBar,
     QRadioButton,
+    QSlider,
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
@@ -172,11 +175,8 @@ class BatchProcessor(QThread):
         else:
             self.log_message.emit("  No existing bounding boxes found")
 
-        if existing_boxes and self.skip_existing and not self.detection_strategy:
-            # Skip if we're not doing detection and boxes exist
-            self.log_message.emit(
-                "  Skipping - has existing boxes and skip mode enabled"
-            )
+        if existing_boxes and self.skip_existing:
+            self.log_message.emit("  Skipping - has existing boxes.")
             return "skipped"
 
         # Load image
@@ -186,22 +186,14 @@ class BatchProcessor(QThread):
 
             # Run detection if requested
             if self.detection_strategy:
-                if existing_boxes and self.skip_existing:
-                    # Skip detection if boxes exist and we're not replacing
-                    self.log_message.emit(
-                        f"  Skipping detection - existing boxes found and skip mode enabled"
-                    )
-                else:
-                    # Run detection (either no existing boxes or we're replacing)
-                    self.log_message.emit(
-                        f"  Running detection using {self.detection_strategy.name}"
-                    )
-                    detected_boxes = self.detection_strategy.detect_photos(image)
-                    current_boxes = detected_boxes
-                    self.storage.set_bounding_boxes(filename, current_boxes)
-                    self.log_message.emit(
-                        f"  Detection found {len(detected_boxes)} photos"
-                    )
+                # Run detection (either no existing boxes or we're replacing)
+                self.log_message.emit(
+                    f"  Running detection using {self.detection_strategy.name}"
+                )
+                detected_boxes = self.detection_strategy.detect_photos(image)
+                current_boxes = detected_boxes
+                self.storage.set_bounding_boxes(filename, current_boxes)
+                self.log_message.emit(f"  Detection found {len(detected_boxes)} photos")
 
             # Run refinement if requested
             if self.refinement_strategy and current_boxes:
@@ -215,27 +207,31 @@ class BatchProcessor(QThread):
                         corner_points=box.corners,
                         reltol=self.refinement_tolerance,
                     )
-
-                    # Apply shrinking if configured
-                    if self.shrink_pixels > 0:
-                        refined_corners = geometry.shrink_rectangle(
-                            refined_corners, shrink_by=self.shrink_pixels
-                        )
-                        self.log_message.emit(
-                            f"    Box {i + 1}: refined and shrunk by {self.shrink_pixels}px"
-                        )
-                    else:
-                        self.log_message.emit(f"    Box {i + 1}: refined")
-
                     box.corners = refined_corners
                     refined_boxes.append(box)
+                    self.log_message.emit(f"    Box {i + 1}: refined")
 
+                current_boxes = refined_boxes
                 self.storage.set_bounding_boxes(filename, refined_boxes)
                 self.log_message.emit(
                     f"  Refinement completed for {len(refined_boxes)} boxes"
                 )
             elif self.refinement_strategy and not current_boxes:
                 self.log_message.emit("  Skipping refinement - no boxes to refine")
+
+            # Apply shrinking if configured
+            if self.shrink_pixels != 0 and current_boxes:
+                shrunk_boxes = []
+                for box in current_boxes:
+                    shrunk_corners = geometry.shrink_rectangle(
+                        box.corners, shrink_by=self.shrink_pixels
+                    )
+                    box.corners = shrunk_corners
+                    shrunk_boxes.append(box)
+                self.storage.set_bounding_boxes(filename, shrunk_boxes)
+                self.log_message.emit(
+                    f"    Shrunk {len(shrunk_boxes)} boxes by {self.shrink_pixels}px"
+                )
 
         self.log_message.emit(f"  ✓ Completed processing {filename}")
         return "processed"
@@ -267,11 +263,15 @@ class BatchPreprocessDialog(QDialog):
 
         # Detection group
         detection_group = QGroupBox("Detection")
-        detection_layout = QFormLayout(detection_group)
+        detection_layout = QVBoxLayout(detection_group)
+        run_detection_layout = QHBoxLayout()
+
+        self.run_detection_check = QCheckBox()
+        self.run_detection_check.setChecked(True)
+        self.run_detection_check.setText("Run detection strategy: ")
 
         # Detection strategy combo
         self.detection_strategy_combo = QComboBox()
-        self.detection_strategy_combo.addItem("None (skip detection)", None)
         for strategy in DETECTION_STRATEGIES.values():
             self.detection_strategy_combo.addItem(strategy.name, strategy.name)
 
@@ -285,33 +285,24 @@ class BatchPreprocessDialog(QDialog):
                     self.detection_strategy_combo.setCurrentIndex(i)
                     break
 
-        detection_layout.addRow("Detection Strategy:", self.detection_strategy_combo)
-
-        # Existing boxes behavior
-        existing_boxes_label = QLabel("Images with existing boxes:")
-        self.skip_existing_radio = QRadioButton("Skip (default)")
-        self.replace_existing_radio = QRadioButton("Clear and Replace")
-        self.skip_existing_radio.setChecked(True)
-
-        existing_boxes_layout = QHBoxLayout()
-        existing_boxes_layout.addWidget(self.skip_existing_radio)
-        existing_boxes_layout.addWidget(self.replace_existing_radio)
-
-        self.existing_boxes_group = QButtonGroup()
-        self.existing_boxes_group.addButton(self.skip_existing_radio)
-        self.existing_boxes_group.addButton(self.replace_existing_radio)
-
-        detection_layout.addRow(existing_boxes_label, existing_boxes_layout)
+        run_detection_layout.addWidget(self.run_detection_check)
+        run_detection_layout.addWidget(self.detection_strategy_combo)
+        detection_layout.addLayout(run_detection_layout)
 
         layout.addWidget(detection_group)
 
         # Refinement group
         refinement_group = QGroupBox("Refinement")
-        refinement_layout = QFormLayout(refinement_group)
+        refinement_layout = QVBoxLayout(refinement_group)
+
+        run_refinement_layout = QHBoxLayout()
+
+        self.run_refinement_check = QCheckBox()
+        self.run_refinement_check.setChecked(True)
+        self.run_refinement_check.setText("Run refinement strategy: ")
 
         # Refinement strategy combo
         self.refinement_strategy_combo = QComboBox()
-        self.refinement_strategy_combo.addItem("None (skip refinement)", None)
         for strategy in REFINEMENT_STRATEGIES.values():
             self.refinement_strategy_combo.addItem(strategy.name, strategy.name)
 
@@ -324,26 +315,64 @@ class BatchPreprocessDialog(QDialog):
                 ):
                     self.refinement_strategy_combo.setCurrentIndex(i)
                     break
+        run_refinement_layout.addWidget(self.run_refinement_check)
+        run_refinement_layout.addWidget(self.refinement_strategy_combo)
 
-        refinement_layout.addRow("Refinement Strategy:", self.refinement_strategy_combo)
+        refinement_layout.addLayout(run_refinement_layout)
 
         # Refinement tolerance
-        self.tolerance_spin = QSpinBox()
-        self.tolerance_spin.setRange(1, 50)  # 0.01 to 0.50
-        self.tolerance_spin.setValue(int(app_settings.refine_default_tolerance * 100))
-        self.tolerance_spin.setSuffix(" (hundredths)")
+        tolerance_row = QHBoxLayout()
 
-        refinement_layout.addRow("Refinement Tolerance:", self.tolerance_spin)
+        tolerance_label = QLabel()
+        tolerance_label.setText("Refinement tolerance: ")
+        tolerance_row.addWidget(tolerance_label)
 
-        # Shrink pixels
-        self.shrink_pixels_spin = QSpinBox()
-        self.shrink_pixels_spin.setRange(0, 20)
-        self.shrink_pixels_spin.setValue(app_settings.shrink_after_refinement)
-        self.shrink_pixels_spin.setSuffix(" pixels")
+        self.tolerance_slider = QSlider(Qt.Orientation.Horizontal)
+        self.tolerance_slider.setMinimum(1)  # 0.01
+        self.tolerance_slider.setMaximum(15)  # 0.15
+        self.tolerance_slider.setValue(int(app_settings.refine_default_tolerance * 100))
+        self.tolerance_slider.setFixedWidth(100)
+        tolerance_row.addWidget(self.tolerance_slider)
 
-        refinement_layout.addRow("Shrink refined boxes:", self.shrink_pixels_spin)
+        self.tolerance_value_label = QLabel(
+            f"{app_settings.refine_default_tolerance:.2f}"
+        )
+        # Avoid a blowup where QT seems to think this label (and thus the toolbar) needs
+        # a ton of vertical space.
+        self.tolerance_value_label.setFixedHeight(20)
+        tolerance_row.addWidget(self.tolerance_value_label)
+        self.tolerance_slider.valueChanged.connect(
+            lambda value: self.tolerance_value_label.setText(f"{value / 100.0:.2f}")
+        )
+
+        refinement_layout.addLayout(tolerance_row)
 
         layout.addWidget(refinement_group)
+
+        shrink_group = QGroupBox("Shrink boxes")
+        shrink_row = QHBoxLayout(shrink_group)
+
+        # Shrink pixels
+        self.shrink_checkbox = QCheckBox()
+        self.shrink_checkbox.setText("Shrink boxes by")
+        self.shrink_checkbox.setChecked(app_settings.shrink_after_refinement != 0)
+        shrink_row.addWidget(self.shrink_checkbox)
+        self.shrink_pixels_edit = QLineEdit()
+        self.shrink_pixels_edit.setText(str(app_settings.shrink_after_refinement))
+        self.shrink_pixels_edit.setMaximumWidth(40)
+        shrink_row.addWidget(self.shrink_pixels_edit)
+
+        shrink_pixels_label = QLabel()
+        shrink_pixels_label.setText("pixels")
+        shrink_row.addWidget(shrink_pixels_label)
+
+        layout.addWidget(shrink_group)
+
+        self.skip_existing_check = QCheckBox()
+        self.skip_existing_check.setChecked(True)
+        self.skip_existing_check.setText("Skip images with existing boxes")
+
+        layout.addWidget(self.skip_existing_check)
 
         # Progress group
         progress_group = QGroupBox("Progress")
@@ -385,14 +414,30 @@ class BatchPreprocessDialog(QDialog):
             return
 
         # Get selected options
-        detection_strategy_name = self.detection_strategy_combo.currentData()
-        skip_existing = self.skip_existing_radio.isChecked()
-        refinement_strategy_name = self.refinement_strategy_combo.currentData()
-        refinement_tolerance = self.tolerance_spin.value() / 100.0
-        shrink_pixels = self.shrink_pixels_spin.value()
+        if self.run_detection_check.isChecked():
+            detection_strategy_name = self.detection_strategy_combo.currentData()
+        else:
+            detection_strategy_name = ""
+
+        if self.run_refinement_check.isChecked():
+            refinement_strategy_name = self.refinement_strategy_combo.currentData()
+        else:
+            refinement_strategy_name = ""
+        refinement_tolerance = self.tolerance_slider.value() / 100.0
+
+        if self.shrink_checkbox.isChecked():
+            shrink_pixels = int(self.shrink_pixels_edit.text().strip())
+        else:
+            shrink_pixels = 0
+
+        skip_existing = self.skip_existing_check.isChecked()
 
         # Validate that at least one operation is selected
-        if not detection_strategy_name and not refinement_strategy_name:
+        if (
+            not detection_strategy_name
+            and not refinement_strategy_name
+            and not shrink_pixels
+        ):
             return  # Nothing to do
 
         # Create and start processor
@@ -445,7 +490,8 @@ class BatchPreprocessDialog(QDialog):
 
         # Auto-scroll to bottom
         scrollbar = self.log_widget.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        if scrollbar:
+            scrollbar.setValue(scrollbar.maximum())
 
     def processing_finished(self, processed: int, skipped: int, errors: int):
         """Handle processing completion."""
