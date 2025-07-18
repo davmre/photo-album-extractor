@@ -489,6 +489,7 @@ def refine_bounding_box_strips(
     corner_points: BoundingBoxAny,
     reltol: float = 0.05,
     resolution_scale_factor: float = 1.0,
+    minimum_strip_size_pixels=8,
     enforce_parallel_sides: bool = False,
     debug_dir: str | None = None,
 ) -> QuadArray:
@@ -513,6 +514,7 @@ def refine_bounding_box_strips(
         image,
         rect,
         reltol=reltol,
+        min_image_pixels=minimum_strip_size_pixels,
         resolution_scale_factor=resolution_scale_factor,
         debug_dir=debug_dir,
     )

@@ -54,6 +54,27 @@ class RefinementStrategyStrips(RefinementStrategy):
         )
 
 
+class RefinementStrategyStripsIndependent(RefinementStrategy):
+    @property
+    def name(self):
+        return "Strips independent edges"
+
+    def refine(
+        self,
+        image: Image.Image | UInt8Array,
+        corner_points: QuadArray,
+        reltol: float = 0.05,
+        debug_dir: str | None = None,
+    ):
+        return refine_strips.refine_bounding_box_strips(
+            image,
+            corner_points,
+            enforce_parallel_sides=False,
+            debug_dir=debug_dir,
+            reltol=reltol,
+        )
+
+
 class RefinementStrategyStripsIterated(RefinementStrategy):
     def __init__(self, max_iterations=4, atol=2.0):
         self.max_iterations = max_iterations
@@ -139,6 +160,44 @@ class RefinementStrategyHoughSoft(RefinementStrategy):
         )
 
 
+class RefinementStrategyHoughStripsRect(RefinementStrategy):
+    @property
+    def name(self):
+        return "Hough transform (with indep rectanglification)"
+
+    def refine(
+        self,
+        image: Image.Image | UInt8Array,
+        corner_points: QuadArray,
+        reltol: float = 0.1,
+        debug_dir: str | None = None,
+    ):
+        print("refining with Hough and debug dir", debug_dir)
+        refined_points = refine_strips_hough.refine_strips_hough(
+            image,
+            corner_points,
+            debug_dir=debug_dir,
+            reltol=reltol,
+            soft_boundaries=True,
+            max_candidate_angles=2,
+            max_candidate_intercepts_per_angle=2,
+            include_single_strip_angle_hypotheses=True,
+            aspect_preference_strength=0.01,
+            candidate_aspect_ratios=app_settings.standard_aspect_ratios,
+        )
+        refined_points = refine_strips.refine_bounding_box_strips(
+            image,
+            refined_points,
+            minimum_strip_size_pixels=10,
+            reltol=0.005,
+            enforce_parallel_sides=False,
+        )
+        return refined_points
+        from core import inscribed_rectangle
+
+        return inscribed_rectangle.largest_inscribed_rectangle(refined_points)
+
+
 class RefinementStrategyHoughMultiscale(RefinementStrategy):
     @property
     def name(self):
@@ -205,8 +264,10 @@ class RefinementStrategyHoughGreedy(RefinementStrategy):
 _REFINEMENT_STRATEGIES: list[RefinementStrategy] = [
     RefinementStrategyStrips(),
     RefinementStrategyStripsIterated(),
+    RefinementStrategyStripsIndependent(),
     RefinementStrategyHoughGreedy(),
     RefinementStrategyHoughReranked(),
+    RefinementStrategyHoughStripsRect(),
     RefinementStrategyHoughSoft(),
     RefinementStrategyHoughMultiscale(),
 ]

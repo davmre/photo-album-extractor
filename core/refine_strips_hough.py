@@ -33,8 +33,7 @@ LOGGER = logging.getLogger("logger")
 DEFAULT_RESOLUTION_SCALE_FACTOR = 1.0
 MIN_IMAGE_PIXELS_DEFAULT = 8
 IMAGE_BOUNDS_SLACK = 0.01
-EDGE_WEIGHT_BLUR_KERNEL_SIZE = (5, 5)
-EDGE_WEIGHT_BLUR_SIGMA = 0
+EDGE_WEIGHT_BLUR_KERNEL_SIZE = 5
 EDGE_PIXELS_TO_ZERO = 2  # Zero out edge pixels where gradients aren't well-defined
 FFT_MAX_RADIUS_FRACTION = 0.8  # Don't sample all the way to FFT edges
 FFT_RADIAL_SAMPLES = 50
@@ -1141,6 +1140,30 @@ def extract_border_strips(
     return map2_strip_set(create_strip, STRIP_POSITIONS, strip_boundaries_unit_square)
 
 
+def get_half_blur_kernel(position: StripPosition, half_field_size=2) -> FloatArray:
+    """Build a Gaussian blur kernel that blurs "inwards" within the bounding rect.
+
+    For the top strip, each blurred pixel only depends on pixels above it;
+    for the left strip, each bluured pixel depends only pixels to its left, and so on.
+
+    This is because we want to err on the side of finding edges within the image
+    bounds. Cropping off a pixel or two of a scanned image is better than having an
+    unsightly strip along the edge.
+    """
+    blur_kernel = cv2.getGaussianKernel(2 * half_field_size + 1, 0)
+    blur_kernel = blur_kernel * blur_kernel.T
+    if position == StripPosition.TOP:
+        blur_kernel[-half_field_size:, :] = 0
+    elif position == StripPosition.BOTTOM:
+        blur_kernel[:half_field_size, 0] = 0
+    elif position == StripPosition.LEFT:
+        blur_kernel[:, -half_field_size:] = 0
+    elif position == StripPosition.RIGHT:
+        blur_kernel[:, :half_field_size] = 0
+    blur_kernel /= np.sum(blur_kernel)
+    return blur_kernel
+
+
 def detect_edges(
     position: StripPosition, pixels: FloatArray, mask: UInt8Array
 ) -> FloatArray:
@@ -1177,9 +1200,12 @@ def detect_edges(
     edge_weights *= mask  # Zero out pixels outside image boundary
     # Square root: favor long coherent edges over smaller areas with high response.
     edge_weights = np.sqrt(np.abs(edge_weights))
-    edge_weights = cv2.GaussianBlur(
-        edge_weights, EDGE_WEIGHT_BLUR_KERNEL_SIZE, EDGE_WEIGHT_BLUR_SIGMA
-    )
+    # Blur pixels "inwards" to favor edges within image bounds.
+    half_blur_kernel = get_half_blur_kernel(position, 2)
+    edge_weights = cv2.filter2D(edge_weights, -1, half_blur_kernel)
+    # edge_weights = cv2.GaussianBlur(
+    #    edge_weights, (EDGE_WEIGHT_BLUR_KERNEL_SIZE, EDGE_WEIGHT_BLUR_KERNEL_SIZE), 0
+    # )
     edge_weights *= mask  # Re-apply mask after blurring
     # don't use votes from the edge pixels where sobel directions aren't
     # fully defined
