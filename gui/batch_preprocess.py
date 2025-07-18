@@ -375,19 +375,19 @@ class BatchPreprocessDialog(QDialog):
         progress_layout = QVBoxLayout(progress_group)
 
         self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
+        self.progress_bar.setVisible(True)
         progress_layout.addWidget(self.progress_bar)
 
         self.status_label = QLabel("")
-        self.status_label.setVisible(False)
+        self.status_label.setVisible(True)
         progress_layout.addWidget(self.status_label)
 
         # Log widget
         self.log_widget = QTextEdit()
         self.log_widget.setReadOnly(True)
         self.log_widget.setMaximumHeight(200)
-        self.log_widget.setVisible(False)
-        self.log_widget.setPlainText("Processing log will appear here...")
+        self.log_widget.setVisible(True)
+        self.log_widget.setPlainText("")
         progress_layout.addWidget(self.log_widget)
 
         layout.addWidget(progress_group)
