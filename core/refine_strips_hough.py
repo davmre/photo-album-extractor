@@ -790,7 +790,7 @@ def score_intercepts_for_strip_functional(
         int(np.ceil(max_intercept)),
         weights=weights.flatten(),
     )
-    print(
+    LOGGER.debug(
         f"strip {strip.position.value} shape {strip.pixels.shape[:2]} min intercept {intercept_bins[0]} max intercept {intercept_bins[-1]} bins {len(intercept_bins)}"
     )
     return intercept_scores, intercept_bins
@@ -847,7 +847,7 @@ def score_aspect_ratio(
     """
     width, height = geometry.dimension_bounds(corners)
     aspect = max(width, height) / min(width, height)
-    print(f"scoring aspect {aspect: .3f}")
+    LOGGER.debug(f"scoring aspect {aspect: .3f}")
     score = 0.0
     for candidate_aspect in candidate_aspect_ratios:
         relative_aspect = aspect / candidate_aspect
@@ -855,7 +855,9 @@ def score_aspect_ratio(
         if aspect_error > aspect_rtol:
             continue
         score += aspect_preference_strength * (1 - (aspect_error / aspect_rtol) ** 2)
-        print(f"   matches candidate {candidate_aspect: .3f}! score boost {score}")
+        LOGGER.debug(
+            f"   matches candidate {candidate_aspect: .3f}! score boost {score}"
+        )
     return score
 
 
@@ -990,19 +992,19 @@ def maybe_boost_image_edge(
         centered_intercept = intercept - slope * x_min
     else:
         centered_intercept = intercept + slope * x_min
-    print(
+    LOGGER.debug(
         f"strip {strip.position}: edge intercept orig {intercept} centered {centered_intercept}"
     )
     if centered_intercept >= np.min(intercept_bins) and centered_intercept <= np.max(
         intercept_bins
     ):
         bin = np.searchsorted(intercept_bins, centered_intercept) - 1
-        print(
+        LOGGER.debug(
             f"previous scores max {np.max(intercept_scores)} mean {np.mean(intercept_scores)} binval {intercept_scores[bin]}"
         )
         intercept_scores[bin] += IMAGE_EDGE_BOOST_FRACTION * (x_max - x_min)
 
-        print(
+        LOGGER.debug(
             f"boosting bin {bin} icept {intercept_bins[bin]} by {IMAGE_EDGE_BOOST_FRACTION * (x_max - x_min)}, new val {intercept_scores[bin]}"
         )
     return intercept_scores
@@ -1260,23 +1262,23 @@ def find_best_overall_angles(
         overall_angle_scores, max_num_peaks=max_num_peaks
     )
     best_angles = [combined_angles[int(idx)] for idx in best_idxs]
-    print("best angle", [np.degrees(a) for a in best_angles])
+    LOGGER.debug("best angle %s", [np.degrees(a) for a in best_angles])
     best_idx = int(best_idxs[0])
     if best_idx > 0:
         best_angles.append(combined_angles[best_idx - 1])
     if best_idx < len(combined_angles) - 1:
         best_angles.append(combined_angles[best_idx + 1])
 
-    print("INcluding single strip?", include_single_strip_hypotheses)
+    LOGGER.debug("Including single strip? %s", include_single_strip_hypotheses)
     if include_single_strip_hypotheses:
         for strip_angles, strip_scores in strip_scored_angles:
             strip_best_angle = strip_angles[np.argmax(strip_scores)]
             diffs = [strip_best_angle - a for a in best_angles]
-            print(
+            LOGGER.debug(
                 f"Considering single-strip angle {strip_best_angle:.4f} to best angles {[best_angles]}"
             )
             if np.min(np.abs(diffs)) > UNIQUE_ANGLE_TOLERANCE:
-                print(
+                LOGGER.debug(
                     f"Adding single-strip angle {strip_best_angle:.4f} to best angles {[best_angles]}"
                 )
                 best_angles.append(strip_best_angle)
@@ -1320,7 +1322,7 @@ def get_candidate_edges(
 
     for candidate_angle in best_angles:
         slope = np.tan(candidate_angle)
-        print("candidate angle", candidate_angle, "slope", slope)
+        LOGGER.debug("candidate angle %s slope %s", candidate_angle, slope)
 
         # Score intercepts for this angle
         intercept_scores, intercept_bins = score_intercepts_for_strip_functional(
@@ -1429,7 +1431,7 @@ def find_best_hypothesis(
                 edge_indices,
             )
 
-            print(
+            LOGGER.debug(
                 f"proposing hypothesis w angle {angle} idx {edge_indices} edge score {sum(edge_scores)}"
             )
 
@@ -1529,7 +1531,7 @@ def refine_strips_hough(
         p = pathlib.Path(debug_dir).expanduser()
         p.mkdir(parents=True, exist_ok=True)
         debug_dir = str(p)
-        print("made debug dir", debug_dir)
+        LOGGER.debug("made debug dir %s", debug_dir)
         LOGGER.info(f"logging to debug dir {debug_dir}")
 
     if isinstance(image, np.ndarray):
