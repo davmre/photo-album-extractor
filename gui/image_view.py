@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import os
 
-import numpy as np
 from PIL import Image, ImageQt
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import (
@@ -88,6 +87,9 @@ class ImageView(QGraphicsView):
 
     def set_image(self, image: Image.Image | None = None):
         """Set the image to display."""
+        # Store PIL Image reference for refinement operations
+        self._image_pil = image
+
         # QPixmap uses implicit sharing semantics, so it seems we need to
         # keep a reference to the QImage so it doesn't get GC'd.
         if image is None:
@@ -228,28 +230,6 @@ class ImageView(QGraphicsView):
         # Emit signal to update magnifier with new bounding box positions
         self.boxes_changed.emit()
 
-    def image_as_numpy(self, format="rgb"):
-        image = self._image_qt
-        if image is None:
-            raise ValueError("no image loaded!")
-        width = image.width()
-        height = image.height()
-
-        # Convert QImage to numpy array
-        ptr = image.constBits()
-        ptr.setsize(height * width * 4)  # 4 bytes per pixel (RGBA)
-        arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
-        # Convert RGBA to BGR for OpenCV
-        if format == "rgba":
-            image = arr
-        if format == "rgb":
-            image = arr[:, :, [0, 1, 2]]  # RGB format
-        elif format == "bgr":
-            image = arr[:, :, [2, 1, 0]]  # BGR format
-        else:
-            raise ValueError("Unrecognized image format", format)
-        return image
-
     def rectangleify_bounding_box(self, box: QuadBoundingBox, inner=True):
         if not self.image_item or not isinstance(box, QuadBoundingBox):
             return
@@ -267,13 +247,10 @@ class ImageView(QGraphicsView):
         self, box: QuadBoundingBox, multiscale=False, enforce_parallel_sides=None
     ):
         """Refine a single bounding box using edge detection."""
-        if not self.image_item or not isinstance(box, QuadBoundingBox):
+        if not self._image_pil or not isinstance(box, QuadBoundingBox):
             return
 
         strategy = refinement_strategies.configure_refinement_strategy(app_settings)
-
-        # Get the current image as numpy array
-        image_bgr = self.image_as_numpy(format="bgr")
 
         # Get current box corners in image coordinates
         corner_coords = box.get_ordered_corners_for_extraction()
@@ -284,7 +261,7 @@ class ImageView(QGraphicsView):
 
         try:
             refined_corners = strategy.refine(
-                image_bgr,
+                self._image_pil,
                 corner_coords,
                 reltol=app_settings.refine_current_tolerance,
                 debug_dir=debug_dir,
