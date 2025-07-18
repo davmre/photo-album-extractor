@@ -284,8 +284,15 @@ class ImageView(QGraphicsView):
 
         try:
             refined_corners = strategy.refine(
-                image_bgr, corner_coords, reltol=app_settings.refine_current_tolerance, debug_dir=debug_dir
+                image_bgr,
+                corner_coords,
+                reltol=app_settings.refine_current_tolerance,
+                debug_dir=debug_dir,
             )
+            if app_settings.shrink_after_refinement:
+                refined_corners = geometry.shrink_rectangle(
+                    refined_corners, shrink_by=app_settings.shrink_after_refinement
+                )
             box.set_corners(refined_corners)
             box.set_marked_as_good(False)
             box.keep_rectangular = geometry.is_rectangle(refined_corners)

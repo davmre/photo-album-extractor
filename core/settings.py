@@ -14,6 +14,7 @@ class AppSettings:
     refinement_strategy: str = ""
     refine_default_tolerance: float = 0.05
     refine_current_tolerance: float = 0.05
+    shrink_after_refinement: int = 2
 
     # Validation settings
     warn_date_inconsistent: bool = True

@@ -474,6 +474,60 @@ def signed_distance_from_border(
     return a1 / n + (-a2 + a3 - a4) / n
 
 
+def shrink_rectangle(corner_points: QuadArray, shrink_by: int | float) -> QuadArray:
+    """
+    Shrink a rectangle by moving each edge towards the center by the given amount.
+
+    Args:
+        corner_points: Array of 4 corner points in clockwise order
+        shrink_by: Distance to move each edge towards center (positive values shrink)
+
+    Returns:
+        New QuadArray with shrunken rectangle corners
+    """
+    # Ensure we have a proper QuadArray
+    corners = bounding_box_as_array(corner_points)
+
+    # Sort corners clockwise for consistent ordering
+    corners = sort_clockwise(corners)
+
+    # Calculate edge vectors (from corner to next corner)
+    edges = np.array(
+        [
+            corners[1] - corners[0],  # edge 0->1
+            corners[2] - corners[1],  # edge 1->2
+            corners[3] - corners[2],  # edge 2->3
+            corners[0] - corners[3],  # edge 3->0
+        ]
+    )
+
+    # Calculate inward normal vectors for each edge
+    inward_normals = np.array([np.array([-edge[1], edge[0]]) for edge in edges])
+
+    # Normalize the inward normals
+    for i in range(4):
+        norm = np.linalg.norm(inward_normals[i])
+        if norm > 0:
+            inward_normals[i] /= norm
+
+    # Move each edge inward by the shrink amount
+    # We need to move both endpoints of each edge
+    new_corners = corners.copy()
+
+    for i in range(4):
+        # Each corner is affected by two edges (the one before and after it)
+        prev_edge_idx = (i - 1) % 4
+        curr_edge_idx = i
+
+        # Move the corner by the average of the two adjacent inward normals
+        displacement = (
+            inward_normals[prev_edge_idx] + inward_normals[curr_edge_idx]
+        ) * shrink_by
+        new_corners[i] += displacement
+
+    return new_corners
+
+
 def image_boundary_mask(
     patch_shape: tuple[int, ...],
     mask_corners_in_patch_coords: QuadArray,

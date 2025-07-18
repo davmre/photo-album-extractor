@@ -9,6 +9,7 @@ import logging
 import PIL.Image
 
 from cli.utils import get_image_files
+from core import geometry
 from core.bounding_box_storage import BoundingBoxStorage
 from core.refinement_strategies import (
     REFINEMENT_STRATEGIES,
@@ -18,7 +19,10 @@ from core.settings import app_settings
 
 
 def cmd_refine(
-    paths: list[str], strategy: str | None, debug_dir: str | None = None, tolerance: float | None = None
+    paths: list[str],
+    strategy: str | None,
+    debug_dir: str | None = None,
+    tolerance: float | None = None,
 ) -> int:
     """Run photo detection on specified images."""
     logger = logging.getLogger(__name__)
@@ -73,10 +77,18 @@ def cmd_refine(
             refined_boxes = []
             for box in boxes:
                 # Run detection
-                reltol = tolerance if tolerance is not None else app_settings.refine_default_tolerance
+                reltol = (
+                    tolerance
+                    if tolerance is not None
+                    else app_settings.refine_default_tolerance
+                )
                 refined = refinement_strategy.refine(
                     image, corner_points=box.corners, reltol=reltol, debug_dir=debug_dir
                 )
+                if app_settings.shrink_after_refinement:
+                    refined = geometry.shrink_rectangle(
+                        refined, shrink_by=app_settings.shrink_after_refinement
+                    )
                 box.corners = refined
                 refined_boxes.append(box)
                 print(f"  Refined box id {box.box_id}")

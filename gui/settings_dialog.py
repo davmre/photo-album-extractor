@@ -42,8 +42,10 @@ class SettingsDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
+        detection_group = QGroupBox("Detection")
+
         # Create form layout
-        form_layout = QFormLayout()
+        form_layout = QFormLayout(detection_group)
 
         # Gemini API Key field
         self.api_key_edit = QLineEdit()
@@ -71,6 +73,10 @@ class SettingsDialog(QDialog):
         self.auto_refine_checkbox.setChecked(app_settings.auto_refine_detection)
 
         form_layout.addRow("", self.auto_refine_checkbox)
+        layout.addWidget(detection_group)
+
+        refine_group = QGroupBox("Refinement")
+        refine_layout = QFormLayout(refine_group)
 
         # Refinement Strategy combo
         self.refinement_strategy_combo = QComboBox()
@@ -81,9 +87,17 @@ class SettingsDialog(QDialog):
                 current_index = i
         self.refinement_strategy_combo.setCurrentIndex(current_index)
 
-        form_layout.addRow("Refinement Strategy:", self.refinement_strategy_combo)
+        refine_layout.addRow("Refinement Strategy:", self.refinement_strategy_combo)
 
-        layout.addLayout(form_layout)
+        self.shrink_after_refine_edit = QLineEdit()
+        self.shrink_after_refine_edit.setMaxLength(3)
+        self.shrink_after_refine_edit.setMaximumWidth(40)
+        self.shrink_after_refine_edit.setText(str(app_settings.shrink_after_refinement))
+        refine_layout.addRow(
+            "Shrink refined bounds (pixels):", self.shrink_after_refine_edit
+        )
+
+        layout.addWidget(refine_group)
 
         # Validation Settings Group
         validation_group = QGroupBox("Validation Warnings")
@@ -184,6 +198,18 @@ class SettingsDialog(QDialog):
         selected_strategy = self.refinement_strategy_combo.currentData()
         if selected_strategy:
             app_settings.refinement_strategy = selected_strategy.name
+
+        try:
+            shrink_after_refine_text = self.shrink_after_refine_edit.text().strip()
+            if shrink_after_refine_text:
+                app_settings.shrink_after_refinement = int(shrink_after_refine_text)
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Value",
+                "Please enter an integer number pixels to shrink each refined box.",
+            )
+            return
 
         # Save validation settings
         app_settings.warn_date_inconsistent = (
