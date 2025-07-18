@@ -30,19 +30,19 @@ ImageCoordinate = NewType("ImageCoordinate", tuple[float, float])
 class PhotoOrientation(Enum):
     """Photo orientation relative to its normal upright position."""
 
-    NORMAL = "normal"                    # 0 degrees (right-side up)
-    ROTATED_90_CW = "rotated_90_cw"     # 90 degrees clockwise
-    UPSIDE_DOWN = "upside_down"         # 180 degrees
-    ROTATED_90_CCW = "rotated_90_ccw"   # 90 degrees counterclockwise
+    NORMAL = "normal"  # 0 degrees (right-side up)
+    ROTATED_90_CW = "rotated_90_cw"  # 90 degrees clockwise
+    UPSIDE_DOWN = "upside_down"  # 180 degrees
+    ROTATED_90_CCW = "rotated_90_ccw"  # 90 degrees counterclockwise
 
     @property
     def rotation_degrees(self) -> int:
         """Return the rotation in degrees needed to make the photo upright."""
         rotation_map = {
             PhotoOrientation.NORMAL: 0,
-            PhotoOrientation.ROTATED_90_CW: -90,     # Need to rotate 90° CCW to fix
+            PhotoOrientation.ROTATED_90_CW: -90,  # Need to rotate 90° CCW to fix
             PhotoOrientation.UPSIDE_DOWN: 180,
-            PhotoOrientation.ROTATED_90_CCW: 90,     # Need to rotate 90° CW to fix
+            PhotoOrientation.ROTATED_90_CCW: 90,  # Need to rotate 90° CW to fix
         }
         return rotation_map[self]
 
@@ -56,6 +56,7 @@ class PhotoOrientation(Enum):
             PhotoOrientation.ROTATED_90_CCW: "Rotated 90° CCW",
         }
         return display_map[self]
+
 
 # =============================================================================
 # Array Types with Shape Constraints

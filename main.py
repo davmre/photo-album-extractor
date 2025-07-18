@@ -68,7 +68,9 @@ def main():
         "--debug_dir", help="Optional directory to dump debugging images."
     )
     refine_parser.add_argument(
-        "--tolerance", type=float, help="Tolerance for refinement convergence (default: app settings)"
+        "--tolerance",
+        type=float,
+        help="Tolerance for refinement convergence (default: app settings)",
     )
 
     # Extract command
