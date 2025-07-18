@@ -195,6 +195,7 @@ def save_cropped_images(
     source_image_path: str | None = None,
     file_exists_behavior: FileExistsBehavior = FileExistsBehavior.OVERWRITE,
     output_format: OutputFormat = OutputFormat.JPEG,
+    save_date_hint_in_description: bool = True,
 ) -> Generator[
     tuple[Literal["skipped"], str]
     | tuple[Literal["saved"], str]
@@ -274,6 +275,7 @@ def save_image_with_exif(
     attributes: PhotoAttributes,
     jpeg_quality: int = 95,
     source_file_time: datetime | None = None,
+    save_date_hint_in_description: bool = True,
 ) -> None:
     """Save image with EXIF data from attributes.
 
@@ -319,9 +321,11 @@ def save_image_with_exif(
     # Add comments if available
     if attributes.comments:
         comments = attributes.comments[:65535]  # EXIF comment limit
-        # Use UserComment for better unicode support
-        exif_dict["Exif"][piexif.ExifIFD.UserComment] = comments.encode("utf-8")
-        # Also set ImageDescription for wider compatibility
+        if attributes.date_hint and save_date_hint_in_description:
+            if comments:
+                comments += "\n"
+            comments += f"Date: {attributes.date_hint}"
+
         exif_dict["0th"][piexif.ImageIFD.ImageDescription] = comments
         pnginfo.add_text("Description", comments)
         tiffinfo[TiffTag.IMAGE_DESCRIPTION] = comments
