@@ -31,6 +31,7 @@ from core.detection_strategies import configure_detection_strategy
 from core.errors import AppError
 from core.settings import app_settings
 from gui.attributes_sidebar import AttributesSidebar
+from gui.batch_preprocess import BatchPreprocessDialog
 from gui.directory_sidebar import DirectoryImageList
 from gui.image_view import ImageView
 from gui.settings_dialog import SettingsDialog
@@ -151,6 +152,9 @@ class PhotoExtractorApp(QMainWindow):
         self.directory_list = DirectoryImageList()
         self.directory_list.image_selected.connect(self.on_image_selected)
         self.directory_list.directory_changed.connect(self.on_directory_changed)
+        self.directory_list.batch_preprocess_requested.connect(
+            self.open_batch_preprocess_dialog
+        )
         # self.directory_list.batch_detect_requested.connect(self.batch_detect_photos)
         # self.directory_list.batch_extract_requested.connect(self.batch_extract_photos)
         main_splitter.addWidget(self.directory_list)
@@ -676,3 +680,34 @@ class PhotoExtractorApp(QMainWindow):
     def open_settings(self):
         """Open the settings dialog."""
         self.settings_dialog.exec()
+
+    def open_batch_preprocess_dialog(self):
+        """Open the batch preprocess dialog."""
+        if not self.current_directory or not self.bounding_box_storage:
+            QMessageBox.warning(
+                self, "No Directory", "Please select a directory first."
+            )
+            return
+
+        # Create and show the batch preprocess dialog
+        dialog = BatchPreprocessDialog(
+            parent=self,
+            directory=self.current_directory,
+            storage=self.bounding_box_storage,
+        )
+
+        # Connect to handle completion
+        dialog.accepted.connect(self.on_batch_preprocess_completed)
+        dialog.exec()
+
+    def on_batch_preprocess_completed(self):
+        """Handle batch preprocessing completion by refreshing the UI."""
+        # Refresh the directory sidebar validation cache
+        self.directory_list.invalidate_validation_cache()
+
+        # Reload the current image's bounding boxes if an image is loaded
+        if self.current_image_path:
+            self.load_saved_bounding_boxes()
+
+        # Update the status bar
+        self.status_bar.showMessage("Batch preprocessing completed", 3000)
