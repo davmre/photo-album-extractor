@@ -10,20 +10,16 @@ import os
 import PIL.Image
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
-    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QProgressBar,
-    QRadioButton,
     QSlider,
-    QSpinBox,
     QTextEdit,
     QVBoxLayout,
 )

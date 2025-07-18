@@ -18,7 +18,7 @@ from scipy import ndimage
 from scipy.interpolate import interp1d
 from scipy.signal import find_peaks
 
-from core import debug_plots, geometry, images, refine_strips
+from core import debug_plots, extract, geometry, refine_strips
 from core.photo_types import (
     FloatArray,
     IntArray,
@@ -1097,7 +1097,7 @@ def extract_border_strips(
         LOGGER.debug(
             f"extracting strip {position} with corners {strip_corners_image} image width {width} height {height} strip width {strip_width} height {strip_height}"
         )
-        strip_pixels = images.extract_perspective_image(
+        strip_pixels = extract.extract_perspective_image(
             pil_image,
             strip_corners_image,
             output_width=strip_width,

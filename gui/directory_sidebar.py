@@ -33,6 +33,7 @@ class DirectoryImageList(QWidget):
     batch_preprocess_requested = (
         pyqtSignal()
     )  # Emits when user requests batch preprocessing
+    extract_photos_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -62,12 +63,6 @@ class DirectoryImageList(QWidget):
         self.open_dir_btn.clicked.connect(self.open_directory)
         layout.addWidget(self.open_dir_btn)
 
-        # Batch preprocess button
-        self.batch_preprocess_btn = QPushButton("Batch preprocess...")
-        self.batch_preprocess_btn.clicked.connect(self.batch_preprocess_requested.emit)
-        self.batch_preprocess_btn.setEnabled(False)  # Disabled until directory is set
-        layout.addWidget(self.batch_preprocess_btn)
-
         # Current directory label
         self.dir_label = QLabel("No directory selected")
         self.dir_label.setWordWrap(True)
@@ -80,6 +75,18 @@ class DirectoryImageList(QWidget):
         self.image_list = QListWidget()
         self.image_list.itemClicked.connect(self.on_item_clicked)
         layout.addWidget(self.image_list)
+
+        # Batch preprocess button
+        self.batch_preprocess_btn = QPushButton("Batch preprocess...")
+        self.batch_preprocess_btn.clicked.connect(self.batch_preprocess_requested.emit)
+        self.batch_preprocess_btn.setEnabled(False)  # Disabled until directory is set
+        layout.addWidget(self.batch_preprocess_btn)
+
+        # Extract button
+        self.extract_btn = QPushButton("Extract photos...")
+        self.extract_btn.clicked.connect(self.extract_photos_requested.emit)
+        self.extract_btn.setEnabled(False)  # Disabled until directory is set
+        layout.addWidget(self.extract_btn)
 
     def set_directory(self, directory, storage: BoundingBoxStorage):
         """Set the directory to display images from."""

@@ -12,7 +12,7 @@ import PIL.Image
 
 from cli.utils import get_image_files
 from core.bounding_box_storage import BoundingBoxStorage
-from core.images import save_cropped_images
+from core.extract import save_cropped_images
 
 
 def cmd_extract(paths: list[str], output_dir: str, base_name: str | None) -> int:
@@ -66,13 +66,17 @@ def cmd_extract(paths: list[str], output_dir: str, base_name: str | None) -> int
                 extract_base_name = base_name if base_name else source_base_name
 
                 # Extract and save photos
-                saved_files = save_cropped_images(
+                saved_files = []
+                for status, val in save_cropped_images(
                     image=image,
                     bounding_box_data_list=bounding_boxes,
                     output_dir=output_dir,
                     base_name=extract_base_name,
                     source_image_path=str(image_path),
-                )
+                ):
+                    print(status, val)
+                    if status == "saved":
+                        saved_files.append(val)
 
                 if saved_files:
                     print(f"  Extracted {len(saved_files)} photos:")

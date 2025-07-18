@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core import images
+from core import extract
 from core.bounding_box import BoundingBox, PhotoAttributes
 from core.bounding_box_storage import BoundingBoxStorage
 from core.date_inference import infer_dates_for_current_directory
@@ -33,6 +33,7 @@ from core.settings import app_settings
 from gui.attributes_sidebar import AttributesSidebar
 from gui.batch_preprocess import BatchPreprocessDialog
 from gui.directory_sidebar import DirectoryImageList
+from gui.extract_dialog import ExtractDialog
 from gui.image_view import ImageView
 from gui.settings_dialog import SettingsDialog
 
@@ -88,63 +89,6 @@ class PhotoExtractorApp(QMainWindow):
         # Create menu bar
         self.create_menu_bar()
 
-        # Create toolbar
-        toolbar_layout = QHBoxLayout()
-
-        # File selection buttons
-        self.load_btn = QPushButton("Load Image")
-        self.load_btn.clicked.connect(self.load_image)
-        toolbar_layout.addWidget(self.load_btn)
-
-        # Extract button
-        self.extract_btn = QPushButton("Extract Photos")
-        self.extract_btn.clicked.connect(self.extract_photos)
-        self.extract_btn.setEnabled(False)
-        toolbar_layout.addWidget(self.extract_btn)
-
-        # Detect photos button
-        self.detect_btn = QPushButton("Detect Photos")
-        self.detect_btn.clicked.connect(self.detect_photos)
-        self.detect_btn.setEnabled(False)
-        toolbar_layout.addWidget(self.detect_btn)
-
-        # Refine all button
-        self.refine_all_btn = QPushButton("Refine All")
-        self.refine_all_btn.clicked.connect(self.refine_all_boxes)
-        self.refine_all_btn.setEnabled(False)
-        toolbar_layout.addWidget(self.refine_all_btn)
-
-        # Clear all button
-        self.clear_btn = QPushButton("Clear")
-        self.clear_btn.clicked.connect(self.clear_all_boxes)
-        self.clear_btn.setEnabled(False)
-        toolbar_layout.addWidget(self.clear_btn)
-
-        # Add tolerance slider
-        tolerance_label = QLabel("Refinement tolerance:")
-        toolbar_layout.addWidget(tolerance_label)
-
-        self.tolerance_slider = QSlider(Qt.Orientation.Horizontal)
-        self.tolerance_slider.setMinimum(1)  # 0.01
-        self.tolerance_slider.setMaximum(15)  # 0.15
-        self.tolerance_slider.setValue(int(app_settings.refine_default_tolerance * 100))
-        self.tolerance_slider.setFixedWidth(100)
-        self.tolerance_slider.valueChanged.connect(self.on_tolerance_changed)
-        toolbar_layout.addWidget(self.tolerance_slider)
-
-        self.tolerance_value_label = QLabel(
-            f"{app_settings.refine_default_tolerance:.2f}"
-        )
-        # Avoid a blowup where QT seems to think this label (and thus the toolbar) needs
-        # a ton of vertical space.
-        self.tolerance_value_label.setFixedHeight(20)
-
-        self.tolerance_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        toolbar_layout.addWidget(self.tolerance_value_label)
-
-        toolbar_layout.addStretch()
-        main_layout.addLayout(toolbar_layout)
-
         # Create main horizontal splitter for three-panel layout
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
 
@@ -155,16 +99,26 @@ class PhotoExtractorApp(QMainWindow):
         self.directory_list.batch_preprocess_requested.connect(
             self.open_batch_preprocess_dialog
         )
+        self.directory_list.extract_photos_requested.connect(self.extract_photos)
         # self.directory_list.batch_detect_requested.connect(self.batch_detect_photos)
         # self.directory_list.batch_extract_requested.connect(self.batch_extract_photos)
         main_splitter.addWidget(self.directory_list)
 
         # Create image view (center panel)
+        center_layout = QVBoxLayout()
+
+        toolbar_layout = self.create_toolbar()
+        center_layout.addLayout(toolbar_layout)
+
         self.image_view = ImageView()
         self.image_view.boxes_changed.connect(self.on_box_changed)
         self.image_view.box_selected.connect(self.on_box_selected)
         self.image_view.box_deselected.connect(self.on_box_deselected)
-        main_splitter.addWidget(self.image_view)
+        center_layout.addWidget(self.image_view)
+
+        center_widget = QWidget()
+        center_widget.setLayout(center_layout)
+        main_splitter.addWidget(center_widget)
 
         # Create attributes sidebar (right panel)
         self.attributes_sidebar = AttributesSidebar()
@@ -278,6 +232,52 @@ class PhotoExtractorApp(QMainWindow):
         next_image_action.triggered.connect(self.next_image)
         view_menu.addAction(next_image_action)
 
+    def create_toolbar(self):
+        toolbar_layout = QHBoxLayout()
+
+        # Detect photos button
+        self.detect_btn = QPushButton("Detect Photos")
+        self.detect_btn.clicked.connect(self.detect_photos)
+        self.detect_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.detect_btn)
+
+        # Add tolerance slider
+        tolerance_label = QLabel("Refinement tolerance:")
+        toolbar_layout.addWidget(tolerance_label)
+
+        self.tolerance_slider = QSlider(Qt.Orientation.Horizontal)
+        self.tolerance_slider.setMinimum(1)  # 0.01
+        self.tolerance_slider.setMaximum(15)  # 0.15
+        self.tolerance_slider.setValue(int(app_settings.refine_default_tolerance * 100))
+        self.tolerance_slider.setFixedWidth(100)
+        self.tolerance_slider.valueChanged.connect(self.on_tolerance_changed)
+        toolbar_layout.addWidget(self.tolerance_slider)
+
+        self.tolerance_value_label = QLabel(
+            f"{app_settings.refine_default_tolerance:.2f}"
+        )
+        # Avoid a blowup where QT seems to think this label (and thus the toolbar) needs
+        # a ton of vertical space.
+        self.tolerance_value_label.setFixedHeight(15)
+
+        self.tolerance_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        toolbar_layout.addWidget(self.tolerance_value_label)
+
+        # Refine all button
+        self.refine_all_btn = QPushButton("Refine All")
+        self.refine_all_btn.clicked.connect(self.refine_all_boxes)
+        self.refine_all_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.refine_all_btn)
+
+        # Clear all button
+        self.clear_btn = QPushButton("Clear boxes")
+        self.clear_btn.clicked.connect(self.clear_all_boxes)
+        self.clear_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.clear_btn)
+
+        toolbar_layout.addStretch()
+        return toolbar_layout
+
     def load_image(self):
         """Load an image file using file dialog."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -297,7 +297,7 @@ class PhotoExtractorApp(QMainWindow):
             self.save_current_bounding_boxes()
 
         try:
-            image = images.load_image(file_path)
+            image = extract.load_image(file_path)
             self.image_view.set_image(image)
             if self.refine_debug_dir:
                 self.image_view.refine_debug_dir = os.path.join(
@@ -516,51 +516,25 @@ class PhotoExtractorApp(QMainWindow):
         has_image = self.current_image_path is not None
         has_boxes = len(self.image_view.bounding_boxes) > 0
 
-        self.extract_btn.setEnabled(has_image and has_boxes)
+        self.directory_list.extract_btn.setEnabled(has_image and has_boxes)
         self.clear_btn.setEnabled(has_boxes)
         self.detect_btn.setEnabled(has_image)
         self.refine_all_btn.setEnabled(has_image and has_boxes)
 
     def extract_photos(self, output_directory=None):
-        """Extract all photos based on bounding boxes."""
-        if not self.current_image_path or not self.current_image:
-            QMessageBox.warning(self, "Error", "Please load an image first")
-            return
-
-        bounding_box_data_list = self.image_view.get_bounding_box_data_list()
-        if not bounding_box_data_list:
-            QMessageBox.warning(self, "Error", "No bounding boxes found")
-            return
-
-        if not output_directory:
-            # Prompt for output directory
-            output_directory = QFileDialog.getExistingDirectory(
-                self, "Select Output Folder for Extracted Photos"
+        """Show the batch extract dialog."""
+        if self.current_directory and self.current_image_path:
+            # Show the extract dialog
+            dialog = ExtractDialog(
+                parent=self,
+                current_directory=self.current_directory,
+                current_image_path=self.current_image_path,
+                storage=self.bounding_box_storage,
             )
-
-        if not output_directory:
-            return []  # User cancelled
-
-        # Extract and save photos with unified bounding box data
-        base_name = "photo"
-        saved_files = images.save_cropped_images(
-            self.current_image,
-            bounding_box_data_list,
-            output_directory,
-            base_name,
-            source_image_path=self.current_image_path,
-        )
-
-        if saved_files:
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Extracted {len(saved_files)} photos to:\n{output_directory}",
-            )
-            self.status_bar.showMessage(f"Extracted {len(saved_files)} photos")
-            return saved_files
+            dialog.exec()
         else:
-            QMessageBox.warning(self, "Error", "Failed to extract photos")
+            # Should never get here bc button is disabled when no image loaded.
+            raise ValueError("No image loaded, cannot extract!")
 
     def refine_all_boxes(self):
         """Refine all bounding boxes using edge detection."""

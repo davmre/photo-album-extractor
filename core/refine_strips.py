@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from core import debug_plots, geometry, images
+from core import debug_plots, extract, geometry
 from core.photo_types import (
     BoundingBoxAny,
     FloatArray,
@@ -196,7 +196,7 @@ def extract_border_strips(
         LOGGER.debug(
             f"extracting strip {name} with corners {strip_corners_image} image width {width} height {height} strip width {strip_width} height {strip_height}"
         )
-        strip_pixels = images.extract_perspective_image(
+        strip_pixels = extract.extract_perspective_image(
             pil_image,
             strip_corners_image,
             output_width=strip_width,

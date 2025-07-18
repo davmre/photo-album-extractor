@@ -7,11 +7,14 @@ from __future__ import annotations
 import os
 import platform
 from datetime import datetime
+from enum import Enum, IntEnum
+from typing import Generator, Literal
 
 import numpy as np
 import piexif
 import PIL.Image
 from PIL import Image
+from PIL.PngImagePlugin import PngInfo
 
 import core.photo_types as photo_types
 from core import date_utils, geometry
@@ -24,6 +27,28 @@ from core.photo_types import PhotoOrientation
 
 # Semantic type aliases
 PILImage = PIL.Image.Image  # PIL/Pillow images
+
+
+class FileExistsBehavior(Enum):
+    OVERWRITE = 0
+    SKIP = 1
+    INCREMENT = 2
+
+
+class OutputFormat(Enum):
+    JPEG = "jpg"
+    PNG = "png"
+    TIFF = "tif"
+
+
+class TiffTag(IntEnum):
+    IMAGE_DESCRIPTION = 270
+    DATE_TIME = 306
+    DATE_TIME_ORIGINAL = 36867  # Date/time when original image was taken
+    DATE_TIME_DIGITIZED = 36868  # Date/time when image was digitized
+    ARTIST = 315
+    COPYRIGHT = 33432
+    SOFTWARE = 305
 
 
 def get_file_creation_time(filepath: str) -> datetime | None:
@@ -168,7 +193,13 @@ def save_cropped_images(
     output_dir: str,
     base_name: str = "photo",
     source_image_path: str | None = None,
-) -> list[str]:
+    file_exists_behavior: FileExistsBehavior = FileExistsBehavior.OVERWRITE,
+    output_format: OutputFormat = OutputFormat.JPEG,
+) -> Generator[
+    tuple[Literal["skipped"], str]
+    | tuple[Literal["saved"], str]
+    | tuple[Literal["error"], Exception]
+]:
     """Save multiple cropped images to the specified directory.
 
     Args:
@@ -177,7 +208,14 @@ def save_cropped_images(
             corners and attributes for each photo to extract.
         output_dir: Directory to save images
         base_name: Base name for files
-        source_image_path: Optional path to source image file (for EXIF DateTimeDigitized creation time)
+        source_image_path: Optional path to source image file (for EXIF
+        DateTimeDigitized creation time)
+
+    Yields:
+        For each box to save, one of:
+        ("saved", filename : str)
+        ("skipped", filename: str)
+        ("error", error: Exception)
     """
     saved_files = []
 
@@ -189,6 +227,10 @@ def save_cropped_images(
     if source_image_path:
         source_file_time = get_file_creation_time(source_image_path)
 
+    # Order boxes by their location on the page, top-to-bottom.
+    bounding_box_data_list = sorted(
+        bounding_box_data_list, key=lambda b: np.min(b.corners, axis=0)[1]
+    )
     for i, bbox_data in enumerate(bounding_box_data_list):
         # Extract the image using the corners, incorporating rotation into the perspective transform
         attributes = bbox_data.attributes
@@ -197,15 +239,20 @@ def save_cropped_images(
         )
 
         # Generate filename
-        filename = f"{base_name}_{i:03d}.jpg"
+        filename = f"{base_name}_{i:03d}.{output_format.value}"
         filepath = os.path.join(output_dir, filename)
 
-        # Ensure unique filename
-        counter = 1
-        while os.path.exists(filepath):
-            filename = f"{base_name}_{i:03d}_{counter}.jpg"
-            filepath = os.path.join(output_dir, filename)
-            counter += 1
+        if os.path.exists(filepath):
+            if file_exists_behavior == FileExistsBehavior.SKIP:
+                yield ("skipped", filename)
+                continue
+            elif file_exists_behavior == FileExistsBehavior.INCREMENT:
+                # Ensure unique filename
+                counter = 1
+                while os.path.exists(filepath):
+                    filename = f"{base_name}_{i:03d}_{counter}.{output_format.value}"
+                    filepath = os.path.join(output_dir, filename)
+                    counter += 1
 
         try:
             # Convert to RGB if necessary
@@ -215,12 +262,10 @@ def save_cropped_images(
             save_image_with_exif(
                 cropped, filepath, attributes, source_file_time=source_file_time
             )
+            yield ("saved", filename)
             saved_files.append(filepath)
-            print(f"Saved: {filename}")
         except Exception as e:
-            print(f"Error saving {filename}: {e}")
-
-    return saved_files
+            yield ("error", e)
 
 
 def save_image_with_exif(
@@ -239,55 +284,64 @@ def save_image_with_exif(
         jpeg_quality: JPEG compression quality (default 95)
         source_file_time: Optional datetime for DateTimeDigitized (source image creation time)
     """
-    try:
-        # Create EXIF dictionary
-        exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+    # Create EXIF dictionary
+    exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+    pnginfo = PngInfo()
+    tiffinfo = {}
 
-        # Add date/time if available
-        date_to_parse = attributes.exif_date or attributes.date_hint
-        if date_to_parse:
-            try:
-                # Parse ISO date string and convert to EXIF format
-                dt = date_utils.parse_flexible_date_as_datetime(date_to_parse)
-                if dt is None:
-                    raise ValueError()
+    # Add date/time if available
+    date_to_parse = attributes.exif_date or attributes.date_hint
+    if date_to_parse:
+        try:
+            # Parse ISO date string and convert to EXIF format
+            dt = date_utils.parse_flexible_date_as_datetime(date_to_parse)
+            if dt is None:
+                raise ValueError()
 
-                exif_datetime = dt.strftime("%Y:%m:%d %H:%M:%S")
+            exif_datetime = dt.strftime("%Y:%m:%d %H:%M:%S")
 
-                # Set DateTime and DateTimeOriginal to the inferred photo date
-                exif_dict["0th"][piexif.ImageIFD.DateTime] = exif_datetime
-                exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = exif_datetime
+            # Set DateTime and DateTimeOriginal to the inferred photo date
+            exif_dict["0th"][piexif.ImageIFD.DateTime] = exif_datetime
+            exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = exif_datetime
+            pnginfo.add_text("DateTime", exif_datetime)
+            tiffinfo[TiffTag.DATE_TIME] = exif_datetime
+            tiffinfo[TiffTag.DATE_TIME_ORIGINAL] = exif_datetime
 
-                # Set DateTimeDigitized to source file time if available, otherwise photo date
-                if source_file_time:
-                    digitized_datetime = source_file_time.strftime("%Y:%m:%d %H:%M:%S")
-                    exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = (
-                        digitized_datetime
-                    )
-                else:
-                    exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = exif_datetime
+            # Set DateTimeDigitized to source file time if available, otherwise photo date
+            if source_file_time:
+                digitized_datetime = source_file_time.strftime("%Y:%m:%d %H:%M:%S")
+                exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = digitized_datetime
+                pnginfo.add_text("DateTimeDigitized", digitized_datetime)
+                tiffinfo[TiffTag.DATE_TIME_DIGITIZED] = digitized_datetime
+        except (ValueError, AttributeError) as e:
+            print(f"Warning: Could not parse date '{date_to_parse}': {e}")
 
-            except (ValueError, AttributeError) as e:
-                print(f"Warning: Could not parse date '{date_to_parse}': {e}")
+    # Add comments if available
+    if attributes.comments:
+        comments = attributes.comments[:65535]  # EXIF comment limit
+        # Use UserComment for better unicode support
+        exif_dict["Exif"][piexif.ExifIFD.UserComment] = comments.encode("utf-8")
+        # Also set ImageDescription for wider compatibility
+        exif_dict["0th"][piexif.ImageIFD.ImageDescription] = comments
+        pnginfo.add_text("Description", comments)
+        tiffinfo[TiffTag.IMAGE_DESCRIPTION] = comments
 
-        # Add comments if available
-        if attributes.comments:
-            comments = attributes.comments[:65535]  # EXIF comment limit
-            # Use UserComment for better unicode support
-            exif_dict["Exif"][piexif.ExifIFD.UserComment] = comments.encode("utf-8")
-            # Also set ImageDescription for wider compatibility
-            exif_dict["0th"][piexif.ImageIFD.ImageDescription] = comments
+    # Add software tag
+    exif_dict["0th"][piexif.ImageIFD.Software] = "Photo Album Extractor"
+    pnginfo.add_text("Software", "Photo Album Extractor")
+    tiffinfo[TiffTag.SOFTWARE] = "Photo Album Extractor"
 
-        # Add software tag
-        exif_dict["0th"][piexif.ImageIFD.Software] = "Photo Album Extractor"
+    # Convert EXIF dictionary to bytes
+    exif_bytes = piexif.dump(exif_dict)
+    pnginfo.add_text("Exif", exif_bytes)
 
-        # Convert EXIF dictionary to bytes
-        exif_bytes = piexif.dump(exif_dict)
-
-        # Save image with EXIF data
+    # Save image with EXIF data
+    extension = os.path.splitext(filepath)[1][1:].lower()
+    if extension in ("jpg", "jpeg"):
         image.save(filepath, "JPEG", quality=jpeg_quality, exif=exif_bytes)
-
-    except Exception as e:
-        print(f"Warning: Could not write EXIF data to {filepath}: {e}")
-        # Fall back to saving without EXIF
-        image.save(filepath, "JPEG", quality=jpeg_quality)
+    elif extension == "png":
+        image.save(filepath, "PNG", pnginfo=pnginfo)
+    elif extension in ("tif", "tiff"):
+        image.save(filepath, "TIFF", tiffinfo=tiffinfo)
+    else:
+        raise Exception(f"Unrecognized extension {extension}!")
