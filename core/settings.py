@@ -41,6 +41,7 @@ class AppSettings:
             refinement_strategy=data.get("refinement_strategy", ""),
             refine_default_tolerance=float(data.get("refine_default_tolerance", 0.05)),
             refine_current_tolerance=float(data.get("refine_current_tolerance", 0.05)),
+            shrink_after_refinement=int(data.get("shrink_after_refinement", 2)),
             warn_date_inconsistent=bool(data.get("warn_date_inconsistent", True)),
             warn_non_rectangular=bool(data.get("warn_non_rectangular", True)),
             warn_nonstandard_aspect=bool(data.get("warn_nonstandard_aspect", True)),
