@@ -319,13 +319,14 @@ def save_image_with_exif(
             print(f"Warning: Could not parse date '{date_to_parse}': {e}")
 
     # Add comments if available
+    comments = ""
     if attributes.comments:
         comments = attributes.comments[:65535]  # EXIF comment limit
-        if attributes.date_hint and save_date_hint_in_description:
-            if comments:
-                comments += "\n"
-            comments += f"Date: {attributes.date_hint}"
-
+    if attributes.date_hint and save_date_hint_in_description:
+        if comments:
+            comments += "\n"
+        comments += f"Date: {attributes.date_hint}"
+    if comments:
         exif_dict["0th"][piexif.ImageIFD.ImageDescription] = comments
         pnginfo.add_text("Description", comments)
         tiffinfo[TiffTag.IMAGE_DESCRIPTION] = comments
