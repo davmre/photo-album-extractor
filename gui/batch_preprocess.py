@@ -14,11 +14,15 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QProgressBar,
+    QPushButton,
+    QRadioButton,
     QSlider,
     QTextEdit,
     QVBoxLayout,
@@ -34,6 +38,20 @@ from core.refinement_strategies import (
 from core.settings import app_settings
 
 
+def get_image_files_in_directory(directory: str) -> list[str]:
+    """Get list of all image files in the directory."""
+    supported_formats = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif"}
+    image_files = []
+
+    for ext in supported_formats:
+        pattern = os.path.join(directory, f"*{ext}")
+        image_files.extend(glob.glob(pattern, recursive=False))
+        pattern = os.path.join(directory, f"*{ext.upper()}")
+        image_files.extend(glob.glob(pattern, recursive=False))
+
+    return sorted(image_files)
+
+
 class BatchProcessor(QThread):
     """Background thread for batch processing operations."""
 
@@ -44,7 +62,7 @@ class BatchProcessor(QThread):
 
     def __init__(
         self,
-        directory: str,
+        image_files: list[str],
         storage: BoundingBoxStorage,
         detection_strategy_name: str | None,
         skip_existing: bool,
@@ -53,7 +71,7 @@ class BatchProcessor(QThread):
         shrink_pixels: int,
     ):
         super().__init__()
-        self.directory = directory
+        self.image_files = image_files
         self.storage = storage
         self.detection_strategy_name = detection_strategy_name
         self.skip_existing = skip_existing
@@ -61,9 +79,6 @@ class BatchProcessor(QThread):
         self.refinement_tolerance = refinement_tolerance
         self.shrink_pixels = shrink_pixels
         self.cancelled = False
-
-        # Get list of image files
-        self.image_files = self._get_image_files()
 
         # Initialize strategies
         self.detection_strategy = None
@@ -90,19 +105,6 @@ class BatchProcessor(QThread):
             except Exception as e:
                 self.error_occurred.emit(f"Error configuring refinement strategy: {e}")
                 return
-
-    def _get_image_files(self) -> list[str]:
-        """Get list of all image files in the directory."""
-        supported_formats = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif"}
-        image_files = []
-
-        for ext in supported_formats:
-            pattern = os.path.join(self.directory, f"*{ext}")
-            image_files.extend(glob.glob(pattern, recursive=False))
-            pattern = os.path.join(self.directory, f"*{ext.upper()}")
-            image_files.extend(glob.glob(pattern, recursive=False))
-
-        return sorted(image_files)
 
     def cancel(self):
         """Cancel the batch processing operation."""
@@ -246,6 +248,7 @@ class BatchPreprocessDialog(QDialog):
         self.directory = directory
         self.storage = storage
         self.processor: BatchProcessor | None = None
+        self.selected_files: list[str] = []
 
         self.init_ui()
 
@@ -256,6 +259,41 @@ class BatchPreprocessDialog(QDialog):
         self.resize(600, 800)
 
         layout = QVBoxLayout(self)
+
+        # File Selection group
+        file_selection_group = QGroupBox("File Selection")
+        file_selection_layout = QVBoxLayout(file_selection_group)
+
+        # Radio buttons for selection mode
+        self.all_files_radio = QRadioButton("Process all files in current directory")
+        self.all_files_radio.setChecked(True)
+        self.selected_files_radio = QRadioButton("Process selected files")
+
+        file_selection_layout.addWidget(self.all_files_radio)
+        file_selection_layout.addWidget(self.selected_files_radio)
+
+        # Browse button and file info
+        browse_layout = QHBoxLayout()
+        self.browse_button = QPushButton("Browse...")
+        self.browse_button.setEnabled(False)
+        self.file_count_label = QLabel("")
+
+        browse_layout.addWidget(self.browse_button)
+        browse_layout.addWidget(self.file_count_label)
+        browse_layout.addStretch()
+
+        file_selection_layout.addLayout(browse_layout)
+
+        # Connect signals
+        self.selected_files_radio.toggled.connect(self.on_file_selection_mode_changed)
+        self.browse_button.clicked.connect(self.browse_files)
+
+        self.skip_existing_check = QCheckBox()
+        self.skip_existing_check.setChecked(True)
+        self.skip_existing_check.setText("Skip images with existing boxes")
+        file_selection_layout.addWidget(self.skip_existing_check)
+
+        layout.addWidget(file_selection_group)
 
         # Detection group
         detection_group = QGroupBox("Detection")
@@ -364,12 +402,6 @@ class BatchPreprocessDialog(QDialog):
 
         layout.addWidget(shrink_group)
 
-        self.skip_existing_check = QCheckBox()
-        self.skip_existing_check.setChecked(True)
-        self.skip_existing_check.setText("Skip images with existing boxes")
-
-        layout.addWidget(self.skip_existing_check)
-
         # Progress group
         progress_group = QGroupBox("Progress")
         progress_layout = QVBoxLayout(progress_group)
@@ -404,6 +436,62 @@ class BatchPreprocessDialog(QDialog):
 
         layout.addWidget(self.button_box)
 
+    def on_file_selection_mode_changed(self):
+        """Handle changes to file selection mode radio buttons."""
+        is_selected_files_mode = self.selected_files_radio.isChecked()
+        self.browse_button.setEnabled(is_selected_files_mode)
+
+        if not is_selected_files_mode:
+            # Clear selected files when switching to "all files" mode
+            self.selected_files = []
+            self.file_count_label.setText("")
+
+    def browse_files(self):
+        """Open file dialog to select specific files."""
+        if not self.directory:
+            return
+
+        # Define supported image formats
+        image_filters = [
+            "Image files (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.gif)",
+            "PNG files (*.png)",
+            "JPEG files (*.jpg *.jpeg)",
+            "All files (*)",
+        ]
+
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "Select Images to Process", self.directory, ";;".join(image_filters)
+        )
+
+        if files:
+            # Validate that all files are in the current directory
+            valid_files = []
+            invalid_files = []
+            for file_path in files:
+                file_dir = os.path.dirname(file_path)
+                if file_dir == self.directory:
+                    valid_files.append(file_path)
+                else:
+                    invalid_files.append(os.path.basename(file_path))
+
+            # Show warning if some files were from different directories
+            if invalid_files:
+                invalid_count = len(invalid_files)
+                if invalid_count == 1:
+                    message = f"The file '{invalid_files[0]}' is not in the current directory and will be skipped."
+                else:
+                    message = f"{invalid_count} files are not in the current directory and will be skipped."
+                QMessageBox.warning(self, "Files Skipped", message)
+
+            self.selected_files = valid_files
+            count = len(self.selected_files)
+            if count > 0:
+                self.file_count_label.setText(
+                    f"{count} file{'s' if count != 1 else ''} selected"
+                )
+            else:
+                self.file_count_label.setText("No valid files selected")
+
     def start_processing(self):
         """Start the batch processing operation."""
         if not self.directory or not self.storage:
@@ -436,9 +524,20 @@ class BatchPreprocessDialog(QDialog):
         ):
             return  # Nothing to do
 
+        # Get list of files to process based on selection mode
+        if self.all_files_radio.isChecked():
+            image_files = get_image_files_in_directory(self.directory)
+        else:
+            image_files = self.selected_files
+
+        # Validate we have files to process
+        if not image_files:
+            self.show_error("No image files to process.")
+            return
+
         # Create and start processor
         self.processor = BatchProcessor(
-            self.directory,
+            image_files,
             self.storage,
             detection_strategy_name,
             skip_existing,
