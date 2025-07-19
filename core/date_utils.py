@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import re
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 
@@ -20,12 +21,55 @@ SPECIAL_PERIODS = {
 DateInterval = tuple[datetime, datetime]
 
 
+def expand_two_digit_year(text, century_cutoff=30):
+    """Hand-code a couple cases where dateutil_parser gets confused."""
+
+    def replace_year(match):
+        # Extract the two-digit number from the match
+        two_digit = int(match.group(1))
+
+        # Determine century based on the rule
+        if two_digit > century_cutoff:
+            return f"19{two_digit:02d}"
+        else:
+            return f"20{two_digit:02d}"
+
+    # Pattern 1: single quote followed by exactly two digits
+    text = re.sub(r"'(\d{2})", replace_year, text)
+
+    def replace_date(match):
+        month = int(match.group(1))  # The month part (1-12)
+        two_digit_year = int(match.group(2))  # The two-digit year
+
+        if month > 12:  # match is broken, abort
+            return f"{month}/{two_digit_year}"
+
+        # Determine century based on the rule
+        if two_digit_year > century_cutoff:
+            full_year = f"19{two_digit_year:02d}"
+        else:
+            full_year = f"20{two_digit_year:02d}"
+
+        return f"{month}/{full_year}"
+
+    # Pattern 2: isolated M/YY or MM/YY
+    text = re.sub(
+        r"(?<!\d)(?<!/)(1[0-2]|[1-9])/(\d{2})(?!\d)(?!/\d)", replace_date, text
+    )
+
+    return text
+
+
 def parse_flexible_date_as_datetime(user_input: str) -> datetime | None:
     user_input = user_input.strip().lower()
     for k, (v1, _) in SPECIAL_PERIODS.items():
         user_input = user_input.replace(k, v1)
+    user_input = expand_two_digit_year(user_input)
     try:
-        return dateutil_parser.parse(user_input, default=datetime(1900, 1, 1, 0, 0, 0))
+        return dateutil_parser.parse(
+            user_input,
+            default=datetime(1900, 1, 1, 0, 0, 0),
+        )
     except (ValueError, TypeError, dateutil_parser.ParserError):
         return None
 
@@ -47,6 +91,8 @@ def parse_flexible_date_as_interval(
     for k, (v1, v2) in SPECIAL_PERIODS.items():
         start_text = start_text.replace(k, v1)
         end_text = end_text.replace(k, v2)
+    start_text = expand_two_digit_year(start_text)
+    end_text = expand_two_digit_year(end_text)
     try:
         interval_start = dateutil_parser.parse(
             start_text, default=datetime(1900, 1, 1, 0, 0)
