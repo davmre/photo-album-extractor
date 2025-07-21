@@ -17,9 +17,6 @@ from core.bounding_box_storage import BoundingBoxStorage
 from core.refinement_strategies import (  # RefinementStrategyHoughGreedy,; RefinementStrategyStrips,
     REFINEMENT_STRATEGIES,
     RefinementStrategy,
-    RefinementStrategyHoughGreedy,
-    RefinementStrategyHoughReranked,
-    RefinementStrategyHoughSoft,
 )
 
 # Utility to evaluate refinement strategies by comparing results to gold boxes
@@ -127,11 +124,7 @@ def sanitize_filename(s):
 
 
 def main():
-    strategies = [
-        RefinementStrategyHoughReranked(),
-        RefinementStrategyHoughGreedy(),
-        RefinementStrategyHoughSoft(),
-    ]  # REFINEMENT_STRATEGIES.values()
+    strategies = REFINEMENT_STRATEGIES.values()
 
     test_image_filenames = [
         name
@@ -139,9 +132,8 @@ def main():
         if os.path.splitext(name)[1] in (".png", ".jpg")
     ]
 
-    # test_image_filenames = ["2025-05-27-0010 small.jpg"]
-
-    corner_deviations = {s.name: [] for s in strategies}
+    all_corner_deviations = {s.name: [] for s in strategies}
+    corner_deviations = {s.name: {} for s in strategies}
     times = {s.name: [] for s in strategies}
 
     storage_objects = {
@@ -161,7 +153,12 @@ def main():
             test_object.refine_all_boxes(strategy)
         test_object.score_refinements()
         for strategy in strategies:
-            corner_deviations[strategy.name].extend(
+            if filename not in corner_deviations[strategy.name]:
+                corner_deviations[strategy.name][filename] = []
+            corner_deviations[strategy.name][filename] = test_object.corner_deviations[
+                strategy.name
+            ]
+            all_corner_deviations[strategy.name].extend(
                 test_object.corner_deviations[strategy.name]
             )
             times[strategy.name].extend(test_object.times[strategy.name])
@@ -170,22 +167,35 @@ def main():
             )
 
         # test_object.dump_debug_images_for_failures(
-        #    debug_dir=os.path.join(REFINEMENT_TEST_DATA_DIR, "debugging_dumps"),
-        #    refine_strategy="Hough transform (greedy)",
-        #    allowed_average_deviation=4.0,
-        #    # refine_strategy="Strips (native res)",
+        #    debug_dir=os.path.join(
+        #        REFINEMENT_TEST_DATA_DIR, "debugging_dumps_noshirnk"
+        #    ),
+        #    refine_strategy="Hough transform (soft reranked)",
+        #    allowed_average_deviation=0.0,
+        # refine_strategy="Strips (native res)",
         # )
 
+    def print_deviations(name, deviations):
+        avg_case = np.mean(deviations)
+        worst_case = np.max(deviations)
+        median = np.median(deviations)
+        print(
+            f"{name}: median {median: .2f} avg {avg_case: .2f} worst {worst_case: .2f}"
+        )
+
+    for strategy in strategies:
+        for filename in corner_deviations[strategy.name].keys():
+            print_deviations(
+                f"{strategy.name} {filename}",
+                corner_deviations[strategy.name][filename],
+            )
     print("OVERALL RESULTS")
     for strategy in strategies:
-        avg_case = np.mean(corner_deviations[strategy.name])
-        worst_case = np.max(corner_deviations[strategy.name])
-        median = np.median(corner_deviations[strategy.name])
+        print_deviations(
+            f"{strategy.name} overall", all_corner_deviations[strategy.name]
+        )
         avg_time = np.mean(times[strategy.name])
         stddev_time = np.std(times[strategy.name])
-        print(
-            f"{strategy.name}: median {median: .2f} avg {avg_case: .2f} worst {worst_case: .2f}"
-        )
         print(f"  time: avg {avg_time} stddev {stddev_time}")
 
 
