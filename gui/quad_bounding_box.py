@@ -4,6 +4,8 @@ Quadrilateral bounding box widget for arbitrary four-sided photo selection.
 
 from __future__ import annotations
 
+import logging
+
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QFont, QKeyEvent, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import (
@@ -17,6 +19,9 @@ import core.photo_types as photo_types
 from core import geometry
 from core.bounding_box import BoundingBox, PhotoAttributes
 from core.validation_utils import Severity, ValidationIssue, validate_bounding_box
+
+# Configure logger for debugging segfaults
+logger = logging.getLogger(__name__)
 
 
 class QuadBoundingBox(QGraphicsObject):
@@ -97,84 +102,128 @@ class QuadBoundingBox(QGraphicsObject):
 
     def paint(self, painter: QPainter, option, widget):
         """Paint the quadrilateral bounding box."""
-        # Use selection-specific styling if selected
-        if self._is_selected:
-            painter.setPen(self.selected_pen)
-            painter.setBrush(self.selected_brush)
-        else:
-            painter.setPen(self.pen)
-            painter.setBrush(self.brush)
+        try:
+            # Check for valid painter and corners
+            if not self.corners or len(self.corners) != 4:
+                logger.error(
+                    f"paint() called with invalid corners for box {self.box_id}: {self.corners}"
+                )
+                return
 
-        # Create polygon from corners and draw
-        polygon = QPolygonF(self.corners)
-        painter.drawPolygon(polygon)
+            # Check for invalid corner coordinates
+            for i, corner in enumerate(self.corners):
+                if corner is None or not isinstance(corner, QPointF):
+                    logger.error(
+                        f"paint() invalid corner {i} for box {self.box_id}: {corner}"
+                    )
+                    return
+                if not (abs(corner.x()) < 1000000 and abs(corner.y()) < 1000000):
+                    logger.warning(
+                        f"paint() extreme corner coordinates for box {self.box_id}, corner {i}: {corner}"
+                    )
 
-        # Draw validation icons if there are issues or if marked as good
-        if self.validation_issues or self.marked_as_good:
-            self._draw_validation_icons(painter)
+            # Use selection-specific styling if selected
+            if self._is_selected:
+                painter.setPen(self.selected_pen)
+                painter.setBrush(self.selected_brush)
+            else:
+                painter.setPen(self.pen)
+                painter.setBrush(self.brush)
+
+            # Create polygon from corners and draw
+            polygon = QPolygonF(self.corners)
+            if polygon.isEmpty():
+                logger.error(f"paint() created empty polygon for box {self.box_id}")
+                return
+
+            logger.debug(
+                f"paint() drawing polygon with {polygon.size()} points for box {self.box_id}"
+            )
+            painter.drawPolygon(polygon)
+
+            # Draw validation icons if there are issues or if marked as good
+            if self.validation_issues or self.marked_as_good:
+                logger.debug(f"paint() drawing validation icons for box {self.box_id}")
+                self._draw_validation_icons(painter)
+
+            logger.debug(f"paint() completed successfully for box {self.box_id}")
+
+        except Exception as e:
+            logger.error(
+                f"Exception in paint() for box {self.box_id}: {e}", exc_info=True
+            )
+            # Don't re-raise the exception to avoid crash, just log it
 
     def _draw_validation_icons(self, painter: QPainter):
         """Draw validation issue icons and/or marked as good checkmark on the bounding box."""
-        # Find the center of the bounding box for overlay positioning
-        center_x = sum(corner.x() for corner in self.corners) / 4
-        center_y = sum(corner.y() for corner in self.corners) / 4
+        try:
+            # Find the center of the bounding box for overlay positioning
+            center_x = sum(corner.x() for corner in self.corners) / 4
+            center_y = sum(corner.y() for corner in self.corners) / 4
 
-        # Collect all icons to draw
-        icons_to_draw = []
+            # Collect all icons to draw
+            icons_to_draw = []
 
-        # Add validation issue icons
-        if self.validation_issues:
-            # Sort issues by severity (errors first)
-            sorted_issues = sorted(
-                self.validation_issues,
-                key=lambda x: x.severity == Severity.ERROR,
-                reverse=True,
+            # Add validation issue icons
+            if self.validation_issues:
+                # Sort issues by severity (errors first)
+                sorted_issues = sorted(
+                    self.validation_issues,
+                    key=lambda x: x.severity == Severity.ERROR,
+                    reverse=True,
+                )
+
+                for issue in sorted_issues:
+                    if issue.severity == Severity.ERROR:
+                        icons_to_draw.append("🚨")
+                    else:
+                        icons_to_draw.append("⚠️")
+
+            # Add green checkmark if marked as good
+            if self.marked_as_good:
+                icons_to_draw.append("✅")
+
+            if not icons_to_draw:
+                return
+
+            # Icon settings - much larger for better visibility
+            width, height = geometry.dimension_bounds(self.corners)
+            icon_scale = min(width, height)
+            icon_size = max(1, int(icon_scale / 5.0))
+            icon_spacing = icon_scale / 20.0
+
+            # Set up font for emoji icons
+            font = QFont()
+            font.setPixelSize(icon_size)
+            painter.setFont(font)
+
+            # Calculate total width needed for all icons
+            total_width = (
+                len(icons_to_draw) * icon_size + (len(icons_to_draw) - 1) * icon_spacing
             )
+            start_x = center_x - total_width // 2
 
-            for issue in sorted_issues:
-                if issue.severity == Severity.ERROR:
-                    icons_to_draw.append("🚨")
-                else:
-                    icons_to_draw.append("⚠️")
+            # Draw icons centered horizontally on the bounding box
+            x_offset = 0
+            for icon in icons_to_draw:
+                # Calculate icon position centered on the bounding box
+                icon_x = int(start_x + x_offset)
+                icon_y = int(center_y - icon_size // 2)
 
-        # Add green checkmark if marked as good
-        if self.marked_as_good:
-            icons_to_draw.append("✅")
+                # Draw the icon
+                painter.setPen(QPen(QColor(255, 255, 255), 2))
+                text_x = icon_x + icon_size // 4  # Adjust for emoji positioning
+                text_y = icon_y + icon_size * 3 // 4  # Adjust for baseline
+                painter.drawText(QPointF(text_x, text_y), icon)
 
-        if not icons_to_draw:
-            return
+                x_offset += icon_size + icon_spacing
 
-        # Icon settings - much larger for better visibility
-        width, height = geometry.dimension_bounds(self.corners)
-        icon_scale = min(width, height)
-        icon_size = int(icon_scale / 5.0)
-        icon_spacing = icon_scale / 20.0
-
-        # Set up font for emoji icons
-        font = QFont()
-        font.setPixelSize(icon_size)
-        painter.setFont(font)
-
-        # Calculate total width needed for all icons
-        total_width = (
-            len(icons_to_draw) * icon_size + (len(icons_to_draw) - 1) * icon_spacing
-        )
-        start_x = center_x - total_width // 2
-
-        # Draw icons centered horizontally on the bounding box
-        x_offset = 0
-        for icon in icons_to_draw:
-            # Calculate icon position centered on the bounding box
-            icon_x = int(start_x + x_offset)
-            icon_y = int(center_y - icon_size // 2)
-
-            # Draw the icon
-            painter.setPen(QPen(QColor(255, 255, 255), 2))
-            text_x = icon_x + icon_size // 4  # Adjust for emoji positioning
-            text_y = icon_y + icon_size * 3 // 4  # Adjust for baseline
-            painter.drawText(QPointF(text_x, text_y), icon)
-
-            x_offset += icon_size + icon_spacing
+        except Exception as e:
+            logger.error(
+                f"Exception in _draw_validation_icons() for box {self.box_id}: {e}",
+                exc_info=True,
+            )
+            # Don't re-raise the exception to avoid crash, just log it
 
     def itemChange(self, change, value):
         """Handle item changes (movement, etc.)."""
@@ -186,6 +235,7 @@ class QuadBoundingBox(QGraphicsObject):
             delta = new_pos - old_pos
 
             # Update corners to new world positions
+            self.prepareGeometryChange()
             for i in range(len(self.corners)):
                 self.corners[i] += delta
 
@@ -210,6 +260,7 @@ class QuadBoundingBox(QGraphicsObject):
     def corner_dragged(
         self, corner_id: int, new_position: QPointF, override_rectangular: bool = False
     ):
+        self.prepareGeometryChange()
         local_pos = new_position - self.pos()
 
         # Check if we should override rectangular mode
@@ -284,6 +335,7 @@ class QuadBoundingBox(QGraphicsObject):
     def set_corners(self, new_corners: photo_types.BoundingBoxAny):
         """Set the corners to new world positions."""
         # Reset to origin and store corners as local coordinates
+        self.prepareGeometryChange()
         self.setPos(0, 0)
         self.corners = photo_types.bounding_box_as_list_of_qpointfs(new_corners)
         self.update_handles()
