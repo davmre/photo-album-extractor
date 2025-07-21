@@ -16,46 +16,48 @@ SPECIAL_PERIODS = {
     "spring": ("march", "june"),
     "summer": ("june", "september"),
     "fall": ("september", "december"),
+    "?": ("", ""),  # Users may use ? to express uncertainty, hide this from parser.
 }
 
 DateInterval = tuple[datetime, datetime]
 
 
 def expand_two_digit_year(text, century_cutoff=30):
-    """Hand-code a couple cases where dateutil_parser gets confused."""
+    """Hand-code a few cases where dateutil_parser gets confused."""
+
+    def get_year(two_digit_year: int):
+        if two_digit_year > century_cutoff:
+            return 1900 + two_digit_year
+        else:
+            return 2000 + two_digit_year
 
     def replace_year(match):
         # Extract the two-digit number from the match
-        two_digit = int(match.group(1))
-
-        # Determine century based on the rule
-        if two_digit > century_cutoff:
-            return f"19{two_digit:02d}"
-        else:
-            return f"20{two_digit:02d}"
+        return str(get_year(two_digit_year=int(match.group(1))))
 
     # Pattern 1: single quote followed by exactly two digits
     text = re.sub(r"'(\d{2})", replace_year, text)
 
     def replace_date(match):
         month = int(match.group(1))  # The month part (1-12)
-        two_digit_year = int(match.group(2))  # The two-digit year
-
+        two_digit_year = int(match.group(2))
         if month > 12:  # match is broken, abort
-            return f"{month}/{two_digit_year}"
-
-        # Determine century based on the rule
-        if two_digit_year > century_cutoff:
-            full_year = f"19{two_digit_year:02d}"
-        else:
-            full_year = f"20{two_digit_year:02d}"
-
+            return f"{month}/{two_digit_year:02d}"
+        full_year = str(get_year(two_digit_year))
         return f"{month}/{full_year}"
 
     # Pattern 2: isolated M/YY or MM/YY
     text = re.sub(
-        r"(?<!\d)(?<!/)(1[0-2]|[1-9])/(\d{2})(?!\d)(?!/\d)", replace_date, text
+        r"(?<!/\d)(?<!/)(1[0-2]|[1-9])/(\d{2})(?!\d)(?!/\d)", replace_date, text
     )
+
+    # Pattern 3: only one numeric part ("Aug 05")
+    parts = text.split(" ")
+    int_parts = [i for i, p in enumerate(parts) if p.isnumeric()]
+    if len(int_parts) == 1 and len(parts[int_parts[0]]) == 2:
+        i = int_parts[0]
+        parts[i] = str(get_year(int(parts[i])))
+    text = " ".join(parts)
 
     return text
 
