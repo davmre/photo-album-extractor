@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 import PIL.Image
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QComboBox,
