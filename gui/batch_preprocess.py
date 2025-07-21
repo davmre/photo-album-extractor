@@ -40,6 +40,11 @@ from core.refinement_strategies import (
 )
 from core.settings import app_settings
 
+DEFAULT_BATCH_REFINEMENT_STRATEGY = REFINEMENT_STRATEGIES[
+    "Hough transform (multiscale)"
+]
+DEFAULT_BATCH_REFINEMENT_TOLERANCE = 0.1
+
 
 def get_image_files_in_directory(directory: str) -> list[str]:
     """Get list of all image files in the directory."""
@@ -366,14 +371,13 @@ class BatchDetectDialog(QDialog):
             self.refinement_strategy_combo.addItem(strategy.name, strategy.name)
 
         # Set default from settings
-        if app_settings.refinement_strategy:
-            for i in range(self.refinement_strategy_combo.count()):
-                if (
-                    self.refinement_strategy_combo.itemData(i)
-                    == app_settings.refinement_strategy
-                ):
-                    self.refinement_strategy_combo.setCurrentIndex(i)
-                    break
+        for i in range(self.refinement_strategy_combo.count()):
+            if (
+                self.refinement_strategy_combo.itemData(i)
+                == DEFAULT_BATCH_REFINEMENT_STRATEGY.name
+            ):
+                self.refinement_strategy_combo.setCurrentIndex(i)
+                break
         run_refinement_layout.addWidget(self.run_refinement_check)
         run_refinement_layout.addWidget(self.refinement_strategy_combo)
 
@@ -389,12 +393,12 @@ class BatchDetectDialog(QDialog):
         self.tolerance_slider = QSlider(Qt.Orientation.Horizontal)
         self.tolerance_slider.setMinimum(1)  # 0.01
         self.tolerance_slider.setMaximum(15)  # 0.15
-        self.tolerance_slider.setValue(int(app_settings.refine_default_tolerance * 100))
+        self.tolerance_slider.setValue(int(DEFAULT_BATCH_REFINEMENT_TOLERANCE * 100))
         self.tolerance_slider.setFixedWidth(100)
         tolerance_row.addWidget(self.tolerance_slider)
 
         self.tolerance_value_label = QLabel(
-            f"{app_settings.refine_default_tolerance:.2f}"
+            f"{self.tolerance_slider.value() / 100.0:.2f}"
         )
         # Avoid a blowup where QT seems to think this label (and thus the toolbar) needs
         # a ton of vertical space.
