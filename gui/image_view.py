@@ -4,10 +4,12 @@ Custom graphics view for displaying images with bounding box interaction.
 
 from __future__ import annotations
 
+import logging
 import os
 
+import numpy as np
 from PIL import Image, ImageQt
-from PyQt6.QtCore import QPointF, Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QAction,
     QEnterEvent,
@@ -23,8 +25,12 @@ import core.geometry as geometry
 import core.inscribed_rectangle as inscribed_rectangle
 from core import refinement_strategies
 from core.bounding_box import BoundingBox
+from core.photo_types import QuadArray
 from core.settings import app_settings
 from gui.quad_bounding_box import QuadBoundingBox
+
+# Configure logger for debugging segfaults
+logger = logging.getLogger(__name__)
 
 
 class ImageView(QGraphicsView):
@@ -53,8 +59,11 @@ class ImageView(QGraphicsView):
         self._scene = QGraphicsScene()
         self.setScene(self._scene)
 
-        # Image item
-        self.image_item: QGraphicsPixmapItem | None = None
+        # Image item and references
+        self.image_item = QGraphicsPixmapItem()
+        self.image_item: QGraphicsPixmapItem = QGraphicsPixmapItem()
+        self._scene.addItem(self.image_item)
+        self._pixmap = QPixmap()  # Keep strong reference to prevent GC issues
         self.bounding_boxes: list[QuadBoundingBox] = []
 
         # Drag state
@@ -85,37 +94,99 @@ class ImageView(QGraphicsView):
         # Enable keyboard focus for key events
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
+    def _safe_remove_item(self, item):
+        """Safely remove an item from the scene if it's actually in this scene."""
+        if item:
+            if item.scene() == self._scene:
+                self._scene.removeItem(item)
+
     def set_image(self, image: Image.Image | None = None):
         """Set the image to display."""
-        # Store PIL Image reference for refinement operations
-        self._image_pil = image
+        try:
+            logger.debug(f"set_image called with image: {image is not None}")
 
-        # QPixmap uses implicit sharing semantics, so it seems we need to
-        # keep a reference to the QImage so it doesn't get GC'd.
-        if image is None:
+            # Clear bounding boxes including temp box if it exists.
+            self.clear_boxes(emit_signals=False)
+            if hasattr(self, "temp_box") and self.temp_box:
+                self._safe_remove_item(self.temp_box)
+                QCoreApplication.processEvents()
+                self.temp_box = None
+
+            # QPixmap uses implicit sharing semantics, so we need to
+            # keep strong references to both QImage and QPixmap to prevent GC issues
+            if image is None:
+                logger.debug("Setting image to None - clearing pixmap")
+                self._image_qt = None
+                self._pixmap = QPixmap()
+            else:
+                logger.debug(f"Creating QImage from PIL image: {image.size}")
+                # Create QImage and keep strong reference
+                self._image_qt = ImageQt.ImageQt(image)
+                logger.debug(
+                    f"QImage created: {self._image_qt.width()}x{self._image_qt.height()}"
+                )
+
+                # Create QPixmap from QImage and keep strong reference
+                self._pixmap = QPixmap.fromImage(self._image_qt)
+                logger.debug(
+                    f"QPixmap created: {self._pixmap.width()}x{self._pixmap.height()}, isNull: {self._pixmap.isNull()}"
+                )
+
+                # Verify the pixmap was created successfully
+                if self._pixmap.isNull():
+                    logger.error(
+                        "Failed to create QPixmap from image - isNull() returned True"
+                    )
+                    raise RuntimeError("Failed to create QPixmap from image")
+
+            # Store PIL Image reference for refinement operations
+            # and to ensure it's not GC'd too early.
+            self._image_pil = image
+
+            # Add new image item with our managed pixmap
+            logger.debug("Updating QGraphicsPixmapItem")
+            self.image_item.setPixmap(self._pixmap)
+
+            # Fit image in view only if we have a valid image
+            if not self._pixmap.isNull():
+                logger.debug("Fitting image in view")
+                self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
+
+            # Emit signal for magnifier
+            logger.debug("Emitting image_updated signal")
+            self.image_updated.emit()
+            logger.debug("set_image completed successfully")
+
+        except Exception as e:
+            logger.error(f"Error setting image: {e}", exc_info=True)
+            print(f"Error setting image: {e}")
+            # Ensure we have a valid state even if image loading fails
+            self._pixmap = QPixmap()
+            self.image_item.setPixmap(self._pixmap)
+            self._image_pil = None
             self._image_qt = None
-            pixmap = QPixmap()
-        else:
-            self._image_qt = ImageQt.ImageQt(image)
-            pixmap = QPixmap.fromImage(self._image_qt)
 
-        # Clear existing image
-        if self.image_item:
-            self._scene.removeItem(self.image_item)
-
-        # Add new image
-        self.image_item = QGraphicsPixmapItem(pixmap)
-        self._scene.addItem(self.image_item)
-
-        # Fit image in view
-        self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
-
-        # Emit signal for magnifier
-        self.image_updated.emit()
+    def _is_box_within_image(self, corners: QuadArray):
+        if not self._image_pil:
+            return False
+        width, height = self._image_pil.width, self._image_pil.height
+        y_min, y_max = np.min(corners[:, 0]), np.max(corners[:, 0])
+        x_min, x_max = np.min(corners[:, 1]), np.max(corners[:, 1])
+        if y_max < 0 or x_max < 0:
+            return False
+        if y_min > height or x_min > width:
+            return False
+        return True
 
     def add_bounding_box(self, box_data: BoundingBox, emit_signals=True):
         """Add a pre-created bounding box object to the scene."""
         if self.image_item is None:
+            return None
+
+        if not self._is_box_within_image(box_data.corners):
+            logger.warning(
+                f"Box is out of bounds for image dimensions, not creating: {box_data}"
+            )
             return None
 
         box = QuadBoundingBox(box_data=box_data)
@@ -140,28 +211,39 @@ class ImageView(QGraphicsView):
 
     def remove_bounding_box(self, box, emit_signals=True):
         """Remove a bounding box from the scene."""
-        if box in self.bounding_boxes:
-            # Remove handles
-            if hasattr(box, "handles"):
-                for handle in box.handles:
-                    self._scene.removeItem(handle)
+        if box not in self.bounding_boxes:
+            return
 
-            # Remove box
-            self._scene.removeItem(box)
+        # Ensure box is not being painted
+        box.setVisible(False)
+        # Process events to ensure any pending paints complete.
+        # Note this can trigger changes to self.bounding_boxes so we
+        # need to re-check it below before removing this box.
+        # QCoreApplication.processEvents()
+
+        # Remove handles first
+        if hasattr(box, "handles"):
+            for handle in box.handles:
+                self._safe_remove_item(handle)
+
+        # Remove box
+        self._safe_remove_item(box)
+        if box in self.bounding_boxes:
             self.bounding_boxes.remove(box)
 
-            # Emit signal that boxes changed
-            if emit_signals:
-                self.boxes_changed.emit()
+        # Clear selection if this was the selected box
+        if self.selected_box == box:
+            self.selected_box = None
+
+        if emit_signals:
+            self.boxes_changed.emit()
 
     def clear_boxes(self, emit_signals=True):
         """Remove all bounding boxes."""
-        if self.bounding_boxes:  # Only emit signal if there were boxes to remove
-            for box in self.bounding_boxes[
-                :
-            ]:  # Copy list to avoid modification during iteration
-                self.remove_bounding_box(box, emit_signals=emit_signals)
-            # Note: remove_bounding_box already emits boxes_changed for each removal
+        # Create a copy to avoid modification during iteration
+        boxes_to_remove = self.bounding_boxes.copy()
+        for box in boxes_to_remove:
+            self.remove_bounding_box(box, emit_signals=emit_signals)
 
     def get_bounding_box_data_list(self) -> list[BoundingBox]:
         """Get all bounding box data for extraction."""
@@ -191,7 +273,13 @@ class ImageView(QGraphicsView):
             # Menu for existing box
             refine_action = menu.addAction("Refine")
             rectangle_inner_action = menu.addAction("Rectangle-ify (inner)")
-            rectangle_outer_action = menu.addAction("Rectangle-ify (outer)")
+
+            # Add mark as good toggle
+            mark_as_good_action: QAction = menu.addAction("Mark as Good")  # type: ignore
+            mark_as_good_action.setCheckable(True)
+            mark_as_good_action.setChecked(
+                clicked_box.get_bounding_box_data().marked_as_good
+            )
 
             # Add keep rectangular toggle
             keep_rectangular_action: QAction = menu.addAction("Keep Rectangular")  # type: ignore
@@ -202,13 +290,6 @@ class ImageView(QGraphicsView):
                 clicked_box.get_bounding_box_data().is_rectangle()
             )
 
-            # Add mark as good toggle
-            mark_as_good_action: QAction = menu.addAction("Mark as Good")  # type: ignore
-            mark_as_good_action.setCheckable(True)
-            mark_as_good_action.setChecked(
-                clicked_box.get_bounding_box_data().marked_as_good
-            )
-
             remove_action = menu.addAction("Remove")
             action = menu.exec(self.mapToGlobal(position))
 
@@ -216,8 +297,6 @@ class ImageView(QGraphicsView):
                 self.refine_bounding_box(clicked_box, multiscale=True)
             elif action == rectangle_inner_action:
                 self.rectangleify_bounding_box(clicked_box, inner=True)
-            elif action == rectangle_outer_action:
-                self.rectangleify_bounding_box(clicked_box, inner=False)
             elif action == keep_rectangular_action:
                 clicked_box.keep_rectangular = keep_rectangular_action.isChecked()
             elif action == mark_as_good_action:
@@ -372,7 +451,7 @@ class ImageView(QGraphicsView):
 
             # Create or update temporary box for preview.
             if self.temp_box:
-                # self._scene.removeItem(self.temp_box)
+                # self._safe_remove_item(self.temp_box)
                 # self.temp_box = None
                 self.temp_box.set_corners(corners)
             else:
@@ -388,7 +467,7 @@ class ImageView(QGraphicsView):
 
             # Remove temporary box if it exists
             if self.temp_box:
-                self._scene.removeItem(self.temp_box)
+                self._safe_remove_item(self.temp_box)
                 self.temp_box = None
 
             # Create final box if drag was significant
