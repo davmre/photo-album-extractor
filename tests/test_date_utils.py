@@ -331,3 +331,25 @@ def test_interpolate_dates_segmented_fallback():
 
     assert len(regular_result) == len(segmented_result) == 4
     assert regular_result == segmented_result
+
+
+def test_two_digit_years():
+    cases = [
+        ("7/99", datetime(1999, 7, 1)),
+        ("7/00", datetime(2000, 7, 1)),
+        ("7/01", datetime(2001, 7, 1)),
+        ("07/01", datetime(2001, 7, 1)),
+        ("12/01", datetime(2001, 12, 1)),
+        ("12/2000", datetime(2000, 12, 1)),
+        ("12/25/97", datetime(1997, 12, 25)),
+        ("1999/12/01", datetime(1999, 12, 1)),
+        ("2000/4/01", datetime(2000, 4, 1)),
+        ("'99 12 2", datetime(1999, 12, 2)),
+        ("'01 8 7", datetime(2001, 8, 7)),
+        ("8 7 '01", datetime(2001, 8, 7)),
+        ("Aug 9 05", datetime(2005, 8, 9)),
+        ("Aug 05", datetime(2005, 8, 1)),
+    ]
+    for in_str, expected in cases:
+        result = date_utils.parse_flexible_date_as_datetime(in_str)
+        assert result == expected
