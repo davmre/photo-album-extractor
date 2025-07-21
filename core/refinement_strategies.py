@@ -262,14 +262,10 @@ class RefinementStrategyHoughGreedy(RefinementStrategy):
 
 
 _REFINEMENT_STRATEGIES: list[RefinementStrategy] = [
-    RefinementStrategyStrips(),
-    RefinementStrategyStripsIterated(),
-    RefinementStrategyStripsIndependent(),
-    RefinementStrategyHoughGreedy(),
-    RefinementStrategyHoughReranked(),
-    RefinementStrategyHoughStripsRect(),
     RefinementStrategyHoughSoft(),
     RefinementStrategyHoughMultiscale(),
+    RefinementStrategyStrips(),
+    RefinementStrategyStripsIndependent(),
 ]
 
 REFINEMENT_STRATEGIES: dict[str, RefinementStrategy] = {
