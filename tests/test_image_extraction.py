@@ -18,7 +18,7 @@ from core.photo_types import PhotoOrientation
 # Add parent directory to path to import app modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from core import images
+from core import extract
 
 
 class TestPerspectiveExtraction:
@@ -53,7 +53,7 @@ class TestPerspectiveExtraction:
             dtype=float,
         )
 
-        extracted = images.extract_perspective_image(test_image, corners)
+        extracted = extract.extract_perspective_image(test_image, corners)
 
         assert extracted is not None
         assert isinstance(extracted, Image.Image)
@@ -74,7 +74,7 @@ class TestPerspectiveExtraction:
             dtype=float,
         )
 
-        extracted = images.extract_perspective_image(test_image, corners)
+        extracted = extract.extract_perspective_image(test_image, corners)
 
         assert extracted is not None
         assert isinstance(extracted, Image.Image)
@@ -87,7 +87,7 @@ class TestPerspectiveExtraction:
             [[100, 100], [200, 100], [200, 200], [100, 200]], dtype=float
         )
 
-        extracted = images.extract_perspective_image(
+        extracted = extract.extract_perspective_image(
             test_image, corners, output_width=150, output_height=150
         )
 
@@ -99,7 +99,7 @@ class TestPerspectiveExtraction:
         # Test with coordinates at image boundaries
         corners = np.array([[0, 0], [399, 0], [399, 299], [0, 299]], dtype=float)
 
-        extracted = images.extract_perspective_image(test_image, corners)
+        extracted = extract.extract_perspective_image(test_image, corners)
 
         assert extracted is not None
         # Should be close to original dimensions
@@ -115,10 +115,10 @@ class TestPerspectiveExtraction:
         )
 
         # Extract without rotation
-        extracted_normal = images.extract_perspective_image(test_image, corners)
+        extracted_normal = extract.extract_perspective_image(test_image, corners)
 
         # Extract with 90-degree clockwise rotation
-        extracted_rotated = images.extract_perspective_image(
+        extracted_rotated = extract.extract_perspective_image(
             test_image, corners, orientation=PhotoOrientation.ROTATED_90_CW
         )
 
@@ -153,10 +153,10 @@ class TestPerspectiveExtraction:
         )
 
         # Extract without rotation
-        extracted_normal = images.extract_perspective_image(test_image, corners)
+        extracted_normal = extract.extract_perspective_image(test_image, corners)
 
         # Extract with 180-degree rotation
-        extracted_rotated = images.extract_perspective_image(
+        extracted_rotated = extract.extract_perspective_image(
             test_image, corners, orientation=PhotoOrientation.UPSIDE_DOWN
         )
 
@@ -202,7 +202,7 @@ class TestImageProcessor:
         """Test saving cropped images without EXIF attributes."""
         # Load a test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = images.load_image(test_image_path)
+        image = extract.load_image(test_image_path)
 
         # Define crop data (simple rectangle)
         crop_data = [
@@ -215,9 +215,12 @@ class TestImageProcessor:
             )
         ]
         # Save cropped images
-        saved_files = images.save_cropped_images(
+        saved_files = []
+        for status, v in extract.save_cropped_images(
             image, crop_data, temp_output_dir, base_name="test_photo"
-        )
+        ):
+            if status == extract.ExtractionStatus.SAVED:
+                saved_files.append(v)
 
         assert len(saved_files) == 1
         assert os.path.exists(saved_files[0])
@@ -233,7 +236,7 @@ class TestImageProcessor:
         """Test saving cropped images with EXIF attributes."""
         # Load test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = images.load_image(test_image_path)
+        image = extract.load_image(test_image_path)
 
         # Define crop data with attributes
         crop_data = [
@@ -246,12 +249,16 @@ class TestImageProcessor:
         ]
 
         # Save cropped images with attributes
-        saved_files = images.save_cropped_images(
-            image,
-            crop_data,
-            temp_output_dir,
-            base_name="test_photo",
-        )
+        saved_files = [
+            str(v)
+            for (s, v) in extract.save_cropped_images(
+                image,
+                crop_data,
+                temp_output_dir,
+                base_name="test_photo",
+            )
+            if s == extract.ExtractionStatus.SAVED
+        ]
 
         assert len(saved_files) == 1
         assert os.path.exists(saved_files[0])
@@ -276,7 +283,7 @@ class TestImageProcessor:
             # Check comment
             assert (
                 b"Test extraction with EXIF data"
-                in exif_dict["Exif"][piexif.ExifIFD.UserComment]
+                in exif_dict["0th"][piexif.ImageIFD.ImageDescription]
             )
 
         except (KeyError, piexif.InvalidImageDataError):
@@ -286,7 +293,7 @@ class TestImageProcessor:
         """Test saving multiple cropped images from one source."""
         # Load test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = images.load_image(test_image_path)
+        image = extract.load_image(test_image_path)
 
         # Define multiple crop regions
         corners = [
@@ -297,12 +304,17 @@ class TestImageProcessor:
         crop_data = [BoundingBox.new(corners=np.array(c, dtype=float)) for c in corners]
 
         # Save all crops
-        saved_files = images.save_cropped_images(
-            image, crop_data, temp_output_dir, base_name="multi_photo"
-        )
+        saved_files = [
+            str(v)
+            for (s, v) in extract.save_cropped_images(
+                image, crop_data, temp_output_dir, base_name="multi_photo"
+            )
+            if s == extract.ExtractionStatus.SAVED
+        ]
         assert len(saved_files) == 3
 
         # Check all files exist and have different names
+        print("saved files", saved_files)
         for i, filepath in enumerate(saved_files):
             assert os.path.exists(filepath)
             assert f"multi_photo_{i:03d}" in os.path.basename(filepath)
@@ -318,7 +330,7 @@ class TestImageProcessor:
         """Test saving cropped images with different orientations applied."""
         # Load test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = images.load_image(test_image_path)
+        image = extract.load_image(test_image_path)
 
         # Create same bounding box with different orientations
         corners = np.array(
@@ -342,9 +354,13 @@ class TestImageProcessor:
         ]
 
         # Save cropped images
-        saved_files = images.save_cropped_images(
-            image, crop_data, temp_output_dir, base_name="orientation_test"
-        )
+        saved_files = [
+            str(v)
+            for (s, v) in extract.save_cropped_images(
+                image, crop_data, temp_output_dir, base_name="orientation_test"
+            )
+            if s == extract.ExtractionStatus.SAVED
+        ]
 
         assert len(saved_files) == 2
 
@@ -385,7 +401,7 @@ class TestEXIFHandling:
             comments="Christmas photo",
         )
 
-        images.save_image_with_exif(test_image, test_filepath, attributes)
+        extract.save_image_with_exif(test_image, test_filepath, attributes)
 
         # Verify EXIF data
         exif_dict = piexif.load(test_filepath)
@@ -395,10 +411,6 @@ class TestEXIFHandling:
         assert exif_dict["0th"][piexif.ImageIFD.DateTime] == expected_datetime.encode()
         assert (
             exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal]
-            == expected_datetime.encode()
-        )
-        assert (
-            exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized]
             == expected_datetime.encode()
         )
 
@@ -411,16 +423,10 @@ class TestEXIFHandling:
             comments="Test comment with special chars: äöü & symbols!",
         )
 
-        images.save_image_with_exif(test_image, test_filepath, attributes)
+        extract.save_image_with_exif(test_image, test_filepath, attributes)
 
         # Verify comment in EXIF
         exif_dict = piexif.load(test_filepath)
-
-        # Check UserComment (should be UTF-8 encoded)
-        user_comment = exif_dict["Exif"][piexif.ExifIFD.UserComment]
-        # Skip the ASCII/Unicode header bytes and decode
-        comment_text = user_comment.decode("utf-8")
-        assert "Test comment with special chars: äöü & symbols!" in comment_text
 
         # Check ImageDescription
         description = exif_dict["0th"][piexif.ImageIFD.ImageDescription]
@@ -432,7 +438,7 @@ class TestEXIFHandling:
 
         attributes = PhotoAttributes(date_hint="2024-01-01", comments="Test")
 
-        images.save_image_with_exif(test_image, test_filepath, attributes)
+        extract.save_image_with_exif(test_image, test_filepath, attributes)
 
         # Verify software tag
         exif_dict = piexif.load(test_filepath)

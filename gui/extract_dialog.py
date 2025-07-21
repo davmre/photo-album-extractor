@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
 from core.bounding_box_storage import BoundingBoxStorage
 from core.extract import (
     DescriptionOptions,
+    ExtractionStatus,
     FileExistsBehavior,
     OutputFormat,
     SaveDateOptions,
@@ -177,15 +178,17 @@ class ExtractProcessor(QThread):
                     description_options=self.description_options,
                 )
             ):
-                if status == "saved":
+                if status == ExtractionStatus.SAVED:
                     extracted_count += 1
-                    self.log_message.emit(f"    Photo {j + 1}: {val}")
-                elif status == "error":
+                    self.log_message.emit(
+                        f"    Photo {j + 1}: {os.path.basename(str(val))}"
+                    )
+                elif status == ExtractionStatus.ERROR:
                     self.log_message.emit(f"    Photo {j + 1}: failed to extract")
                     self.log_message.emit(str(val))
-                elif status == "skipped":
+                elif status == ExtractionStatus.SKIPPED:
                     self.log_message.emit(
-                        f"    Photo {j + 1}: {val} exists, skipping..."
+                        f"    Photo {j + 1}: {os.path.basename(str(val))} exists, skipping..."
                     )
 
                 if self.cancelled:

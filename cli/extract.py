@@ -12,7 +12,7 @@ import PIL.Image
 
 from cli.utils import get_image_files
 from core.bounding_box_storage import BoundingBoxStorage
-from core.extract import save_cropped_images
+from core.extract import ExtractionStatus, save_cropped_images
 
 
 def cmd_extract(paths: list[str], output_dir: str, base_name: str | None) -> int:
@@ -74,8 +74,7 @@ def cmd_extract(paths: list[str], output_dir: str, base_name: str | None) -> int
                     base_name=extract_base_name,
                     source_image_path=str(image_path),
                 ):
-                    print(status, val)
-                    if status == "saved":
+                    if status == ExtractionStatus.SAVED:
                         saved_files.append(val)
 
                 if saved_files:

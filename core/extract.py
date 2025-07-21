@@ -53,6 +53,12 @@ class DescriptionOptions(Enum):
     NONE = 2
 
 
+class ExtractionStatus(Enum):
+    SAVED = 0
+    SKIPPED = 1
+    ERROR = 2
+
+
 class TiffTag(IntEnum):
     IMAGE_DESCRIPTION = 270
     DATE_TIME = 306
@@ -210,9 +216,9 @@ def save_cropped_images(
     save_date: SaveDateOptions = SaveDateOptions.ALL,
     description_options: DescriptionOptions = DescriptionOptions.COMMENTS_AND_DATE,
 ) -> Generator[
-    tuple[Literal["skipped"], str]
-    | tuple[Literal["saved"], str]
-    | tuple[Literal["error"], Exception]
+    tuple[Literal[ExtractionStatus.SAVED], str]
+    | tuple[Literal[ExtractionStatus.SKIPPED], str]
+    | tuple[Literal[ExtractionStatus.ERROR], Exception]
 ]:
     """Save multiple cropped images to the specified directory.
 
@@ -258,7 +264,7 @@ def save_cropped_images(
 
         if os.path.exists(filepath):
             if file_exists_behavior == FileExistsBehavior.SKIP:
-                yield ("skipped", filename)
+                yield (ExtractionStatus.SKIPPED, filepath)
                 continue
             elif file_exists_behavior == FileExistsBehavior.INCREMENT:
                 # Ensure unique filename
@@ -281,10 +287,10 @@ def save_cropped_images(
                 save_date=save_date,
                 description_options=description_options,
             )
-            yield ("saved", filename)
+            yield (ExtractionStatus.SAVED, filepath)
             saved_files.append(filepath)
         except Exception as e:
-            yield ("error", e)
+            yield (ExtractionStatus.ERROR, e)
 
 
 def save_image_with_exif(
