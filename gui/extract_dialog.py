@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 import PIL.Image
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -30,7 +30,13 @@ from PyQt6.QtWidgets import (
 )
 
 from core.bounding_box_storage import BoundingBoxStorage
-from core.extract import FileExistsBehavior, OutputFormat, save_cropped_images
+from core.extract import (
+    DescriptionOptions,
+    FileExistsBehavior,
+    OutputFormat,
+    SaveDateOptions,
+    save_cropped_images,
+)
 
 
 class ExtractProcessor(QThread):
@@ -49,6 +55,8 @@ class ExtractProcessor(QThread):
         jpeg_quality: int,
         conflict_mode: FileExistsBehavior,
         storage: BoundingBoxStorage,
+        save_date: SaveDateOptions,
+        description_options: DescriptionOptions,
     ):
         super().__init__()
         self.image_files = image_files
@@ -56,6 +64,8 @@ class ExtractProcessor(QThread):
         self.output_format = output_format
         self.jpeg_quality = jpeg_quality
         self.conflict_mode = conflict_mode
+        self.save_date = save_date
+        self.description_options = description_options
         self.storage = storage
         self.cancelled = False
 
@@ -163,6 +173,8 @@ class ExtractProcessor(QThread):
                     source_image_path=str(image_path),
                     file_exists_behavior=self.conflict_mode,
                     output_format=self.output_format,
+                    save_date=self.save_date,
+                    description_options=self.description_options,
                 )
             ):
                 if status == "saved":
@@ -272,6 +284,26 @@ class ExtractDialog(QDialog):
         self.quality_label = QLabel("JPEG Quality:")
         format_layout.addRow(self.quality_label, quality_row)
 
+        self.exif_date_combo = QComboBox()
+        self.exif_date_combo.addItem("All images", SaveDateOptions.ALL)
+        self.exif_date_combo.addItem(
+            "Images with explicit date hints only", SaveDateOptions.EXPLICIT_ONLY
+        )
+        self.exif_date_combo.addItem("Do not save", SaveDateOptions.NONE)
+        format_layout.addRow("Save Exif dates for: ", self.exif_date_combo)
+
+        self.exif_description_combo = QComboBox()
+        self.exif_description_combo.addItem(
+            "Comments + Date hint (if provided)", DescriptionOptions.COMMENTS_AND_DATE
+        )
+        self.exif_description_combo.addItem(
+            "Comments only", DescriptionOptions.COMMENTS_ONLY
+        )
+        self.exif_description_combo.addItem("Do not save", DescriptionOptions.NONE)
+        format_layout.addRow("Save Exif descriptions as: ", self.exif_description_combo)
+
+        # format_layout.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
+
         layout.addWidget(format_group)
 
         # Conflict handling group
@@ -372,6 +404,10 @@ class ExtractDialog(QDialog):
         jpeg_quality = (
             self.quality_spinbox.value() if output_format == OutputFormat.JPEG else 95
         )
+        save_date: SaveDateOptions = self.exif_date_combo.currentData()
+        description_options: DescriptionOptions = (
+            self.exif_description_combo.currentData()
+        )
         conflict_mode: FileExistsBehavior = self.conflict_combo.currentData()
 
         # Create and start processor
@@ -382,6 +418,8 @@ class ExtractDialog(QDialog):
             jpeg_quality=jpeg_quality,
             conflict_mode=conflict_mode,
             storage=self.storage,
+            save_date=save_date,
+            description_options=description_options,
         )
 
         # Connect signals
@@ -485,6 +523,12 @@ class ExtractDialog(QDialog):
             cancel_button.setText("Close")
 
     def cancel_or_close(self):
+        """Cancel processing or close dialog."""
+        if self.processor and self.processor.isRunning():
+            self.processor.cancel()
+            self.processor.wait()  # Wait for thread to finish
+
+        self.reject()
         """Cancel processing or close dialog."""
         if self.processor and self.processor.isRunning():
             self.processor.cancel()

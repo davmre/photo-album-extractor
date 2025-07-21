@@ -41,6 +41,18 @@ class OutputFormat(Enum):
     TIFF = "tif"
 
 
+class SaveDateOptions(Enum):
+    ALL = 0
+    EXPLICIT_ONLY = 1
+    NONE = 2
+
+
+class DescriptionOptions(Enum):
+    COMMENTS_AND_DATE = 0
+    COMMENTS_ONLY = 1
+    NONE = 2
+
+
 class TiffTag(IntEnum):
     IMAGE_DESCRIPTION = 270
     DATE_TIME = 306
@@ -195,7 +207,8 @@ def save_cropped_images(
     source_image_path: str | None = None,
     file_exists_behavior: FileExistsBehavior = FileExistsBehavior.OVERWRITE,
     output_format: OutputFormat = OutputFormat.JPEG,
-    save_date_hint_in_description: bool = True,
+    save_date: SaveDateOptions = SaveDateOptions.ALL,
+    description_options: DescriptionOptions = DescriptionOptions.COMMENTS_AND_DATE,
 ) -> Generator[
     tuple[Literal["skipped"], str]
     | tuple[Literal["saved"], str]
@@ -261,7 +274,12 @@ def save_cropped_images(
                 cropped = cropped.convert("RGB")
 
             save_image_with_exif(
-                cropped, filepath, attributes, source_file_time=source_file_time
+                cropped,
+                filepath,
+                attributes,
+                source_file_time=source_file_time,
+                save_date=save_date,
+                description_options=description_options,
             )
             yield ("saved", filename)
             saved_files.append(filepath)
@@ -275,7 +293,8 @@ def save_image_with_exif(
     attributes: PhotoAttributes,
     jpeg_quality: int = 95,
     source_file_time: datetime | None = None,
-    save_date_hint_in_description: bool = True,
+    save_date: SaveDateOptions = SaveDateOptions.ALL,
+    description_options: DescriptionOptions = DescriptionOptions.COMMENTS_AND_DATE,
 ) -> None:
     """Save image with EXIF data from attributes.
 
@@ -291,8 +310,12 @@ def save_image_with_exif(
     pnginfo = PngInfo()
     tiffinfo = {}
 
-    # Add date/time if available
-    date_to_parse = attributes.exif_date or attributes.date_hint
+    # Add date/time if available and requested
+    date_to_parse = None
+    if save_date == SaveDateOptions.ALL:
+        date_to_parse = attributes.exif_date or attributes.date_hint
+    elif save_date == SaveDateOptions.EXPLICIT_ONLY and attributes.date_hint:
+        date_to_parse = attributes.exif_date or attributes.date_hint
     if date_to_parse:
         try:
             # Parse ISO date string and convert to EXIF format
@@ -308,25 +331,28 @@ def save_image_with_exif(
             pnginfo.add_text("DateTime", exif_datetime)
             tiffinfo[TiffTag.DATE_TIME] = exif_datetime
             tiffinfo[TiffTag.DATE_TIME_ORIGINAL] = exif_datetime
-
-            # Set DateTimeDigitized to source file time if available, otherwise photo date
-            if source_file_time:
-                digitized_datetime = source_file_time.strftime("%Y:%m:%d %H:%M:%S")
-                exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = digitized_datetime
-                pnginfo.add_text("DateTimeDigitized", digitized_datetime)
-                tiffinfo[TiffTag.DATE_TIME_DIGITIZED] = digitized_datetime
         except (ValueError, AttributeError) as e:
             print(f"Warning: Could not parse date '{date_to_parse}': {e}")
+
+    # Set DateTimeDigitized to source file time if available
+    if source_file_time:
+        digitized_datetime = source_file_time.strftime("%Y:%m:%d %H:%M:%S")
+        exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = digitized_datetime
+        pnginfo.add_text("DateTimeDigitized", digitized_datetime)
+        tiffinfo[TiffTag.DATE_TIME_DIGITIZED] = digitized_datetime
 
     # Add comments if available
     comments = ""
     if attributes.comments:
         comments = attributes.comments[:65535]  # EXIF comment limit
-    if attributes.date_hint and save_date_hint_in_description:
+    if (
+        attributes.date_hint
+        and description_options == DescriptionOptions.COMMENTS_AND_DATE
+    ):
         if comments:
             comments += "\n"
         comments += f"Date: {attributes.date_hint}"
-    if comments:
+    if comments and not description_options == DescriptionOptions.NONE:
         exif_dict["0th"][piexif.ImageIFD.ImageDescription] = comments
         pnginfo.add_text("Description", comments)
         tiffinfo[TiffTag.IMAGE_DESCRIPTION] = comments
