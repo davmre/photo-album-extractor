@@ -54,6 +54,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
     """Gemini AI-based strategy for detecting photos in album pages."""
 
     model_name: str
+    requery_to_confirm_rotated_orientation: bool = True
 
     def __init__(self) -> None:
         self._model: Any | None = None
@@ -125,6 +126,55 @@ class GeminiDetectionStrategy(DetectionStrategy):
             [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
         )
 
+    def _confirm_orientation(
+        self, detected_box: BoundingBox, image: PIL.Image.Image
+    ) -> BoundingBox:
+        # Gemini seems to be *very* bad at distinguishing clockwise from
+        # counterclockwise orientation in the prompts I've tried. If it
+        # flags a rotated photo, we can (optionally) run a separate query to
+        # disambiguate.
+        if not self.requery_to_confirm_rotated_orientation:
+            return detected_box
+        if detected_box.attributes.orientation in (
+            PhotoOrientation.NORMAL,
+            PhotoOrientation.UPSIDE_DOWN,
+        ):
+            return detected_box
+        if not self._model:
+            return detected_box
+
+        from core import extract
+
+        # Extract the image assuming counterclockwise rotation
+        width = detected_box.corners[1, 0] - detected_box.corners[0, 0]
+        height = detected_box.corners[2, 1] - detected_box.corners[0, 1]
+        max_dim = max(width, height)
+        scale_by = 768 / max_dim
+        image_ccw = extract.extract_perspective_image(
+            image=image,
+            corner_points=detected_box.corners,
+            output_width=int(width * scale_by),
+            output_height=int(height * scale_by),
+            orientation=PhotoOrientation.ROTATED_90_CCW,
+        )
+        if image_ccw.mode != "RGB":
+            image_ccw = image_ccw.convert("RGB")
+
+        prompt = """Does this image appear predominantly right-side-up? (vs upside-down,
+some rotation is fine). Respond with one of: "yes", "no", or "unclear"."""
+
+        response_ccw = self._model.generate_content([image_ccw, prompt])
+        response_ccw_text: str = response_ccw.text.strip().lower()
+        print(
+            "Does box appear rotated counterclockwise? Gemini says: ", response_ccw_text
+        )
+
+        if "yes" in response_ccw_text:
+            detected_box.attributes.orientation = PhotoOrientation.ROTATED_90_CCW
+        elif "no" in response_ccw_text:
+            detected_box.attributes.orientation = PhotoOrientation.ROTATED_90_CW
+        return detected_box
+
     def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBox]:
         if not image or not self._model:
             return []
@@ -133,10 +183,10 @@ class GeminiDetectionStrategy(DetectionStrategy):
 
         # If the image is very large, no need to send the whole thing.
         # We're just getting approximate bounding boxes here.
-        image = image.resize(size=(768, 768))
+        scaled_image = image.resize(size=(768, 768))
 
-        if image.mode != "RGB":
-            image = image.convert("RGB")
+        if scaled_image.mode != "RGB":
+            scaled_image = scaled_image.convert("RGB")
 
         prompt = """This is a scanned page from a photo album. Your task is
 to detect the locations of the photos on the page. Output a JSON list of
@@ -180,7 +230,7 @@ Example response for a page with three photos:
 
 Return only the JSON response, no additional text."""
 
-        response = self._model.generate_content([image, prompt])
+        response = self._model.generate_content([scaled_image, prompt])
 
         if not response.text:
             return []
@@ -200,6 +250,7 @@ Return only the JSON response, no additional text."""
                     bbox_data = self._get_bounding_box_data_from_json(
                         entry, rescale_coordinates=unnormalize_gemini_coords
                     )
+                    bbox_data = self._confirm_orientation(bbox_data, image)
                     detected_bboxes.append(bbox_data)
                 except ValueError as e:
                     print("Could not extract bounding box from response: ", e)
