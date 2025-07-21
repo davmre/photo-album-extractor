@@ -30,7 +30,7 @@ class DirectoryImageList(QWidget):
 
     image_selected = pyqtSignal(str)  # Emits the full path of selected image
     directory_changed = pyqtSignal(str)  # Emits when user selects new directory
-    batch_preprocess_requested = (
+    batch_detect_requested = (
         pyqtSignal()
     )  # Emits when user requests batch preprocessing
     extract_photos_requested = pyqtSignal()
@@ -77,10 +77,10 @@ class DirectoryImageList(QWidget):
         layout.addWidget(self.image_list)
 
         # Batch preprocess button
-        self.batch_preprocess_btn = QPushButton("Batch preprocess...")
-        self.batch_preprocess_btn.clicked.connect(self.batch_preprocess_requested.emit)
-        self.batch_preprocess_btn.setEnabled(False)  # Disabled until directory is set
-        layout.addWidget(self.batch_preprocess_btn)
+        self.batch_detect_btn = QPushButton("Batch detect/refine...")
+        self.batch_detect_btn.clicked.connect(self.batch_detect_requested.emit)
+        self.batch_detect_btn.setEnabled(False)  # Disabled until directory is set
+        layout.addWidget(self.batch_detect_btn)
 
         # Extract button
         self.extract_btn = QPushButton("Extract photos...")
@@ -101,7 +101,7 @@ class DirectoryImageList(QWidget):
         self.storage = storage
 
         # Enable batch preprocess button when directory is set
-        self.batch_preprocess_btn.setEnabled(bool(directory))
+        self.batch_detect_btn.setEnabled(bool(directory))
 
     def update_directory_label(self):
         """Update the directory label with current path."""

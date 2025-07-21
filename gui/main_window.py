@@ -31,11 +31,13 @@ from core.detection_strategies import configure_detection_strategy
 from core.errors import AppError
 from core.settings import app_settings
 from gui.attributes_sidebar import AttributesSidebar
-from gui.batch_preprocess import BatchPreprocessDialog
+from gui.batch_preprocess import BatchDetectDialog
 from gui.directory_sidebar import DirectoryImageList
 from gui.extract_dialog import ExtractDialog
 from gui.image_view import ImageView
 from gui.settings_dialog import SettingsDialog
+
+os.environ["QT_FATAL_WARNINGS"] = "1"
 
 
 class PhotoExtractorApp(QMainWindow):
@@ -96,8 +98,8 @@ class PhotoExtractorApp(QMainWindow):
         self.directory_list = DirectoryImageList()
         self.directory_list.image_selected.connect(self.on_image_selected)
         self.directory_list.directory_changed.connect(self.on_directory_changed)
-        self.directory_list.batch_preprocess_requested.connect(
-            self.open_batch_preprocess_dialog
+        self.directory_list.batch_detect_requested.connect(
+            self.open_batch_detect_dialog
         )
         self.directory_list.extract_photos_requested.connect(self.extract_photos)
         # self.directory_list.batch_detect_requested.connect(self.batch_detect_photos)
@@ -655,16 +657,16 @@ class PhotoExtractorApp(QMainWindow):
         """Open the settings dialog."""
         self.settings_dialog.exec()
 
-    def open_batch_preprocess_dialog(self):
-        """Open the batch preprocess dialog."""
+    def open_batch_detect_dialog(self):
+        """Open the batch detection dialog."""
         if not self.current_directory or not self.bounding_box_storage:
             QMessageBox.warning(
                 self, "No Directory", "Please select a directory first."
             )
             return
 
-        # Create and show the batch preprocess dialog
-        dialog = BatchPreprocessDialog(
+        # Create and show the batch detect dialog
+        dialog = BatchDetectDialog(
             parent=self,
             directory=self.current_directory,
             storage=self.bounding_box_storage,
@@ -676,6 +678,9 @@ class PhotoExtractorApp(QMainWindow):
 
     def on_batch_preprocess_completed(self):
         """Handle batch preprocessing completion by refreshing the UI."""
+        # Fill in dates (and validation errors) for newly created boxes.
+        self._trigger_date_inference()
+
         # Refresh the directory sidebar validation cache
         self.directory_list.invalidate_validation_cache()
 

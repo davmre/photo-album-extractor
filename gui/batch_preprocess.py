@@ -6,8 +6,11 @@ from __future__ import annotations
 
 import glob
 import os
+import time
 
 import PIL.Image
+from google.api_core.exceptions import ResourceExhausted
+from google.rpc.error_details_pb2 import RetryInfo
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -159,6 +162,15 @@ class BatchProcessor(QThread):
         )
         self.finished_processing.emit(processed_count, skipped_count, error_count)
 
+    def _get_retry_seconds(self, e: ResourceExhausted) -> int:
+        for r in e.details:
+            if isinstance(r, RetryInfo):
+                fields = r.ListFields()
+                for _, v in fields:
+                    if hasattr(v, "ToSeconds"):
+                        return v.ToSeconds() + 1  # Add a second to be safe.
+        return -1
+
     def _process_image(self, image_path: str) -> str:
         """Process a single image with detection and/or refinement."""
         filename = os.path.basename(image_path)
@@ -188,7 +200,20 @@ class BatchProcessor(QThread):
                 self.log_message.emit(
                     f"  Running detection using {self.detection_strategy.name}"
                 )
-                detected_boxes = self.detection_strategy.detect_photos(image)
+                detected_boxes = None
+                while detected_boxes is None:
+                    try:
+                        detected_boxes = self.detection_strategy.detect_photos(image)
+                    except ResourceExhausted as e:
+                        s = self._get_retry_seconds(e)
+                        if s >= 0 and s <= 60:
+                            self.log_message.emit(
+                                f"  Gemini quota exceeded, waiting for reset in {s}s..."
+                            )
+                            time.sleep(s)
+                        else:
+                            raise e
+
                 current_boxes = detected_boxes
                 self.storage.set_bounding_boxes(filename, current_boxes)
                 self.log_message.emit(f"  Detection found {len(detected_boxes)} photos")
@@ -235,7 +260,7 @@ class BatchProcessor(QThread):
         return "processed"
 
 
-class BatchPreprocessDialog(QDialog):
+class BatchDetectDialog(QDialog):
     """Dialog for batch preprocessing operations."""
 
     def __init__(
