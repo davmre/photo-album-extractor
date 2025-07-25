@@ -63,6 +63,8 @@ class ImageView(QGraphicsView):
         self.image_item = QGraphicsPixmapItem()
         self.image_item: QGraphicsPixmapItem = QGraphicsPixmapItem()
         self._scene.addItem(self.image_item)
+        # Image is the backdrop for other stuff (boxes etc).
+        self.image_item.setZValue(-1.0)
         self._pixmap = QPixmap()  # Keep strong reference to prevent GC issues
         self.bounding_boxes: list[QuadBoundingBox] = []
 
@@ -103,8 +105,6 @@ class ImageView(QGraphicsView):
     def set_image(self, image: Image.Image | None = None):
         """Set the image to display."""
         try:
-            logger.debug(f"set_image called with image: {image is not None}")
-
             # Clear bounding boxes including temp box if it exists.
             self.clear_boxes(emit_signals=False)
             if hasattr(self, "temp_box") and self.temp_box:
@@ -115,22 +115,14 @@ class ImageView(QGraphicsView):
             # QPixmap uses implicit sharing semantics, so we need to
             # keep strong references to both QImage and QPixmap to prevent GC issues
             if image is None:
-                logger.debug("Setting image to None - clearing pixmap")
                 self._image_qt = None
                 self._pixmap = QPixmap()
             else:
-                logger.debug(f"Creating QImage from PIL image: {image.size}")
                 # Create QImage and keep strong reference
                 self._image_qt = ImageQt.ImageQt(image)
-                logger.debug(
-                    f"QImage created: {self._image_qt.width()}x{self._image_qt.height()}"
-                )
 
                 # Create QPixmap from QImage and keep strong reference
                 self._pixmap = QPixmap.fromImage(self._image_qt)
-                logger.debug(
-                    f"QPixmap created: {self._pixmap.width()}x{self._pixmap.height()}, isNull: {self._pixmap.isNull()}"
-                )
 
                 # Verify the pixmap was created successfully
                 if self._pixmap.isNull():
@@ -144,21 +136,16 @@ class ImageView(QGraphicsView):
             self._image_pil = image
 
             # Add new image item with our managed pixmap
-            logger.debug("Updating QGraphicsPixmapItem")
             self.image_item.setPixmap(self._pixmap)
 
             # Fit image in view only if we have a valid image
             if not self._pixmap.isNull():
-                logger.debug("Fitting image in view")
                 self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
 
             # Emit signal for magnifier
-            logger.debug("Emitting image_updated signal")
             self.image_updated.emit()
-            logger.debug("set_image completed successfully")
 
         except Exception as e:
-            logger.error(f"Error setting image: {e}", exc_info=True)
             print(f"Error setting image: {e}")
             # Ensure we have a valid state even if image loading fails
             self._pixmap = QPixmap()
@@ -170,8 +157,8 @@ class ImageView(QGraphicsView):
         if not self._image_pil:
             return False
         width, height = self._image_pil.width, self._image_pil.height
-        y_min, y_max = np.min(corners[:, 0]), np.max(corners[:, 0])
-        x_min, x_max = np.min(corners[:, 1]), np.max(corners[:, 1])
+        y_min, y_max = np.min(corners[:, 1]), np.max(corners[:, 1])
+        x_min, x_max = np.min(corners[:, 0]), np.max(corners[:, 0])
         if y_max < 0 or x_max < 0:
             return False
         if y_min > height or x_min > width:
