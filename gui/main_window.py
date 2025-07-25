@@ -298,6 +298,9 @@ class PhotoExtractorApp(QMainWindow):
         if self.current_image_path and self.bounding_box_storage:
             self.save_current_bounding_boxes()
 
+        # Clear currently selected box, if any
+        self.attributes_sidebar.show_no_selection()
+
         try:
             image = extract.load_image(file_path)
             self.image_view.set_image(image)
@@ -685,7 +688,9 @@ class PhotoExtractorApp(QMainWindow):
         self.directory_list.invalidate_validation_cache()
 
         # Reload the current image's bounding boxes if an image is loaded
-        if self.current_image_path:
+        if self.current_image_path and self.current_directory:
+            self.image_view.clear_boxes()
+            self.bounding_box_storage = BoundingBoxStorage(self.current_directory)
             self.load_saved_bounding_boxes()
 
         # Update the status bar
