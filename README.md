@@ -24,7 +24,7 @@ pages.
 
 ## Installation
 
-Using `uv` (MacOS/Linux, fastest but you may need to [install
+Using `uv` (fastest but you may need to [install
 `uv`](https://docs.astral.sh/uv/getting-started/installation/) first):
 
 ```bash
@@ -36,7 +36,7 @@ cd photo-album-extractor
 uv run python3 main.py
 ```
 
-Using `pip/venv` (MacOS/Linux, more compatible):
+Using `pip/venv` (legacy approach):
 
 ```bash
 # Clone the repository
@@ -54,8 +54,10 @@ pip install -e .
 python3 main.py
 ```
 
-The app *should* also work on Windows, but you might need to slightly modify the above
-instructions, or run them under WSL.
+Windows users will need to install [git](https://git-scm.com/downloads) and
+[uv](https://docs.astral.sh/uv/getting-started/installation/); then the `uv`
+instructions above (at the command prompt or Powershell prompt) should work to
+automatically download Python and all required dependencies and run the app.
 
 TODO: create prepackaged installers for Windows/MacOS and common Linux distros.
 
