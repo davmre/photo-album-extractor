@@ -495,6 +495,10 @@ class PhotoExtractorApp(QMainWindow):
             # Save detected bounding boxes.
             filename = Path(self.current_image_path).name
             self.bounding_box_storage.set_bounding_boxes(filename, detected_boxes)
+
+            # Incorporate any newly transcribed date hints.
+            self._trigger_date_inference()
+
             # Update directory sidebar validation for this file
             self.directory_list.update_file_validation(
                 filename, storage=self.bounding_box_storage
@@ -529,6 +533,9 @@ class PhotoExtractorApp(QMainWindow):
     def extract_photos(self, output_directory=None):
         """Show the batch extract dialog."""
         if self.current_directory and self.current_image_path:
+            # Ensure the saved bounding boxes are current.
+            self.save_current_bounding_boxes()
+
             # Show the extract dialog
             dialog = ExtractDialog(
                 parent=self,
