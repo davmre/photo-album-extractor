@@ -29,7 +29,7 @@ from core.refinement_strategies import (  # RefinementStrategyHoughGreedy,; Refi
 # 4. Set up a test class and test methods for pytest (but we still want to support running main() directly also)
 # 5. Clean up and check in the test images and bounding box data
 
-REFINEMENT_TEST_DATA_DIR = "/Users/dave/Pictures/refinement_evals"
+REFINEMENT_TEST_DATA_DIR = "test_scans"
 
 
 def load_json(file_name):
