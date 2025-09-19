@@ -20,9 +20,7 @@ class AppSettings:
     warn_date_inconsistent: bool = True
     warn_non_rectangular: bool = True
     warn_nonstandard_aspect: bool = False
-    standard_aspect_ratios: list[float] = field(
-        default_factory=lambda: [4 / 6, 6 / 4, 5 / 7, 7 / 5]
-    )
+    standard_aspect_ratios: list[float] = field(default_factory=lambda: [6 / 4, 7 / 5])
     aspect_ratio_tolerance: float = 0.02
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -45,9 +43,7 @@ class AppSettings:
             warn_date_inconsistent=bool(data.get("warn_date_inconsistent", True)),
             warn_non_rectangular=bool(data.get("warn_non_rectangular", True)),
             warn_nonstandard_aspect=bool(data.get("warn_nonstandard_aspect", False)),
-            standard_aspect_ratios=data.get(
-                "standard_aspect_ratios", [4 / 6, 6 / 4, 5 / 7, 7 / 5]
-            ),
+            standard_aspect_ratios=data.get("standard_aspect_ratios", [6 / 4, 7 / 5]),
             aspect_ratio_tolerance=float(data.get("aspect_ratio_tolerance", 0.02)),
         )
 
