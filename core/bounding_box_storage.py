@@ -3,8 +3,9 @@ Persistent storage for bounding box data per directory.
 """
 
 import json
+import platform
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from core.bounding_box import BoundingBox
 
@@ -12,13 +13,20 @@ from core.bounding_box import BoundingBox
 class BoundingBoxStorage:
     """Handles saving and loading bounding box data for images in a directory."""
 
-    def __init__(
-        self, directory: str, json_file_name: str = ".photo_extractor_data.json"
-    ) -> None:
+    def __init__(self, directory: str, json_file_name: Optional[str] = None) -> None:
         self.directory = directory
         self._directory_path = Path(directory)
+
+        # Use platform-specific filename to avoid Windows permission issues
+        if json_file_name is None:
+            if "Windows" in platform.system():
+                json_file_name = "photo_extractor_data.json"
+            else:
+                json_file_name = ".photo_extractor_data.json"
+
         self._data_file_path = self._directory_path / json_file_name
         self.data_file = str(self._data_file_path)
+
         self.data: dict[str, list[dict[str, Any]]] = self._load_data()
 
     def _load_data(self) -> dict[str, list[dict[str, Any]]]:
@@ -33,11 +41,8 @@ class BoundingBoxStorage:
 
     def save_data(self) -> None:
         """Save bounding box data to JSON file."""
-        try:
-            with open(self.data_file, "w") as f:
-                json.dump(self.data, f, indent=2)
-        except OSError:
-            print(f"Warning: Could not save bounding box data to {self.data_file}")
+        with open(self.data_file, "w") as f:
+            json.dump(self.data, f, indent=2)
 
     def set_bounding_boxes(
         self,
