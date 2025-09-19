@@ -2,36 +2,35 @@
 Tests for bounding box storage and loading functionality.
 """
 
-import os
-import sys
+from pathlib import Path
 
 import pytest
 
-# Add parent directory to path to import app modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 from core.bounding_box_storage import BoundingBoxStorage
+
+# Add parent directory to path to import app modules
+# sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 class TestBoundingBoxStorage:
     """Test the BoundingBoxStorage class for saving and loading bounding box data."""
 
     @pytest.fixture
-    def test_directory(self):
+    def test_directory(self) -> Path:
         """Path to test data directory."""
-        return os.path.join(os.path.dirname(__file__), "..", "test_data", "album1")
+        return Path(__file__).parent.parent / "test_data" / "album1"
 
     @pytest.fixture
-    def storage(self, test_directory):
+    def storage(self, test_directory: Path):
         """Create a BoundingBoxStorage instance for testing."""
         return BoundingBoxStorage(test_directory)
 
-    def test_init_loads_existing_data(self, storage, test_directory):
+    def test_init_loads_existing_data(self, storage, test_directory: Path):
         """Test that initializing storage loads existing data file."""
-        expected_data_file = os.path.join(test_directory, ".photo_extractor_data.json")
+        expected_data_file = test_directory / ".photo_extractor_data.json"
 
-        assert storage.directory == test_directory
-        assert storage.data_file == expected_data_file
+        assert storage.directory == str(test_directory)
+        assert storage.data_file == str(expected_data_file)
         assert storage.data is not None
         assert isinstance(storage.data, dict)
 

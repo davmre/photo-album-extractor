@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 import numpy as np
 
@@ -43,7 +44,7 @@ class FileValidationSeverity(Enum):
 class FileValidationSummary:
     """Summary of validation issues for a single file."""
 
-    file_path: str
+    file_path: Path
     severity: FileValidationSeverity
     error_count: int
     warning_count: int
@@ -112,7 +113,7 @@ def validate_bounding_box(box) -> list[ValidationIssue]:
 
 
 def validate_file_bounding_boxes(
-    directory: str, filename: str, storage: BoundingBoxStorage
+    directory: Path, filename: str, storage: BoundingBoxStorage
 ) -> FileValidationSummary:
     """
     Validate all bounding boxes in a single image file.
@@ -146,7 +147,7 @@ def validate_file_bounding_boxes(
     else:
         severity = FileValidationSeverity.CLEAN
 
-    file_path = os.path.join(directory, filename)
+    file_path = directory / filename
     return FileValidationSummary(
         file_path=file_path,
         severity=severity,
@@ -156,7 +157,7 @@ def validate_file_bounding_boxes(
 
 
 def validate_directory_files(
-    directory: str, storage: BoundingBoxStorage
+    directory: Path, storage: BoundingBoxStorage
 ) -> dict[str, FileValidationSummary]:
     """
     Validate all files with bounding box data in a directory.

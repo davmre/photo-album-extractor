@@ -5,8 +5,9 @@ Batch preprocessing dialog for running detection and refinement on multiple imag
 from __future__ import annotations
 
 import glob
-import os
 import time
+from pathlib import Path
+from typing import Optional
 
 import PIL.Image
 from google.api_core.exceptions import ResourceExhausted
@@ -46,16 +47,19 @@ DEFAULT_BATCH_REFINEMENT_STRATEGY = REFINEMENT_STRATEGIES[
 DEFAULT_BATCH_REFINEMENT_TOLERANCE = 0.1
 
 
-def get_image_files_in_directory(directory: str) -> list[str]:
+def get_image_files_in_directory(directory: Path) -> list[Path]:
     """Get list of all image files in the directory."""
     supported_formats = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif"}
-    image_files = []
+    image_files = set()  # Use set to avoid duplicates
 
+    directory_path = directory
     for ext in supported_formats:
-        pattern = os.path.join(directory, f"*{ext}")
-        image_files.extend(glob.glob(pattern, recursive=False))
-        pattern = os.path.join(directory, f"*{ext.upper()}")
-        image_files.extend(glob.glob(pattern, recursive=False))
+        pattern = str(directory_path / f"*{ext}")
+        for file_path in glob.glob(pattern, recursive=False):
+            image_files.add(Path(file_path).resolve())
+        pattern = str(directory_path / f"*{ext.upper()}")
+        for file_path in glob.glob(pattern, recursive=False):
+            image_files.add(Path(file_path).resolve())
 
     return sorted(image_files)
 
@@ -70,7 +74,7 @@ class BatchProcessor(QThread):
 
     def __init__(
         self,
-        image_files: list[str],
+        image_files: list[Path],
         storage: BoundingBoxStorage,
         detection_strategy_name: str | None,
         skip_existing: bool,
@@ -138,7 +142,7 @@ class BatchProcessor(QThread):
                 self.log_message.emit("Processing cancelled by user.")
                 break
 
-            filename = os.path.basename(image_path)
+            filename = image_path.name
 
             try:
                 # Update progress
@@ -176,9 +180,9 @@ class BatchProcessor(QThread):
                         return v.ToSeconds() + 1  # Add a second to be safe.
         return -1
 
-    def _process_image(self, image_path: str) -> str:
+    def _process_image(self, image_path: Path) -> str:
         """Process a single image with detection and/or refinement."""
-        filename = os.path.basename(image_path)
+        filename = image_path.name
 
         # Check if bounding boxes already exist
         existing_boxes = self.storage.get_bounding_boxes(filename)
@@ -195,7 +199,7 @@ class BatchProcessor(QThread):
             return "skipped"
 
         # Load image
-        with PIL.Image.open(image_path) as image:
+        with PIL.Image.open(str(image_path)) as image:
             self.log_message.emit(f"  Loaded image ({image.size[0]}x{image.size[1]})")
             current_boxes = existing_boxes.copy()
 
@@ -271,14 +275,14 @@ class BatchDetectDialog(QDialog):
     def __init__(
         self,
         parent=None,
-        directory: str = "",
+        directory: Optional[Path] = None,
         storage: BoundingBoxStorage | None = None,
     ):
         super().__init__(parent)
-        self.directory = directory
+        self.directory = directory or Path()
         self.storage = storage
         self.processor: BatchProcessor | None = None
-        self.selected_files: list[str] = []
+        self.selected_files: list[Path] = []
 
         self.init_ui()
 
@@ -489,7 +493,10 @@ class BatchDetectDialog(QDialog):
         ]
 
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Select Images to Process", self.directory, ";;".join(image_filters)
+            self,
+            "Select Images to Process",
+            str(self.directory),
+            ";;".join(image_filters),
         )
 
         if files:
@@ -497,11 +504,11 @@ class BatchDetectDialog(QDialog):
             valid_files = []
             invalid_files = []
             for file_path in files:
-                file_dir = os.path.dirname(file_path)
-                if file_dir == self.directory:
-                    valid_files.append(file_path)
+                file_path_obj = Path(file_path)
+                if file_path_obj.parent == self.directory:
+                    valid_files.append(file_path_obj)
                 else:
-                    invalid_files.append(os.path.basename(file_path))
+                    invalid_files.append(file_path_obj.name)
 
             # Show warning if some files were from different directories
             if invalid_files:

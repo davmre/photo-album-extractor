@@ -5,6 +5,7 @@ Batch extraction dialog for extracting photos from multiple images.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import PIL.Image
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -100,7 +101,7 @@ class ExtractProcessor(QThread):
         total_photos_extracted = 0
 
         directory = self.image_files[0].parent
-        storage = BoundingBoxStorage(str(directory))
+        storage = BoundingBoxStorage(directory)
 
         for i, image_path in enumerate(self.image_files):
             if self.cancelled:
@@ -168,9 +169,9 @@ class ExtractProcessor(QThread):
                 save_cropped_images(
                     image=image,
                     bounding_box_data_list=bounding_boxes,
-                    output_dir=self.output_dir,
+                    output_dir=Path(self.output_dir),
                     base_name=base_name,
-                    source_image_path=str(image_path),
+                    source_image_path=image_path,
                     file_exists_behavior=self.conflict_mode,
                     output_format=self.output_format,
                     save_date=self.save_date,
@@ -179,9 +180,7 @@ class ExtractProcessor(QThread):
             ):
                 if status == ExtractionStatus.SAVED:
                     extracted_count += 1
-                    self.log_message.emit(
-                        f"    Photo {j + 1}: {Path(str(val)).name}"
-                    )
+                    self.log_message.emit(f"    Photo {j + 1}: {Path(str(val)).name}")
                 elif status == ExtractionStatus.ERROR:
                     self.log_message.emit(f"    Photo {j + 1}: failed to extract")
                     self.log_message.emit(str(val))
@@ -204,13 +203,13 @@ class ExtractDialog(QDialog):
     def __init__(
         self,
         parent=None,
-        current_directory: str = "",
-        current_image_path: str = "",
+        current_directory: Optional[Path] = None,
+        current_image_path: Optional[Path] = None,
         storage: BoundingBoxStorage | None = None,
     ):
         super().__init__(parent)
-        self.current_directory = current_directory
-        self.current_image_path = current_image_path
+        self.current_directory = current_directory or Path()
+        self.current_image_path = current_image_path or Path()
         self.storage = storage
         self.processor: ExtractProcessor | None = None
 
@@ -236,7 +235,7 @@ class ExtractDialog(QDialog):
 
         # Default to "extracted_photos" subdirectory
         if self.current_directory:
-            default_output = str(Path(self.current_directory) / "extracted_photos")
+            default_output = str(self.current_directory / "extracted_photos")
             self.output_dir_edit.setText(default_output)
 
         self.browse_button = QPushButton("Browse...")
@@ -392,7 +391,7 @@ class ExtractDialog(QDialog):
             if not self.current_image_path:
                 self.error_occurred.emit("No current image loaded")
                 return
-            image_files = [Path(self.current_image_path)]
+            image_files = [self.current_image_path]
         else:
             # All pages in directory
             image_files = self._get_image_files_in_directory(self.current_directory)
@@ -445,12 +444,12 @@ class ExtractDialog(QDialog):
         # Start processing
         self.processor.start()
 
-    def _get_image_files_in_directory(self, directory: str) -> list[Path]:
+    def _get_image_files_in_directory(self, directory: Path) -> list[Path]:
         """Get all image files in the directory."""
         supported_formats = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif"}
         image_files = []
 
-        dir_path = Path(directory)
+        dir_path = directory
         for file_path in dir_path.iterdir():
             if file_path.is_file() and file_path.suffix.lower() in supported_formats:
                 image_files.append(file_path)

@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import piexif
@@ -202,7 +203,7 @@ class TestImageProcessor:
         """Test saving cropped images without EXIF attributes."""
         # Load a test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = extract.load_image(test_image_path)
+        image = extract.load_image(Path(test_image_path))
 
         # Define crop data (simple rectangle)
         crop_data = [
@@ -236,7 +237,7 @@ class TestImageProcessor:
         """Test saving cropped images with EXIF attributes."""
         # Load test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = extract.load_image(test_image_path)
+        image = extract.load_image(Path(test_image_path))
 
         # Define crop data with attributes
         crop_data = [
@@ -293,7 +294,7 @@ class TestImageProcessor:
         """Test saving multiple cropped images from one source."""
         # Load test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = extract.load_image(test_image_path)
+        image = extract.load_image(Path(test_image_path))
 
         # Define multiple crop regions
         corners = [
@@ -330,7 +331,7 @@ class TestImageProcessor:
         """Test saving cropped images with different orientations applied."""
         # Load test image
         test_image_path = os.path.join(test_images_dir, "album_page1.jpg")
-        image = extract.load_image(test_image_path)
+        image = extract.load_image(Path(test_image_path))
 
         # Create same bounding box with different orientations
         corners = np.array(

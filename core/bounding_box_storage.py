@@ -13,9 +13,9 @@ from core.bounding_box import BoundingBox
 class BoundingBoxStorage:
     """Handles saving and loading bounding box data for images in a directory."""
 
-    def __init__(self, directory: str, json_file_name: Optional[str] = None) -> None:
-        self.directory = directory
-        self._directory_path = Path(directory)
+    def __init__(self, directory: Path, json_file_name: Optional[str] = None) -> None:
+        self._directory_path = directory
+        self.directory = str(self._directory_path)  # Keep for backward compatibility
 
         # Use platform-specific filename to avoid Windows permission issues
         if json_file_name is None:

@@ -10,7 +10,7 @@ from PIL import Image
 from core.photo_types import AnyArray, IntArray
 
 try:
-    from matplotlib import pylab as plt
+    from matplotlib import pylab as plt  # pyright: ignore[reportMissingImports]
 except ImportError:
     pass
 

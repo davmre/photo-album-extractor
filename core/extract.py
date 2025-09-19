@@ -8,7 +8,7 @@ import platform
 from datetime import datetime
 from pathlib import Path
 from enum import Enum, IntEnum
-from typing import Generator, Literal
+from typing import Generator, Literal, Optional
 
 import numpy as np
 import piexif
@@ -202,16 +202,16 @@ def extract_perspective_image(
     )
 
 
-def load_image(filepath: str) -> PILImage:
+def load_image(filepath: Path) -> PILImage:
     return Image.open(filepath)
 
 
 def save_cropped_images(
     image: PILImage,
     bounding_box_data_list: list[BoundingBox],
-    output_dir: str,
+    output_dir: Path,
     base_name: str = "photo",
-    source_image_path: str | None = None,
+    source_image_path: Optional[Path] = None,
     file_exists_behavior: FileExistsBehavior = FileExistsBehavior.OVERWRITE,
     output_format: OutputFormat = OutputFormat.JPEG,
     save_date: SaveDateOptions = SaveDateOptions.ALL,

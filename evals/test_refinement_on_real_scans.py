@@ -7,6 +7,7 @@ import json
 import os
 import time
 from collections.abc import Sequence
+from pathlib import Path
 
 import numpy as np
 import PIL.Image as Image
@@ -138,7 +139,7 @@ def main():
 
     storage_objects = {
         s: BoundingBoxStorage(
-            REFINEMENT_TEST_DATA_DIR,
+            Path(REFINEMENT_TEST_DATA_DIR),
             json_file_name=f"{sanitize_filename(s)}_boxes.json",
         )
         for s in list(REFINEMENT_STRATEGIES.keys()) + ["gold", "init"]

@@ -61,6 +61,7 @@ select = [
 ignore = [
     "E501",  # line too long (handled by formatter)
     "N802",  # function name should be lowercase (Qt method overrides)
+    "UP045", # Use `X | None` for type annotations (compat with Python 3.9)
 ]
 
 [tool.ruff.format]

@@ -3,8 +3,8 @@ Directory sidebar widget for browsing images.
 """
 
 import glob
-import os
 from pathlib import Path
+from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -29,8 +29,8 @@ from core.validation_utils import (
 class DirectoryImageList(QWidget):
     """Sidebar widget showing images in the current directory."""
 
-    image_selected = pyqtSignal(str)  # Emits the full path of selected image
-    directory_changed = pyqtSignal(str)  # Emits when user selects new directory
+    image_selected = pyqtSignal(Path)  # Emits the full path of selected image
+    directory_changed = pyqtSignal(Path)  # Emits when user selects new directory
     batch_detect_requested = (
         pyqtSignal()
     )  # Emits when user requests batch preprocessing
@@ -38,7 +38,7 @@ class DirectoryImageList(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.current_directory = None
+        self.current_directory: Optional[Path] = None
         self.validation_cache: dict[str, FileValidationSummary] = {}
         self.supported_formats = {
             ".png",
@@ -89,7 +89,7 @@ class DirectoryImageList(QWidget):
         self.extract_btn.setEnabled(False)  # Disabled until directory is set
         layout.addWidget(self.extract_btn)
 
-    def set_directory(self, directory, storage: BoundingBoxStorage):
+    def set_directory(self, directory: Path, storage: BoundingBoxStorage):
         """Set the directory to display images from."""
         if directory != self.current_directory:
             self.current_directory = directory
@@ -108,16 +108,16 @@ class DirectoryImageList(QWidget):
         """Update the directory label with current path."""
         if self.current_directory:
             # Show just the directory name and parent for space efficiency
-            dir_name = Path(self.current_directory).name
-            parent_name = Path(self.current_directory).parent.name
+            dir_name = self.current_directory.name
+            parent_name = self.current_directory.parent.name
             if parent_name and dir_name:
                 display_text = f".../{parent_name}/{dir_name}"
             elif dir_name:
                 display_text = dir_name
             else:
-                display_text = self.current_directory
+                display_text = str(self.current_directory)
             self.dir_label.setText(display_text)
-            self.dir_label.setToolTip(self.current_directory)  # Full path on hover
+            self.dir_label.setToolTip(str(self.current_directory))  # Full path on hover
         else:
             self.dir_label.setText("No directory selected")
             self.dir_label.setToolTip("")
@@ -126,24 +126,25 @@ class DirectoryImageList(QWidget):
         """Refresh the list of images in the current directory."""
         self.image_list.clear()
 
-        if not self.current_directory or not Path(self.current_directory).is_dir():
+        if not self.current_directory or not self.current_directory.is_dir():
             return
 
         # Find all image files in the directory
-        image_files = []
+        image_files = set()  # Use set to avoid duplicates
         for ext in self.supported_formats:
-            pattern = str(Path(self.current_directory) / f"*{ext}")
-            image_files.extend(glob.glob(pattern, recursive=False))
-            pattern = str(Path(self.current_directory) / f"*{ext.upper()}")
-            image_files.extend(glob.glob(pattern, recursive=False))
+            pattern = str(self.current_directory / f"*{ext}")
+            for file_path in glob.glob(pattern, recursive=False):
+                image_files.add(Path(file_path).resolve())
+            pattern = str(self.current_directory / f"*{ext.upper()}")
+            for file_path in glob.glob(pattern, recursive=False):
+                image_files.add(Path(file_path).resolve())
 
         # Sort files alphabetically
-        image_files.sort()
+        image_files = sorted(image_files)
 
         # Add items to the list
         for image_path in image_files:
-            filename = Path(image_path).name
-            self._add_image_item(filename, image_path)
+            self._add_image_item(image_path.name, image_path)
 
     def on_item_clicked(self, item):
         """Handle image selection."""
@@ -151,24 +152,24 @@ class DirectoryImageList(QWidget):
         if image_path:
             self.image_selected.emit(image_path)
 
-    def select_image(self, image_path):
+    def select_image(self, image_path: Path):
         """Select the specified image in the list."""
-        filename = os.path.basename(image_path)
+        filename = image_path.name
         for i in range(self.image_list.count()):
             item = self.image_list.item(i)
-            if item is not None and item.text() == filename:
+            if item is not None and item.text().endswith(filename):
                 self.image_list.setCurrentItem(item)
                 break
 
     def open_directory(self):
         """Open directory selection dialog."""
         directory = QFileDialog.getExistingDirectory(
-            self, "Select Directory", self.current_directory or str(Path.cwd())
+            self, "Select Directory", str(self.current_directory or Path.cwd())
         )
         if directory:
-            self.directory_changed.emit(directory)
+            self.directory_changed.emit(Path(directory))
 
-    def get_first_image(self):
+    def get_first_image(self) -> Optional[Path]:
         """Get the path of the first image in the current directory."""
         if self.image_list.count() > 0:
             first_item = self.image_list.item(0)
@@ -198,7 +199,7 @@ class DirectoryImageList(QWidget):
         )
         self._update_all_item_display()
 
-    def _add_image_item(self, filename: str, image_path: str):
+    def _add_image_item(self, filename: str, image_path: Path):
         """Add an image item to the list with validation icon if needed."""
         # Get validation icon for this file
         validation_icon = ""
@@ -221,7 +222,7 @@ class DirectoryImageList(QWidget):
             if item is not None:
                 image_path = item.data(Qt.ItemDataRole.UserRole)
                 if image_path:
-                    filename = Path(image_path).name
+                    filename = image_path.name
                     old_text = item.text()
 
                     # Get validation icon for this file

@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 
 import piexif
 import pytest
@@ -45,10 +46,10 @@ class TestMainWindowWorkflow:
         shutil.rmtree(temp_dir)
 
     def test_load_refine_and_extract(
-        self, app, test_images_dir, temp_output_dir, qtbot
+        self, app: PhotoExtractorApp, test_images_dir: str, temp_output_dir: str, qtbot
     ):
         """Test loading image from path through main window."""
-        jpeg_path = os.path.join(test_images_dir, "album_page1.jpg")
+        jpeg_path = Path(test_images_dir) / "album_page1.jpg"
 
         app.load_image_from_path(jpeg_path)
 
@@ -107,7 +108,9 @@ class TestMainWindowWorkflow:
                 exif_dict["0th"][piexif.ImageIFD.Software] == b"Photo Album Extractor"
             )
 
-    def _extract_photos_via_dialog(self, app, temp_output_dir, qtbot):
+    def _extract_photos_via_dialog(
+        self, app: PhotoExtractorApp, temp_output_dir: str, qtbot
+    ):
         """Helper method to handle the extract dialog and return saved files."""
         saved_files = []
         dialog_opened = False

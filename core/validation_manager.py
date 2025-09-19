@@ -7,6 +7,8 @@ of truth for all validation state throughout the application.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from core.bounding_box import BoundingBox
@@ -49,7 +51,7 @@ class ValidationManager(QObject):
         ] = {}
 
     def get_box_validation(
-        self, directory: str, filename: str, box_data: BoundingBox
+        self, directory: Path, filename: str, box_data: BoundingBox
     ) -> list[ValidationIssue]:
         """
         Get validation issues for a specific bounding box.
@@ -62,7 +64,7 @@ class ValidationManager(QObject):
         Returns:
             List of validation issues for the box
         """
-        cache_key = (directory, filename, box_data.box_id)
+        cache_key = (str(directory), filename, box_data.box_id)
 
         if cache_key not in self._box_validation_cache:
             # Validate and cache the result
@@ -72,7 +74,7 @@ class ValidationManager(QObject):
         return self._box_validation_cache[cache_key]
 
     def get_file_validation(
-        self, directory: str, filename: str, storage: BoundingBoxStorage | None = None
+        self, directory: Path, filename: str, storage: BoundingBoxStorage | None = None
     ) -> FileValidationSummary:
         """
         Get validation summary for all bounding boxes in a file.
@@ -85,7 +87,7 @@ class ValidationManager(QObject):
         Returns:
             FileValidationSummary for the file
         """
-        cache_key = (directory, filename)
+        cache_key = (str(directory), filename)
 
         if cache_key not in self._file_validation_cache:
             # Create storage if not provided
@@ -99,7 +101,7 @@ class ValidationManager(QObject):
         return self._file_validation_cache[cache_key]
 
     def get_directory_validation(
-        self, directory: str, storage: BoundingBoxStorage | None = None
+        self, directory: Path, storage: BoundingBoxStorage | None = None
     ) -> dict[str, FileValidationSummary]:
         """
         Get validation summaries for all files in a directory.
@@ -111,7 +113,7 @@ class ValidationManager(QObject):
         Returns:
             Dict mapping filename to FileValidationSummary
         """
-        if directory not in self._directory_validation_cache:
+        if str(directory) not in self._directory_validation_cache:
             # Create storage if not provided
             if storage is None:
                 storage = BoundingBoxStorage(directory)
@@ -125,11 +127,11 @@ class ValidationManager(QObject):
                 summary = self.get_file_validation(directory, filename, storage)
                 file_summaries[filename] = summary
 
-            self._directory_validation_cache[directory] = file_summaries
+            self._directory_validation_cache[str(directory)] = file_summaries
 
-        return self._directory_validation_cache[directory]
+        return self._directory_validation_cache[str(directory)]
 
-    def invalidate_box(self, directory: str, filename: str, box_id: str) -> None:
+    def invalidate_box(self, directory: Path, filename: str, box_id: str) -> None:
         """
         Invalidate cached validation for a specific bounding box.
 
@@ -138,7 +140,7 @@ class ValidationManager(QObject):
             filename: Image filename
             box_id: ID of the bounding box to invalidate
         """
-        cache_key = (directory, filename, box_id)
+        cache_key = (str(directory), filename, box_id)
 
         if cache_key in self._box_validation_cache:
             del self._box_validation_cache[cache_key]
@@ -147,9 +149,9 @@ class ValidationManager(QObject):
         self.invalidate_file(directory, filename)
 
         # Emit signal that box validation changed
-        self.box_validation_changed.emit(directory, filename, box_id)
+        self.box_validation_changed.emit(str(directory), filename, box_id)
 
-    def invalidate_file(self, directory: str, filename: str) -> None:
+    def invalidate_file(self, directory: Path, filename: str) -> None:
         """
         Invalidate cached validation for all boxes in a file.
 
@@ -157,7 +159,7 @@ class ValidationManager(QObject):
             directory: Directory containing the image
             filename: Image filename
         """
-        file_cache_key = (directory, filename)
+        file_cache_key = (str(directory), filename)
 
         # Remove file-level cache
         if file_cache_key in self._file_validation_cache:
@@ -167,20 +169,20 @@ class ValidationManager(QObject):
         keys_to_remove = [
             key
             for key in self._box_validation_cache.keys()
-            if key[0] == directory and key[1] == filename
+            if key[0] == str(directory) and key[1] == filename
         ]
         for key in keys_to_remove:
             del self._box_validation_cache[key]
 
         # Update directory cache if it exists
-        if directory in self._directory_validation_cache:
-            if filename in self._directory_validation_cache[directory]:
-                del self._directory_validation_cache[directory][filename]
+        if str(directory) in self._directory_validation_cache:
+            if filename in self._directory_validation_cache[str(directory)]:
+                del self._directory_validation_cache[str(directory)][filename]
 
         # Emit signal that file validation changed
-        self.file_validation_changed.emit(directory, filename)
+        self.file_validation_changed.emit(str(directory), filename)
 
-    def invalidate_directory(self, directory: str) -> None:
+    def invalidate_directory(self, directory: Path) -> None:
         """
         Invalidate cached validation for an entire directory.
 
@@ -188,25 +190,27 @@ class ValidationManager(QObject):
             directory: Directory to invalidate
         """
         # Remove directory-level cache
-        if directory in self._directory_validation_cache:
-            del self._directory_validation_cache[directory]
+        if str(directory) in self._directory_validation_cache:
+            del self._directory_validation_cache[str(directory)]
 
         # Remove all file-level caches for this directory
         file_keys_to_remove = [
-            key for key in self._file_validation_cache.keys() if key[0] == directory
+            key
+            for key in self._file_validation_cache.keys()
+            if key[0] == str(directory)
         ]
         for key in file_keys_to_remove:
             del self._file_validation_cache[key]
 
         # Remove all box-level caches for this directory
         box_keys_to_remove = [
-            key for key in self._box_validation_cache.keys() if key[0] == directory
+            key for key in self._box_validation_cache.keys() if key[0] == str(directory)
         ]
         for key in box_keys_to_remove:
             del self._box_validation_cache[key]
 
         # Emit signal that directory validation changed
-        self.directory_validation_changed.emit(directory)
+        self.directory_validation_changed.emit(str(directory))
 
     def invalidate_all(self) -> None:
         """
@@ -228,7 +232,7 @@ class ValidationManager(QObject):
 
     def update_box_validation(
         self,
-        directory: str,
+        directory: Path,
         filename: str,
         box_data: BoundingBox,
         storage: BoundingBoxStorage | None = None,
@@ -250,7 +254,7 @@ class ValidationManager(QObject):
         self.get_file_validation(directory, filename, storage)
 
     def update_file_validation(
-        self, directory: str, filename: str, storage: BoundingBoxStorage | None = None
+        self, directory: Path, filename: str, storage: BoundingBoxStorage | None = None
     ) -> None:
         """
         Force update validation for all boxes in a file.
