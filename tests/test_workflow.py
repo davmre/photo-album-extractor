@@ -137,7 +137,7 @@ class TestMainWindowWorkflow:
             def on_processing_finished(processed, skipped, errors):
                 nonlocal saved_files, extraction_completed
                 # Find saved files in output directory
-                for root, dirs, files in os.walk(temp_output_dir):
+                for root, _, files in os.walk(temp_output_dir):
                     for file in files:
                         if file.lower().endswith((".jpg", ".jpeg", ".png", ".tiff")):
                             saved_files.append(os.path.join(root, file))
