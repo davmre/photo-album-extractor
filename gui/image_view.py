@@ -5,7 +5,7 @@ Custom graphics view for displaying images with bounding box interaction.
 from __future__ import annotations
 
 import logging
-import os
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageQt
@@ -323,7 +323,7 @@ class ImageView(QGraphicsView):
 
         debug_dir = getattr(self, "refine_debug_dir", None)
         if debug_dir is not None:
-            debug_dir = os.path.join(debug_dir, str(box.box_id))
+            debug_dir = str(Path(debug_dir) / str(box.box_id))
 
         try:
             refined_corners = strategy.refine(

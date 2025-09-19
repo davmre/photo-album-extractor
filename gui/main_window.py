@@ -5,6 +5,7 @@ Main application window for the Photo Album Extractor.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import PIL.Image
 from PyQt6.QtCore import Qt
@@ -74,7 +75,7 @@ class PhotoExtractorApp(QMainWindow):
             self.load_directory(initial_directory)
         else:
             # Set current working directory as default
-            self.set_current_directory(os.getcwd())
+            self.set_current_directory(str(Path.cwd()))
 
     def init_ui(self):
         """Initialize the user interface."""
@@ -305,16 +306,15 @@ class PhotoExtractorApp(QMainWindow):
             image = extract.load_image(file_path)
             self.image_view.set_image(image)
             if self.refine_debug_dir:
-                self.image_view.refine_debug_dir = os.path.join(
-                    self.refine_debug_dir,
-                    os.path.splitext(os.path.basename(file_path))[0],
+                self.image_view.refine_debug_dir = str(
+                    Path(self.refine_debug_dir) / Path(file_path).stem
                 )
                 print("IMAGE RDD", self.image_view.refine_debug_dir)
             self.current_image = image
             self.current_image_path = file_path
 
             # Update directory context
-            new_directory = os.path.dirname(file_path)
+            new_directory = str(Path(file_path).parent)
             self.set_current_directory(new_directory)
 
             # Load saved bounding boxes for this image
@@ -323,7 +323,7 @@ class PhotoExtractorApp(QMainWindow):
             # Update sidebar selection
             self.directory_list.select_image(file_path)
 
-            self.status_bar.showMessage(f"Loaded: {os.path.basename(file_path)}")
+            self.status_bar.showMessage(f"Loaded: {Path(file_path).name}")
             self.update_extract_button_state()
 
             return True  # Load succeeded.
@@ -354,7 +354,7 @@ class PhotoExtractorApp(QMainWindow):
 
     def load_directory(self, directory):
         """Load a directory and its first image."""
-        if not os.path.isdir(directory):
+        if not Path(directory).is_dir():
             QMessageBox.warning(self, "Error", f"Directory not found: {directory}")
             return False
 
@@ -374,7 +374,7 @@ class PhotoExtractorApp(QMainWindow):
             self.current_image_path = None
             self.image_view.set_image()  # Clear image
             self.status_bar.showMessage(
-                f"No images found in directory: {os.path.basename(directory)}"
+                f"No images found in directory: {Path(directory).name}"
             )
             self.update_extract_button_state()
             return True
@@ -415,7 +415,7 @@ class PhotoExtractorApp(QMainWindow):
             self.image_view.update_box_data(updated_data)
 
             if self.current_image_path and self.bounding_box_storage:
-                filename = os.path.basename(self.current_image_path)
+                filename = Path(self.current_image_path).name
                 self.bounding_box_storage.update_box_data(filename, updated_data)
 
                 # Update directory sidebar validation for this file
@@ -449,7 +449,7 @@ class PhotoExtractorApp(QMainWindow):
 
                 # If the current image was updated, reload and refresh the UI
                 if self.current_image_path:
-                    current_filename = os.path.basename(self.current_image_path)
+                    current_filename = Path(self.current_image_path).name
                     if current_filename in result.updated_files:
                         # Reload bounding boxes from storage (they've been updated).
                         self.load_saved_bounding_boxes()
@@ -493,7 +493,7 @@ class PhotoExtractorApp(QMainWindow):
                 self.image_view.add_bounding_box(box_data)
 
             # Save detected bounding boxes.
-            filename = os.path.basename(self.current_image_path)
+            filename = Path(self.current_image_path).name
             self.bounding_box_storage.set_bounding_boxes(filename, detected_boxes)
             # Update directory sidebar validation for this file
             self.directory_list.update_file_validation(
@@ -573,7 +573,7 @@ class PhotoExtractorApp(QMainWindow):
     def load_saved_bounding_boxes(self):
         """Load saved bounding boxes for the current image."""
         if self.current_image_path and self.bounding_box_storage:
-            filename = os.path.basename(self.current_image_path)
+            filename = Path(self.current_image_path).name
             saved_data = self.bounding_box_storage.get_bounding_boxes(filename)
 
             # Remember the currently selected box id

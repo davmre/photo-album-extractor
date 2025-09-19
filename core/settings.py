@@ -1,6 +1,6 @@
 import json
-import os
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Optional
 
 
@@ -59,11 +59,13 @@ class AppSettings:
     def load_from_file(cls, file_path: Optional[str] = None) -> "AppSettings":
         """Load settings from JSON file."""
         if file_path is None:
-            file_path = os.path.expanduser("~/.photo_extractor_settings.json")
+            file_path_obj = Path.home() / ".photo_extractor_settings.json"
+        else:
+            file_path_obj = Path(file_path)
 
-        if os.path.exists(file_path):
+        if file_path_obj.exists():
             try:
-                with open(file_path) as f:
+                with open(file_path_obj) as f:
                     data = json.load(f)
                 return cls.from_dict(data)
             except (OSError, json.JSONDecodeError):
@@ -73,13 +75,15 @@ class AppSettings:
     def save_to_file(self, file_path: Optional[str] = None) -> None:
         """Save settings to JSON file."""
         if file_path is None:
-            file_path = os.path.expanduser("~/.photo_extractor_settings.json")
+            file_path_obj = Path.home() / ".photo_extractor_settings.json"
+        else:
+            file_path_obj = Path(file_path)
 
         try:
-            with open(file_path, "w") as f:
+            with open(file_path_obj, "w") as f:
                 json.dump(self.to_dict(), f, indent=2)
         except OSError:
-            print(f"Warning: Could not save settings to {file_path}")
+            print(f"Warning: Could not save settings to {file_path_obj}")
 
 
 # Global settings instance - loaded once on import

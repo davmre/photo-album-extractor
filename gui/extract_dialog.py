@@ -4,7 +4,6 @@ Batch extraction dialog for extracting photos from multiple images.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import PIL.Image
@@ -181,14 +180,14 @@ class ExtractProcessor(QThread):
                 if status == ExtractionStatus.SAVED:
                     extracted_count += 1
                     self.log_message.emit(
-                        f"    Photo {j + 1}: {os.path.basename(str(val))}"
+                        f"    Photo {j + 1}: {Path(str(val)).name}"
                     )
                 elif status == ExtractionStatus.ERROR:
                     self.log_message.emit(f"    Photo {j + 1}: failed to extract")
                     self.log_message.emit(str(val))
                 elif status == ExtractionStatus.SKIPPED:
                     self.log_message.emit(
-                        f"    Photo {j + 1}: {os.path.basename(str(val))} exists, skipping..."
+                        f"    Photo {j + 1}: {Path(str(val)).name} exists, skipping..."
                     )
 
                 if self.cancelled:
@@ -237,7 +236,7 @@ class ExtractDialog(QDialog):
 
         # Default to "extracted_photos" subdirectory
         if self.current_directory:
-            default_output = os.path.join(self.current_directory, "extracted_photos")
+            default_output = str(Path(self.current_directory) / "extracted_photos")
             self.output_dir_edit.setText(default_output)
 
         self.browse_button = QPushButton("Browse...")

@@ -3,7 +3,7 @@ Persistent storage for bounding box data per directory.
 """
 
 import json
-import os
+from pathlib import Path
 from typing import Any
 
 from core.bounding_box import BoundingBox
@@ -16,12 +16,14 @@ class BoundingBoxStorage:
         self, directory: str, json_file_name: str = ".photo_extractor_data.json"
     ) -> None:
         self.directory = directory
-        self.data_file = os.path.join(directory, json_file_name)
+        self._directory_path = Path(directory)
+        self._data_file_path = self._directory_path / json_file_name
+        self.data_file = str(self._data_file_path)
         self.data: dict[str, list[dict[str, Any]]] = self._load_data()
 
     def _load_data(self) -> dict[str, list[dict[str, Any]]]:
         """Load bounding box data from JSON file."""
-        if os.path.exists(self.data_file):
+        if self._data_file_path.exists():
             try:
                 with open(self.data_file) as f:
                     return json.load(f)
@@ -60,7 +62,7 @@ class BoundingBoxStorage:
     def clear_nonexistent_images(self):
         filenames = self.load_image_filenames()
         for filename in filenames:
-            if not os.path.exists(os.path.join(self.directory, filename)):
+            if not (self._directory_path / filename).exists():
                 del self.data[filename]
         self.save_data()
 

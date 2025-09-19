@@ -4,9 +4,9 @@ Image processing utilities for loading, cropping, and saving photos.
 
 from __future__ import annotations
 
-import os
 import platform
 from datetime import datetime
+from pathlib import Path
 from enum import Enum, IntEnum
 from typing import Generator, Literal
 
@@ -69,7 +69,7 @@ class TiffTag(IntEnum):
     SOFTWARE = 305
 
 
-def get_file_creation_time(filepath: str) -> datetime | None:
+def get_file_creation_time(filepath: str | Path) -> datetime | None:
     """Get the creation time of a file as a datetime object.
 
     On Windows, this returns the actual creation time (st_ctime).
@@ -85,7 +85,8 @@ def get_file_creation_time(filepath: str) -> datetime | None:
         datetime object representing file creation time, or None if error
     """
     try:
-        stat = os.stat(filepath)
+        filepath = Path(filepath)
+        stat = filepath.stat()
 
         # Try platform-specific creation time fields
         if platform.system() == "Windows":
@@ -240,7 +241,7 @@ def save_cropped_images(
     saved_files = []
 
     # Ensure output directory exists
-    os.makedirs(output_dir, exist_ok=True)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # Read source file creation time if path provided
     source_file_time = None
@@ -260,18 +261,18 @@ def save_cropped_images(
 
         # Generate filename
         filename = f"{base_name}_{i:03d}.{output_format.value}"
-        filepath = os.path.join(output_dir, filename)
+        filepath = Path(output_dir) / filename
 
-        if os.path.exists(filepath):
+        if filepath.exists():
             if file_exists_behavior == FileExistsBehavior.SKIP:
-                yield (ExtractionStatus.SKIPPED, filepath)
+                yield (ExtractionStatus.SKIPPED, str(filepath))
                 continue
             elif file_exists_behavior == FileExistsBehavior.INCREMENT:
                 # Ensure unique filename
                 counter = 1
-                while os.path.exists(filepath):
+                while filepath.exists():
                     filename = f"{base_name}_{i:03d}_{counter}.{output_format.value}"
-                    filepath = os.path.join(output_dir, filename)
+                    filepath = Path(output_dir) / filename
                     counter += 1
 
         try:
@@ -281,14 +282,14 @@ def save_cropped_images(
 
             save_image_with_exif(
                 cropped,
-                filepath,
+                str(filepath),
                 attributes,
                 source_file_time=source_file_time,
                 save_date=save_date,
                 description_options=description_options,
             )
-            yield (ExtractionStatus.SAVED, filepath)
-            saved_files.append(filepath)
+            yield (ExtractionStatus.SAVED, str(filepath))
+            saved_files.append(str(filepath))
         except Exception as e:
             yield (ExtractionStatus.ERROR, e)
 
@@ -373,7 +374,7 @@ def save_image_with_exif(
     pnginfo.add_text("Exif", exif_bytes)
 
     # Save image with EXIF data
-    extension = os.path.splitext(filepath)[1][1:].lower()
+    extension = Path(filepath).suffix[1:].lower()
     if extension in ("jpg", "jpeg"):
         image.save(filepath, "JPEG", quality=jpeg_quality, exif=exif_bytes)
     elif extension == "png":
