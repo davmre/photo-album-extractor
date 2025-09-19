@@ -33,7 +33,7 @@ git clone https://github.com/davmre/photo-album-extractor
 cd photo-album-extractor
 
 # Run the app
-uv run --with -r requirements.txt python3 main.py
+uv run python3 main.py
 ```
 
 Using `pip/venv` (MacOS/Linux, more compatible):
@@ -48,7 +48,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -e .
 
 # Run the app
 python3 main.py

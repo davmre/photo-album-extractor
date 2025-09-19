@@ -10,7 +10,7 @@ Photo Album Extractor is a PyQt6-based GUI application for extracting individual
 
 ### Environment
 
-Use the virtual environment under `.venv`: run `source .venv/bin/activate` 
+Use the virtual environment under `.venv`: run `source .venv/bin/activate`
 before any other Python commands.
 
 ### Running
@@ -94,7 +94,3 @@ Test-driven development: before adding new functionality, consider what semantic
    - `main_window.py`: Main application window orchestrating all components
    - `image_view.py`: Custom QGraphicsView handling image display and bounding box interactions
    - `quad_bounding_box.py`: Quadrilateral (4-point) bounding box implementation - NOT restricted to rectangles
-
-3. **CLI Layer** (`cli/`): command-line interface
-   - Commands `info`, `detect`, `extract`, `refine`, etc. operate on single images
-   or batches of images, using saved bounding-box data.

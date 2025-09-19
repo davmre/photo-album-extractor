@@ -4,6 +4,11 @@ env/
 .env
 .venv
 
+# Build / package directories
+build
+dist
+photo_album_extractor.egg*
+
 # Python cache
 __pycache__/
 *.pyc
@@ -32,3 +37,4 @@ scripts
 # Temporary files
 *.tmp
 *.log
+*.lock
