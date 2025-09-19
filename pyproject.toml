@@ -26,6 +26,7 @@ dev = [
     "types-Pillow>=10.0.0",
     "types-requests>=2.31.0",
     "pyright>=1.1.350",
+    "ruff>=0.13.0"
 ]
 
 [tool.setuptools.packages.find]
