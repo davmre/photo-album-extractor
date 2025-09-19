@@ -19,7 +19,7 @@ class AppSettings:
     # Validation settings
     warn_date_inconsistent: bool = True
     warn_non_rectangular: bool = True
-    warn_nonstandard_aspect: bool = True
+    warn_nonstandard_aspect: bool = False
     standard_aspect_ratios: list[float] = field(
         default_factory=lambda: [4 / 6, 6 / 4, 5 / 7, 7 / 5]
     )
@@ -44,7 +44,7 @@ class AppSettings:
             shrink_after_refinement=int(data.get("shrink_after_refinement", 2)),
             warn_date_inconsistent=bool(data.get("warn_date_inconsistent", True)),
             warn_non_rectangular=bool(data.get("warn_non_rectangular", True)),
-            warn_nonstandard_aspect=bool(data.get("warn_nonstandard_aspect", True)),
+            warn_nonstandard_aspect=bool(data.get("warn_nonstandard_aspect", False)),
             standard_aspect_ratios=data.get(
                 "standard_aspect_ratios", [4 / 6, 6 / 4, 5 / 7, 7 / 5]
             ),
