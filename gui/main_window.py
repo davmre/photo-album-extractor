@@ -9,8 +9,9 @@ from pathlib import Path
 
 import PIL.Image
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QCursor
 from PyQt6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -481,6 +482,9 @@ class PhotoExtractorApp(QMainWindow):
             err.show_warning(parent=self)
             return
 
+        # Set waiting cursor
+        self.setCursor(QCursor(Qt.CursorShape.WaitCursor))
+
         # Clear existing boxes
         self.image_view.clear_boxes()
 
@@ -519,6 +523,9 @@ class PhotoExtractorApp(QMainWindow):
             QMessageBox.warning(
                 self, "Detection Error", f"Failed to detect photos: {str(e)}"
             )
+        finally:
+            # Restore normal cursor
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def update_extract_button_state(self):
         """Enable/disable extract, clear, and detect buttons based on current state."""
