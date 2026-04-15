@@ -264,6 +264,14 @@ Return only the JSON response, no additional text."""
 
 
 class GeminiFlashDetectionStrategy(GeminiDetectionStrategy):
+    model_name = "gemini-flash-latest"
+
+    @property
+    def name(self):
+        return "Gemini Flash (latest)"
+
+
+class GeminiFlash25DetectionStrategy(GeminiDetectionStrategy):
     model_name = "gemini-2.5-flash"
 
     @property
@@ -282,6 +290,7 @@ class GeminiProDetectionStrategy(GeminiDetectionStrategy):
 # Registry of all available strategies
 _DETECTION_STRATEGIES: list[DetectionStrategy] = [
     GeminiFlashDetectionStrategy(),
+    GeminiFlash25DetectionStrategy(),
     GeminiProDetectionStrategy(),
 ]
 
