@@ -8,9 +8,9 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any
 
-import google.generativeai as genai  # type: ignore
 import numpy as np
 import PIL.Image
+from google import genai
 
 from core.bounding_box import BoundingBox, PhotoAttributes
 from core.errors import AppError
@@ -57,7 +57,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
     requery_to_confirm_rotated_orientation: bool = True
 
     def __init__(self) -> None:
-        self._model: Any | None = None
+        self._client: genai.Client | None = None
         self._api_key: str | None = None
 
     def set_api_key(self, api_key: str) -> None:
@@ -66,19 +66,17 @@ class GeminiDetectionStrategy(DetectionStrategy):
         self._setup_gemini()
 
     def _setup_gemini(self) -> None:
-        """Initialize the Gemini model."""
+        """Initialize the Gemini client."""
         if not self._api_key:
             print("Gemini API key not set. Please configure it in Settings.")
-            self._model = None
+            self._client = None
             return
 
         try:
-            # Configure the API key
-            genai.configure(api_key=self._api_key)  # type: ignore
-            self._model = genai.GenerativeModel(self.model_name)  # type: ignore
+            self._client = genai.Client(api_key=self._api_key)
         except Exception as e:
             print(f"Failed to initialize Gemini: {e}")
-            self._model = None
+            self._client = None
 
     @property
     def description(self) -> str:
@@ -140,7 +138,7 @@ class GeminiDetectionStrategy(DetectionStrategy):
             PhotoOrientation.UPSIDE_DOWN,
         ):
             return detected_box
-        if not self._model:
+        if not self._client:
             return detected_box
 
         from core import extract
@@ -163,7 +161,11 @@ class GeminiDetectionStrategy(DetectionStrategy):
         prompt = """Does this image appear predominantly right-side-up? (vs upside-down,
 some rotation is fine). Respond with one of: "yes", "no", or "unclear"."""
 
-        response_ccw = self._model.generate_content([image_ccw, prompt])
+        response_ccw = self._client.models.generate_content(
+            model=self.model_name, contents=[image_ccw, prompt]
+        )
+        if not response_ccw.text:
+            return detected_box
         response_ccw_text: str = response_ccw.text.strip().lower()
         print(
             "Does box appear rotated counterclockwise? Gemini says: ", response_ccw_text
@@ -176,7 +178,7 @@ some rotation is fine). Respond with one of: "yes", "no", or "unclear"."""
         return detected_box
 
     def detect_photos(self, image: PIL.Image.Image) -> list[BoundingBox]:
-        if not image or not self._model:
+        if not image or not self._client:
             return []
 
         image_width, image_height = image.width, image.height
@@ -230,7 +232,9 @@ Example response for a page with three photos:
 
 Return only the JSON response, no additional text."""
 
-        response = self._model.generate_content([scaled_image, prompt])
+        response = self._client.models.generate_content(
+            model=self.model_name, contents=[scaled_image, prompt]
+        )
 
         if not response.text:
             return []
