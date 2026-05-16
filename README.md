@@ -70,9 +70,12 @@ re-open the album later without losing your work.
 
 To detect photos you will need a Gemini API key, which you can get for free from [Google
 AI Studio](https://aistudio.google.com/app/apikey): click "Create API Key" and follow
-the prompts. As of fall 2025, the Gemini Flash free tier supports 250 requests per day
-(250 album pages per day) at no charge. Once you have your API key, enter it in the app
-preferences dialog.
+the prompts. Once you have your API key, enter it in the app preferences dialog. ~~As of 
+fall 2025, the Gemini Flash free tier supports 250 requests per day
+(250 album pages per day) at no charge.~~ **Update**: as of spring 2026, the Gemini free tier
+has become much less generous; currently it provides 20 free requests per day. However,
+paid use is quite cheap: at current pricing ($0.50 / 1M tokens in and $3 /1M tokens out
+for Gemini Flash), spending a dollar would let you process several thousand album pages.
 
 The basic workflow is as follows:
 
